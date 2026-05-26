@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   Platform,
@@ -16,7 +17,13 @@ const C = colors.light;
 
 export default function ClientProfile() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    router.replace("/onboarding");
+  }
 
   const items = [
     { icon: "user", label: "الاسم", value: user?.name },
@@ -59,7 +66,7 @@ export default function ClientProfile() {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.85}>
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
         <Text style={styles.logoutText}>تسجيل الخروج</Text>
         <Feather name="log-out" size={18} color={C.destructive} />
       </TouchableOpacity>
