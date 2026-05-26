@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
+import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 import { useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
@@ -27,9 +28,11 @@ export default function RegisterClient() {
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
     phone: "",
     country: "qatar" as "qatar" | "jordan",
   });
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,14 +41,24 @@ export default function RegisterClient() {
   }
 
   async function handleRegister() {
+    setError("");
     if (!form.name || !form.email || !form.password || !form.phone) {
       setError("يرجى تعبئة جميع الحقول");
       return;
     }
-    setError("");
+    if (form.password !== form.confirmPassword) {
+      setError("كلمتا المرور غير متطابقتين");
+      return;
+    }
     setLoading(true);
     try {
-      await registerClient(form);
+      await registerClient({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        country: form.country,
+      });
     } catch (e: any) {
       setError(e.message ?? "حدث خطأ");
     } finally {
@@ -63,7 +76,7 @@ export default function RegisterClient() {
           styles.container,
           {
             paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20),
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 20),
+            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 24),
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -77,8 +90,17 @@ export default function RegisterClient() {
           <Text style={styles.sub}>ابدأ رحلتك مع مستشارك</Text>
         </View>
 
+        <SocialLoginButtons role="client" />
+
+        <View style={styles.orRow}>
+          <View style={styles.line} />
+          <Text style={styles.orText}>أو بالبريد الإلكتروني</Text>
+          <View style={styles.line} />
+        </View>
+
         {!!error && (
           <View style={styles.errorBox}>
+            <Feather name="alert-circle" size={14} color={C.destructive} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -93,6 +115,7 @@ export default function RegisterClient() {
               placeholderTextColor={C.mutedForeground}
             />
           </Field>
+
           <Field label="البريد الإلكتروني" icon="mail">
             <TextInput
               style={styles.input}
@@ -101,19 +124,40 @@ export default function RegisterClient() {
               onChangeText={(v) => set("email", v)}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
               placeholderTextColor={C.mutedForeground}
             />
           </Field>
+
           <Field label="كلمة المرور" icon="lock">
             <TextInput
               style={styles.input}
-              placeholder="••••••••"
+              placeholder="6 أحرف على الأقل"
               value={form.password}
               onChangeText={(v) => set("password", v)}
+              secureTextEntry={!showPass}
+              placeholderTextColor={C.mutedForeground}
+            />
+            <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+              <Feather
+                name={showPass ? "eye-off" : "eye"}
+                size={16}
+                color={C.mutedForeground}
+              />
+            </TouchableOpacity>
+          </Field>
+
+          <Field label="تأكيد كلمة المرور" icon="lock">
+            <TextInput
+              style={styles.input}
+              placeholder="أعد إدخال كلمة المرور"
+              value={form.confirmPassword}
+              onChangeText={(v) => set("confirmPassword", v)}
               secureTextEntry
               placeholderTextColor={C.mutedForeground}
             />
           </Field>
+
           <Field label="رقم الجوال" icon="phone">
             <TextInput
               style={styles.input}
@@ -137,7 +181,7 @@ export default function RegisterClient() {
                   ]}
                   onPress={() => set("country", c)}
                 >
-                  <Text style={styles.countryBtnText}>
+                  <Text style={styles.countryText}>
                     {c === "qatar" ? "🇶🇦 قطر" : "🇯🇴 الأردن"}
                   </Text>
                 </TouchableOpacity>
@@ -158,6 +202,15 @@ export default function RegisterClient() {
             <Text style={styles.btnText}>إنشاء الحساب</Text>
           )}
         </TouchableOpacity>
+
+        <View style={styles.loginRow}>
+          <Text style={styles.loginLabel}>لديك حساب بالفعل؟</Text>
+          <TouchableOpacity
+            onPress={() => router.push("/auth/login?role=client")}
+          >
+            <Text style={styles.loginLink}>تسجيل الدخول</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -185,8 +238,8 @@ function Field({
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: 24 },
-  backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 20 },
-  header: { gap: 6, marginBottom: 28 },
+  backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 16 },
+  header: { gap: 4, marginBottom: 20 },
   title: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
@@ -199,19 +252,36 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "right",
   },
+  orRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+  },
+  line: { flex: 1, height: 1, backgroundColor: C.border },
+  orText: {
+    fontSize: 12,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
   errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
     backgroundColor: "#FEE2E2",
     borderRadius: 10,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   errorText: {
     color: C.destructive,
     fontFamily: "Inter_500Medium",
     fontSize: 13,
+    flex: 1,
     textAlign: "right",
+    lineHeight: 20,
   },
-  form: { gap: 14, marginBottom: 24 },
+  form: { gap: 12, marginBottom: 20 },
   field: { gap: 6 },
   label: {
     fontSize: 13,
@@ -247,11 +317,8 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     backgroundColor: C.card,
   },
-  countryBtnActive: {
-    borderColor: C.navy,
-    backgroundColor: "#EEF2F8",
-  },
-  countryBtnText: {
+  countryBtnActive: { borderColor: C.navy, backgroundColor: "#EEF2F8" },
+  countryText: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: C.foreground,
@@ -261,10 +328,23 @@ const styles = StyleSheet.create({
     borderRadius: colors.radius,
     paddingVertical: 16,
     alignItems: "center",
+    marginBottom: 16,
   },
-  btnText: {
-    color: "#fff",
-    fontSize: 16,
+  btnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  loginRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  loginLabel: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
+  loginLink: {
+    fontSize: 13,
+    color: C.navy,
     fontFamily: "Inter_700Bold",
   },
 });

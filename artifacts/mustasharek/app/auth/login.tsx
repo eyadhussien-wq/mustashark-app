@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
+import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 import { useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
@@ -22,8 +23,9 @@ export default function Login() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const params = useLocalSearchParams<{ role: string }>();
-  const role = params.role ?? "client";
+  const params = useLocalSearchParams<{ role?: string }>();
+  const role = (params.role ?? "client") as "client" | "lawyer";
+  const isLawyer = role === "lawyer";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,13 +33,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const isLawyer = role === "lawyer";
-
   async function handleLogin() {
-    if (!email || !password) {
-      setError("يرجى تعبئة جميع الحقول");
-      return;
-    }
     setError("");
     setLoading(true);
     try {
@@ -59,7 +55,7 @@ export default function Login() {
           styles.container,
           {
             paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20),
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 20),
+            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 24),
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -69,7 +65,7 @@ export default function Login() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <View style={[styles.icon, isLawyer && styles.iconLawyer]}>
+          <View style={[styles.iconWrap, isLawyer && styles.iconWrapLawyer]}>
             <Feather
               name={isLawyer ? "briefcase" : "user"}
               size={28}
@@ -77,7 +73,7 @@ export default function Login() {
             />
           </View>
           <Text style={styles.title}>
-            {isLawyer ? "تسجيل دخول المحامي" : "تسجيل دخول العميل"}
+            {isLawyer ? "دخول المحامي" : "دخول العميل"}
           </Text>
           <Text style={styles.sub}>مرحباً بعودتك في مستشارك</Text>
         </View>
@@ -101,6 +97,7 @@ export default function Login() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 placeholderTextColor={C.mutedForeground}
               />
             </View>
@@ -119,7 +116,11 @@ export default function Login() {
                 placeholderTextColor={C.mutedForeground}
               />
               <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                <Feather name={showPass ? "eye-off" : "eye"} size={16} color={C.mutedForeground} />
+                <Feather
+                  name={showPass ? "eye-off" : "eye"}
+                  size={16}
+                  color={C.mutedForeground}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -141,57 +142,42 @@ export default function Login() {
         <TouchableOpacity
           style={styles.forgotBtn}
           onPress={() => router.push("/auth/forgot-password")}
-          activeOpacity={0.7}
         >
           <Text style={styles.forgotText}>نسيت كلمة المرور؟</Text>
         </TouchableOpacity>
 
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.dividerText}>أو</Text>
-          <View style={styles.line} />
+        <SocialLoginButtons role={role} />
+
+        <View style={styles.registerRow}>
+          <Text style={styles.registerLabel}>ليس لديك حساب؟</Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                isLawyer ? "/auth/register-lawyer" : "/auth/register-client"
+              )
+            }
+          >
+            <Text style={styles.registerLink}>
+              {isLawyer ? "تسجيل محامٍ جديد" : "إنشاء حساب"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.registerBtn}
-          onPress={() =>
-            router.push(
-              isLawyer ? "/auth/register-lawyer" : "/auth/register-client"
-            )
-          }
-          activeOpacity={0.85}
-        >
-          <Text style={styles.registerText}>
-            {isLawyer ? "تسجيل محامٍ جديد" : "إنشاء حساب عميل"}
-          </Text>
-        </TouchableOpacity>
-
-        {!isLawyer && (
-          <Text style={styles.hint}>
-            للتجربة: email@example.com / كلمة المرور: 123456
-          </Text>
-        )}
+        <Text style={styles.hint}>
+          {isLawyer
+            ? "للتجربة: fatima@example.com / 123456"
+            : "للتجربة: ahmed@example.com / 123456"}
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
-  backBtn: {
-    alignSelf: "flex-end",
-    padding: 4,
-    marginBottom: 24,
-  },
-  header: {
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 32,
-  },
-  icon: {
+  container: { flexGrow: 1, paddingHorizontal: 24 },
+  backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 20 },
+  header: { alignItems: "center", gap: 10, marginBottom: 28 },
+  iconWrap: {
     width: 72,
     height: 72,
     borderRadius: 36,
@@ -201,15 +187,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(201,160,53,0.2)",
   },
-  iconLawyer: {
+  iconWrapLawyer: {
     backgroundColor: "#EEF2F8",
     borderColor: "rgba(27,58,107,0.15)",
   },
-  title: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: C.foreground,
-  },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground },
   sub: {
     fontSize: 14,
     color: C.mutedForeground,
@@ -217,7 +199,7 @@ const styles = StyleSheet.create({
   },
   errorBox: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     backgroundColor: "#FEE2E2",
     borderRadius: 10,
@@ -230,14 +212,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
     textAlign: "right",
+    lineHeight: 20,
   },
-  form: {
-    gap: 16,
-    marginBottom: 24,
-  },
-  field: {
-    gap: 6,
-  },
+  form: { gap: 14, marginBottom: 20 },
+  field: { gap: 6 },
   label: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
@@ -267,54 +245,35 @@ const styles = StyleSheet.create({
     borderRadius: colors.radius,
     paddingVertical: 16,
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 10,
   },
-  loginText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: C.border,
-  },
-  dividerText: {
-    fontSize: 12,
-    color: C.mutedForeground,
-    fontFamily: "Inter_400Regular",
-  },
-  forgotBtn: {
-    alignItems: "center",
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
+  loginText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  forgotBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 16 },
   forgotText: {
     fontSize: 13,
     color: C.primary,
     fontFamily: "Inter_500Medium",
   },
-  registerBtn: {
-    borderWidth: 1.5,
-    borderColor: C.navy,
-    borderRadius: colors.radius,
-    paddingVertical: 14,
+  registerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+    gap: 6,
+    marginTop: 16,
   },
-  registerText: {
+  registerLabel: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
+  registerLink: {
+    fontSize: 13,
     color: C.navy,
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_700Bold",
   },
   hint: {
     textAlign: "center",
-    marginTop: 16,
+    marginTop: 12,
     fontSize: 11,
     color: C.mutedForeground,
     fontFamily: "Inter_400Regular",
