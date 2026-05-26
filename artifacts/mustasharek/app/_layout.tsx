@@ -29,6 +29,7 @@ function RootLayoutNav() {
       <Stack.Screen name="auth/login" />
       <Stack.Screen name="auth/register-client" />
       <Stack.Screen name="auth/register-lawyer" />
+      <Stack.Screen name="auth/forgot-password" />
       <Stack.Screen name="(client)" />
       <Stack.Screen name="(lawyer)" />
       <Stack.Screen

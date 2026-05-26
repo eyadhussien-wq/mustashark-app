@@ -138,6 +138,14 @@ export default function Login() {
           )}
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.forgotBtn}
+          onPress={() => router.push("/auth/forgot-password")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.forgotText}>نسيت كلمة المرور؟</Text>
+        </TouchableOpacity>
+
         <View style={styles.divider}>
           <View style={styles.line} />
           <Text style={styles.dividerText}>أو</Text>
@@ -281,6 +289,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.mutedForeground,
     fontFamily: "Inter_400Regular",
+  },
+  forgotBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  forgotText: {
+    fontSize: 13,
+    color: C.primary,
+    fontFamily: "Inter_500Medium",
   },
   registerBtn: {
     borderWidth: 1.5,

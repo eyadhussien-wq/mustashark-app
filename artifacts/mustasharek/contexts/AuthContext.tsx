@@ -37,6 +37,8 @@ interface AuthContextValue {
   registerLawyer: (data: RegisterLawyerData) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<string>;
+  resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
 }
 
 interface RegisterClientData {
@@ -200,6 +202,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
+  // Returns the OTP code (displayed to user in-app since no real email service)
+  const requestPasswordReset = useCallback(async (email: string): Promise<string> => {
+    await new Promise((r) => setTimeout(r, 1000));
+    const allUsers = await getAllUsers();
+    const match = allUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (!match) throw new Error("لا يوجد حساب مرتبط بهذا البريد الإلكتروني");
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const record = { email: email.toLowerCase(), otp, expiresAt: Date.now() + 10 * 60 * 1000 };
+    await AsyncStorage.setItem("mustasharek_reset_otp", JSON.stringify(record));
+    return otp;
+  }, []);
+
+  const resetPassword = useCallback(async (email: string, otp: string, newPassword: string) => {
+    await new Promise((r) => setTimeout(r, 800));
+
+    const stored = await AsyncStorage.getItem("mustasharek_reset_otp");
+    if (!stored) throw new Error("لم يتم طلب استعادة كلمة المرور");
+
+    const record = JSON.parse(stored) as { email: string; otp: string; expiresAt: number };
+
+    if (record.email !== email.toLowerCase()) throw new Error("البريد الإلكتروني غير متطابق");
+    if (record.otp !== otp.trim()) throw new Error("رمز التحقق غير صحيح");
+    if (Date.now() > record.expiresAt) throw new Error("انتهت صلاحية رمز التحقق. يرجى طلب رمز جديد");
+    if (newPassword.length < 6) throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+
+    const allUsers = await getAllUsers();
+    const idx = allUsers.findIndex((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (idx === -1) throw new Error("المستخدم غير موجود");
+
+    allUsers[idx].password = newPassword;
+    await AsyncStorage.setItem("mustasharek_all_users", JSON.stringify(allUsers));
+    await AsyncStorage.removeItem("mustasharek_reset_otp");
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -210,6 +247,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerLawyer,
         logout,
         updateUser,
+        requestPasswordReset,
+        resetPassword,
       }}
     >
       {children}
