@@ -1,6 +1,6 @@
-# [Project name]
+# مستشارك — Mustasharek
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+منصة استشارات قانونية أونلاين تربط العملاء بمحامين مرخصين في قطر والأردن.
 
 ## Run & Operate
 
@@ -14,31 +14,48 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- Mobile: Expo (React Native) — `artifacts/mustasharek/`
+- API: Express 5 — `artifacts/api-server/`
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
+- State: AsyncStorage (local), React Context
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/mustasharek/` — Expo mobile app
+- `artifacts/mustasharek/app/` — All screens (Expo Router file-based)
+- `artifacts/mustasharek/contexts/AuthContext.tsx` — Auth state + user management
+- `artifacts/mustasharek/contexts/DataContext.tsx` — Lawyers list + consultations
+- `artifacts/mustasharek/constants/colors.ts` — Design tokens (navy + gold palette)
+- `lib/api-spec/openapi.yaml` — API contract (source of truth)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Two user roles: `client` and `lawyer`, stored in AsyncStorage and persisted across sessions.
+- License verification is format-based (QAT-XXXXX or JOR-XXXXX) with a simulated async check — ready to connect to a real government API later.
+- Sample lawyers are seeded in DataContext and merged with any newly registered lawyers from AsyncStorage.
+- Navigation uses separate `(client)` and `(lawyer)` tab groups, with the root `index.tsx` acting as a router redirect based on user role.
+- The app is RTL-friendly — Arabic text uses `textAlign: "right"` throughout.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **عميل (Client):** Browse lawyers, filter by country (Qatar/Jordan) and specialization, book consultations with date/time/type selection.
+- **محامٍ (Lawyer):** Register with license number verification, manage availability, view/accept/reject consultation requests, dashboard with stats.
+- Demo login: `ahmed@example.com` / `123456` (client) or `fatima@example.com` / `123456` (lawyer).
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Arabic-first UI with RTL support.
+- Start with Qatar and Jordan, then expand.
+- License verification by number (format check), not manual review.
+- Mobile app first, web app to follow.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The `(tabs)` group is kept as a stub redirect — do NOT add real screens there. Use `(client)` and `(lawyer)` groups instead.
+- Arabic text may appear faint in web preview screenshots — this is a web rendering artifact. Test on native (Expo Go) for truth.
+- License format: Qatar = `QAT-XXXXX` or 5-8 digits. Jordan = `JOR-XXXXX` or 5-8 digits.
 
 ## Pointers
 

@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "مستشارك"
+version = "1.0.0"
+id = "artifacts/mustasharek"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 19915
+
+[services.development]
+run = "pnpm --filter @workspace/mustasharek run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mustasharek", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/mustasharek", "run", "serve" ]
+
+[services.env]
+PORT = "19915"
+BASE_PATH = "/"
