@@ -38,6 +38,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
+      router.replace("/");
     } catch (e: any) {
       setError(e.message ?? "حدث خطأ");
     } finally {

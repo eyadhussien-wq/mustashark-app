@@ -91,6 +91,7 @@ export default function RegisterLawyer() {
         experience: parseInt(form.experience) || 1,
         hourlyRate: parseInt(form.hourlyRate) || 150,
       });
+      router.replace("/");
     } catch (e: any) {
       setError(e.message ?? "حدث خطأ");
     } finally {

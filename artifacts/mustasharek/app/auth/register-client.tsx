@@ -59,6 +59,7 @@ export default function RegisterClient() {
         phone: form.phone,
         country: form.country,
       });
+      router.replace("/");
     } catch (e: any) {
       setError(e.message ?? "حدث خطأ");
     } finally {
