@@ -32,18 +32,27 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notRegistered, setNotRegistered] = useState(false);
 
   async function handleLogin() {
     setError("");
+    setNotRegistered(false);
     setLoading(true);
     try {
       await login(email, password);
       router.replace("/");
     } catch (e: any) {
-      setError(e.message ?? "حدث خطأ");
+      const msg: string = e.message ?? "حدث خطأ";
+      setError(msg);
+      if (msg.includes("غير مسجّل")) setNotRegistered(true);
     } finally {
       setLoading(false);
     }
+  }
+
+  function goRegister() {
+    const target = isLawyer ? "/auth/register-lawyer" : "/auth/register-client";
+    router.push({ pathname: target as any, params: { prefillEmail: email } });
   }
 
   return (
@@ -80,9 +89,18 @@ export default function Login() {
         </View>
 
         {!!error && (
-          <View style={styles.errorBox}>
-            <Feather name="alert-circle" size={14} color={C.destructive} />
-            <Text style={styles.errorText}>{error}</Text>
+          <View style={[styles.errorBox, notRegistered && styles.errorBoxWide]}>
+            <View style={styles.errorTop}>
+              <Feather name="alert-circle" size={14} color={C.destructive} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+            {notRegistered && (
+              <TouchableOpacity style={styles.registerNowBtn} onPress={goRegister}>
+                <Text style={styles.registerNowText}>
+                  {isLawyer ? "تسجيل محامٍ جديد ←" : "إنشاء حساب الآن ←"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -207,6 +225,15 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
+  errorBoxWide: {
+    flexDirection: "column",
+    gap: 10,
+  },
+  errorTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
   errorText: {
     color: C.destructive,
     fontFamily: "Inter_500Medium",
@@ -214,6 +241,17 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
     lineHeight: 20,
+  },
+  registerNowBtn: {
+    backgroundColor: C.navy,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  registerNowText: {
+    color: "#fff",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
   },
   form: { gap: 14, marginBottom: 20 },
   field: { gap: 6 },

@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -41,10 +41,11 @@ export default function RegisterLawyer() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { registerLawyer } = useAuth();
+  const { prefillEmail } = useLocalSearchParams<{ prefillEmail?: string }>();
 
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: prefillEmail ?? "",
     password: "",
     phone: "",
     country: "qatar" as "qatar" | "jordan",
