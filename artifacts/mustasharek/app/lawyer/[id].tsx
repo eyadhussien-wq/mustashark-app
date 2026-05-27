@@ -84,6 +84,7 @@ export default function LawyerDetail() {
         lawyerId: lawyer!.id,
         lawyerName: lawyer!.name,
         lawyerSpecialization: lawyer!.specialization,
+        lawyerCountry: lawyer!.country,
         subject,
         description,
         date: selectedDate,

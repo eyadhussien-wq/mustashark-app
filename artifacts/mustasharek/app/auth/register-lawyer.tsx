@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
+import { rateLabel } from "@/utils/currency";
 
 const C = colors.light;
 
@@ -237,7 +238,7 @@ export default function RegisterLawyer() {
             <TextInput style={styles.input} placeholder="10" value={form.experience} onChangeText={(v) => set("experience", v)} keyboardType="number-pad" placeholderTextColor={C.mutedForeground} />
           </Field>
 
-          <Field label="السعر بالساعة (ر)" icon="dollar-sign">
+          <Field label={`السعر بالساعة (${rateLabel(form.country)})`} icon="dollar-sign">
             <TextInput style={styles.input} placeholder="200" value={form.hourlyRate} onChangeText={(v) => set("hourlyRate", v)} keyboardType="number-pad" placeholderTextColor={C.mutedForeground} />
           </Field>
 

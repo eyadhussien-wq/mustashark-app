@@ -34,6 +34,7 @@ export interface Consultation {
   lawyerId: string;
   lawyerName: string;
   lawyerSpecialization: string;
+  lawyerCountry?: "qatar" | "jordan";
   subject: string;
   description: string;
   date: string;
@@ -207,6 +208,7 @@ const SAMPLE_CONSULTATIONS: Consultation[] = [
     lawyerId: "lawyer-1",
     lawyerName: "د. فاطمة الزهراني",
     lawyerSpecialization: "قانون تجاري",
+    lawyerCountry: "qatar",
     subject: "مراجعة عقد شراكة تجارية",
     description:
       "أحتاج مراجعة عقد شراكة مع شريك أجنبي وإبداء الرأي القانوني.",
@@ -224,6 +226,7 @@ const SAMPLE_CONSULTATIONS: Consultation[] = [
     lawyerId: "lawyer-4",
     lawyerName: "أ. خالد الهاجري",
     lawyerSpecialization: "قانون عقاري",
+    lawyerCountry: "qatar",
     subject: "نزاع مع مالك العقار",
     description: "مالك العقار يرفض إعادة وديعة الإيجار دون مسوغ قانوني.",
     date: "2026-06-15",

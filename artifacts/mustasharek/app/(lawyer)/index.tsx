@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import { rateLabel } from "@/utils/currency";
 
 const C = colors.light;
 
@@ -83,7 +84,7 @@ export default function LawyerDashboard() {
         <StatCard icon="clock" label="طلبات معلّقة" value={pending.toString()} color={C.warning} bg="#FEF3C7" />
         <StatCard icon="check-circle" label="استشارات مقبولة" value={accepted.toString()} color={C.success} bg="#ECFDF5" />
         <StatCard icon="check" label="مكتملة" value={completed.toString()} color={C.primary} bg="#EEF2F8" />
-        <StatCard icon="dollar-sign" label="الأرباح (ر)" value={totalEarnings.toString()} color={C.gold} bg="#FEF9EC" />
+        <StatCard icon="dollar-sign" label={`الأرباح (${user?.country ? rateLabel(user.country) : "ر.ق"})`} value={totalEarnings.toString()} color={C.gold} bg="#FEF9EC" />
       </View>
 
       <View style={styles.section}>

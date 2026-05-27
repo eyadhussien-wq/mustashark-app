@@ -3,6 +3,7 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import colors from "@/constants/colors";
 import type { Consultation, ConsultationStatus } from "@/contexts/DataContext";
+import { rateLabel } from "@/utils/currency";
 
 interface Props {
   consultation: Consultation;
@@ -64,7 +65,7 @@ export function ConsultationCard({ consultation, viewAs, onPress, onAccept, onRe
         </View>
         <View style={styles.footerItem}>
           <Feather name="dollar-sign" size={12} color={C.mutedForeground} />
-          <Text style={styles.footerText}>{consultation.price} ر</Text>
+          <Text style={styles.footerText}>{consultation.price} {rateLabel(consultation.lawyerCountry ?? "qatar")}</Text>
         </View>
       </View>
 
