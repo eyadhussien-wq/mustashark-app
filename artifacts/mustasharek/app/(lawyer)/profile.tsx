@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatPrice } from "@/utils/currency";
 
 const C = colors.light;
 
@@ -33,7 +34,7 @@ export default function LawyerProfile() {
     { icon: "file-text", label: "رقم الترخيص", value: user?.licenseNumber },
     { icon: "map-pin", label: "الدولة", value: user?.country === "qatar" ? "🇶🇦 قطر" : "🇯🇴 الأردن" },
     { icon: "clock", label: "سنوات الخبرة", value: user?.experience ? `${user.experience} سنوات` : "—" },
-    { icon: "dollar-sign", label: "السعر بالساعة", value: user?.hourlyRate ? `${user.hourlyRate} ريال` : "—" },
+    { icon: "dollar-sign", label: "السعر بالساعة", value: user?.hourlyRate && user?.country ? formatPrice(user.hourlyRate, user.country) : "—" },
   ];
 
   return (

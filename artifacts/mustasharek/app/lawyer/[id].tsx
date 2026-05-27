@@ -18,6 +18,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import * as Haptics from "expo-haptics";
+import { formatPrice, getCurrency, rateLabel } from "@/utils/currency";
 
 const C = colors.light;
 
@@ -155,7 +156,7 @@ export default function LawyerDetail() {
             <View style={styles.statDivider} />
             <View style={styles.stat}>
               <Text style={styles.statVal}>{lawyer.hourlyRate}</Text>
-              <Text style={styles.statLabel}>ر/ساعة</Text>
+              <Text style={styles.statLabel}>{rateLabel(lawyer.country)}</Text>
             </View>
           </View>
         </View>
@@ -260,7 +261,7 @@ export default function LawyerDetail() {
               </View>
               <View style={styles.priceRight}>
                 <Text style={styles.priceAmount}>{lawyer.hourlyRate}</Text>
-                <Text style={styles.priceCurrency}>ريال</Text>
+                <Text style={styles.priceCurrency}>{getCurrency(lawyer.country)}</Text>
               </View>
             </View>
 

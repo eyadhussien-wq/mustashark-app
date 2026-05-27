@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import colors from "@/constants/colors";
 import type { Lawyer } from "@/contexts/DataContext";
+import { rateLabel } from "@/utils/currency";
 
 interface Props {
   lawyer: Lawyer;
@@ -71,7 +72,7 @@ export function LawyerCard({ lawyer, onPress }: Props) {
         </View>
         <View style={styles.priceRow}>
           <Text style={styles.price}>{lawyer.hourlyRate}</Text>
-          <Text style={styles.currency}> ر / ساعة</Text>
+          <Text style={styles.currency}> {rateLabel(lawyer.country)}</Text>
         </View>
       </View>
     </TouchableOpacity>
