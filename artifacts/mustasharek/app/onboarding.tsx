@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   Dimensions,
+  Image,
   Platform,
   StyleSheet,
   Text,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
+
+const LOGO = require("../assets/images/logo-transparent.png");
 
 const { width, height } = Dimensions.get("window");
 const C = colors.light;
@@ -22,9 +25,7 @@ export default function Onboarding() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) }]}>
       <View style={styles.brandSection}>
-        <View style={styles.logo}>
-          <Feather name="shield" size={40} color={C.gold} />
-        </View>
+        <Image source={LOGO} style={styles.logo} resizeMode="contain" />
         <Text style={styles.appName}>مستشارك</Text>
         <Text style={styles.tagline}>استشاراتك القانونية بين يديك</Text>
         <Text style={styles.subtitle}>
@@ -89,15 +90,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   logo: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "rgba(201,160,53,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(201,160,53,0.3)",
-    marginBottom: 8,
+    width: 140,
+    height: 140,
+    marginBottom: 4,
   },
   appName: {
     fontSize: 40,

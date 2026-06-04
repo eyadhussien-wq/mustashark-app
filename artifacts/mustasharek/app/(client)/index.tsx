@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
+  Image,
   Platform,
   StyleSheet,
   Text,
@@ -10,11 +11,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { LawyerCard } from "@/components/LawyerCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+
+const LOGO = require("../../assets/images/logo-transparent.png");
 
 const C = colors.light;
 
@@ -55,9 +59,7 @@ export default function ClientHome() {
           <Text style={styles.greeting}>أهلاً، {user?.name?.split(" ")[0]}</Text>
           <Text style={styles.greetingSub}>ابحث عن مستشارك القانوني</Text>
         </View>
-        <View style={styles.logoMini}>
-          <Feather name="shield" size={22} color={C.gold} />
-        </View>
+        <Image source={LOGO} style={styles.logoMini} resizeMode="contain" />
       </View>
 
       <View style={styles.searchBar}>
@@ -151,8 +153,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground },
   greetingSub: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right" },
   logoMini: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: C.navy, alignItems: "center", justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: 10,
   },
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
