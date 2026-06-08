@@ -1,9 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,8 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
-import * as Haptics from "expo-haptics";
-import { formatPrice, getCurrency, rateLabel } from "@/utils/currency";
+import { getCurrency, rateLabel } from "@/utils/currency";
 
 const C = colors.light;
 
@@ -28,6 +27,12 @@ const TYPES = [
   { id: "phone" as const, label: "مكالمة هاتفية", icon: "phone" },
   { id: "chat" as const, label: "محادثة نصية", icon: "message-square" },
 ];
+
+interface Attachment {
+  name: string;
+  uri: string;
+  type: "image" | "file";
+}
 
 function getAvailableDates() {
   const dates: string[] = [];
@@ -47,7 +52,7 @@ export default function LawyerDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { getLawyerById, bookConsultation } = useData();
+  const { getLawyerById } = useData();
   const lawyer = getLawyerById(id ?? "");
 
   const [subject, setSubject] = useState("");
@@ -55,7 +60,8 @@ export default function LawyerDetail() {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">("video");
-  const [loading, setLoading] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [error, setError] = useState("");
 
   const dates = getAvailableDates();
 
@@ -70,17 +76,39 @@ export default function LawyerDetail() {
     );
   }
 
-  async function handleBook() {
-    if (!subject || !description || !selectedDate || !selectedTime) {
-      Alert.alert("تنبيه", "يرجى تعبئة جميع حقول الحجز");
-      return;
+  async function pickAttachment() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+      allowsMultipleSelection: true,
+    });
+    if (!result.canceled) {
+      const newFiles: Attachment[] = result.assets.map((a) => ({
+        name: a.fileName ?? `مرفق_${Date.now()}.jpg`,
+        uri: a.uri,
+        type: "image",
+      }));
+      setAttachments((prev) => [...prev, ...newFiles].slice(0, 5));
     }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleProceed() {
+    setError("");
+    if (!subject.trim()) { setError("يرجى إدخال موضوع الاستشارة"); return; }
+    if (!description.trim()) { setError("يرجى إدخال وصف المشكلة"); return; }
+    if (!selectedDate) { setError("يرجى اختيار التاريخ"); return; }
+    if (!selectedTime) { setError("يرجى اختيار الوقت"); return; }
     if (!user) return;
-    setLoading(true);
-    try {
-      await bookConsultation({
-        clientId: user.id,
-        clientName: user.name,
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    router.push({
+      pathname: "/payment",
+      params: {
         lawyerId: lawyer!.id,
         lawyerName: lawyer!.name,
         lawyerSpecialization: lawyer!.specialization,
@@ -90,17 +118,10 @@ export default function LawyerDetail() {
         date: selectedDate,
         time: selectedTime,
         type: selectedType,
-        price: lawyer!.hourlyRate,
-      });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("تم الحجز", "تم إرسال طلب الاستشارة إلى المحامي. سيتم إبلاغك عند الموافقة.", [
-        { text: "حسناً", onPress: () => router.back() },
-      ]);
-    } catch {
-      Alert.alert("خطأ", "حدث خطأ أثناء الحجز. يرجى المحاولة مجدداً.");
-    } finally {
-      setLoading(false);
-    }
+        price: String(lawyer!.hourlyRate),
+        attachments: JSON.stringify(attachments.map((a) => a.name)),
+      },
+    });
   }
 
   return (
@@ -125,6 +146,7 @@ export default function LawyerDetail() {
           </TouchableOpacity>
         </View>
 
+        {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{lawyer.name.charAt(0)}</Text>
@@ -176,6 +198,7 @@ export default function LawyerDetail() {
 
         {lawyer.available && (
           <>
+            {/* Consultation type */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>نوع الاستشارة</Text>
               <View style={styles.typeRow}>
@@ -192,6 +215,7 @@ export default function LawyerDetail() {
               </View>
             </View>
 
+            {/* Subject */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>موضوع الاستشارة</Text>
               <TextInput
@@ -203,6 +227,7 @@ export default function LawyerDetail() {
               />
             </View>
 
+            {/* Description */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>وصف المشكلة</Text>
               <TextInput
@@ -217,6 +242,7 @@ export default function LawyerDetail() {
               />
             </View>
 
+            {/* Date */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>اختر التاريخ</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -240,6 +266,7 @@ export default function LawyerDetail() {
               </ScrollView>
             </View>
 
+            {/* Time */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>اختر الوقت</Text>
               <View style={styles.timesGrid}>
@@ -255,6 +282,71 @@ export default function LawyerDetail() {
               </View>
             </View>
 
+            {/* ── Attachments section ───────────────────────────────────── */}
+            <View style={styles.section}>
+              <View style={styles.attachHeader}>
+                <View style={styles.attachBadge}>
+                  <Text style={styles.attachBadgeText}>اختياري</Text>
+                </View>
+                <Text style={styles.sectionTitle}>إرفاق وثائق أو صور القضية</Text>
+              </View>
+              <Text style={styles.attachSub}>
+                أرفق عقوداً أو صوراً أو وثائق تساعد المحامي في فهم قضيتك (PDF، JPG، PNG)
+              </Text>
+
+              {/* Uploaded list */}
+              {attachments.length > 0 && (
+                <View style={styles.attachList}>
+                  {attachments.map((file, i) => (
+                    <View key={i} style={styles.attachItem}>
+                      <View style={styles.attachItemIcon}>
+                        <Feather name="file" size={16} color={C.navy} />
+                      </View>
+                      <Text style={styles.attachItemName} numberOfLines={1}>{file.name}</Text>
+                      <TouchableOpacity onPress={() => removeAttachment(i)} style={styles.attachRemove}>
+                        <Feather name="x" size={14} color={C.destructive} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.attachBtn, attachments.length >= 5 && { opacity: 0.5 }]}
+                onPress={pickAttachment}
+                disabled={attachments.length >= 5}
+                activeOpacity={0.8}
+              >
+                <View style={styles.attachBtnIcon}>
+                  <Feather name="upload-cloud" size={22} color={C.gold} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.attachBtnTitle}>إرفاق وثائق أو صور القضية</Text>
+                  <Text style={styles.attachBtnSub}>
+                    {attachments.length === 0
+                      ? "اضغط لاختيار ملفات · حتى 5 مرفقات"
+                      : `${attachments.length} مرفق · اضغط لإضافة المزيد`}
+                  </Text>
+                </View>
+                <View style={styles.attachBtnFormats}>
+                  {["PDF", "JPG", "PNG"].map((f) => (
+                    <View key={f} style={styles.formatPill}>
+                      <Text style={styles.formatPillText}>{f}</Text>
+                    </View>
+                  ))}
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Error */}
+            {!!error && (
+              <View style={styles.errorBox}>
+                <Feather name="alert-circle" size={14} color={C.destructive} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            {/* Price row */}
             <View style={styles.priceRow}>
               <View>
                 <Text style={styles.priceLabel}>رسوم الاستشارة</Text>
@@ -266,21 +358,20 @@ export default function LawyerDetail() {
               </View>
             </View>
 
+            {/* CTA → Payment */}
             <TouchableOpacity
-              style={[styles.bookBtn, loading && { opacity: 0.7 }]}
-              onPress={handleBook}
-              disabled={loading}
+              style={styles.bookBtn}
+              onPress={handleProceed}
               activeOpacity={0.85}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Feather name="calendar" size={18} color="#fff" />
-                  <Text style={styles.bookText}>تأكيد الحجز</Text>
-                </>
-              )}
+              <Feather name="credit-card" size={18} color={C.navy} />
+              <Text style={styles.bookText}>متابعة للدفع</Text>
+              <Feather name="arrow-left" size={16} color={C.navy} />
             </TouchableOpacity>
+
+            <Text style={styles.bookNote}>
+              ستنتقل لشاشة الدفع الآمن لإتمام الحجز
+            </Text>
           </>
         )}
       </ScrollView>
@@ -292,6 +383,8 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: 20 },
   topBar: { marginBottom: 16 },
   backBtn: { alignSelf: "flex-end", padding: 4 },
+
+  // Profile
   profileCard: {
     backgroundColor: C.navy, borderRadius: 20, padding: 24,
     alignItems: "center", gap: 8, marginBottom: 16,
@@ -321,18 +414,22 @@ const styles = StyleSheet.create({
   statVal: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#fff" },
   statLabel: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
   statDivider: { width: 1, height: 30, backgroundColor: "rgba(255,255,255,0.1)" },
+
+  // Bio
   bioCard: {
     backgroundColor: C.card, borderRadius: colors.radius,
-    padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border,
-    gap: 8,
+    padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border, gap: 8,
   },
   bioTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.primary, textAlign: "right" },
   bioText: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", lineHeight: 22, textAlign: "right" },
+
   unavailableBanner: {
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#FEF3C7", borderRadius: colors.radius, padding: 14, marginBottom: 16,
   },
   unavailableText: { fontSize: 13, color: C.warning, fontFamily: "Inter_500Medium", flex: 1, textAlign: "right" },
+
+  // Form sections
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground, marginBottom: 10, textAlign: "right" },
   typeRow: { flexDirection: "row", gap: 8 },
@@ -366,6 +463,60 @@ const styles = StyleSheet.create({
   timeChipActive: { backgroundColor: C.primary, borderColor: C.primary },
   timeText: { fontSize: 14, fontFamily: "Inter_500Medium", color: C.foreground },
   timeTextActive: { color: "#fff" },
+
+  // Attachments
+  attachHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  attachBadge: {
+    backgroundColor: "rgba(201,160,53,0.15)", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderWidth: 1, borderColor: "rgba(201,160,53,0.25)",
+  },
+  attachBadgeText: { fontSize: 10, color: C.gold, fontFamily: "Inter_700Bold" },
+  attachSub: {
+    fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular",
+    textAlign: "right", lineHeight: 18, marginBottom: 12,
+  },
+  attachList: { gap: 8, marginBottom: 10 },
+  attachItem: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#EEF2F8", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: "rgba(27,58,107,0.1)",
+  },
+  attachItemIcon: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: "rgba(27,58,107,0.1)",
+    alignItems: "center", justifyContent: "center",
+  },
+  attachItemName: { flex: 1, fontSize: 13, color: C.foreground, fontFamily: "Inter_500Medium", textAlign: "right" },
+  attachRemove: { padding: 4 },
+  attachBtn: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderWidth: 2, borderStyle: "dashed", borderColor: "rgba(201,160,53,0.4)",
+    borderRadius: 14, padding: 16, backgroundColor: "#FFFCF3",
+  },
+  attachBtnIcon: {
+    width: 48, height: 48, borderRadius: 12,
+    backgroundColor: "rgba(201,160,53,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  attachBtnTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.foreground, textAlign: "right" },
+  attachBtnSub: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 2 },
+  attachBtnFormats: { gap: 3 },
+  formatPill: {
+    backgroundColor: "rgba(201,160,53,0.15)", borderRadius: 5,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  formatPillText: { fontSize: 9, color: C.gold, fontFamily: "Inter_700Bold" },
+
+  // Error
+  errorBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 12,
+  },
+  errorText: { flex: 1, fontSize: 13, color: C.destructive, fontFamily: "Inter_500Medium", textAlign: "right" },
+
+  // Price
   priceRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#EEF2F8", borderRadius: colors.radius, padding: 16, marginBottom: 16,
@@ -376,11 +527,16 @@ const styles = StyleSheet.create({
   priceRight: { flexDirection: "row", alignItems: "baseline", gap: 4 },
   priceAmount: { fontSize: 28, fontFamily: "Inter_700Bold", color: C.navy },
   priceCurrency: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+
+  // Book button → Payment
   bookBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 10, backgroundColor: C.gold, borderRadius: colors.radius, paddingVertical: 16,
+    marginBottom: 8,
   },
-  bookText: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
+  bookText: { color: C.navy, fontSize: 17, fontFamily: "Inter_700Bold", flex: 1, textAlign: "center" },
+  bookNote: { fontSize: 11, color: C.mutedForeground, textAlign: "center", fontFamily: "Inter_400Regular", marginBottom: 8 },
+
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   notFoundText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: C.foreground },
   backLink: { fontSize: 14, color: C.primary, fontFamily: "Inter_500Medium" },
