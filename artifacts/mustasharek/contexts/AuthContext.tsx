@@ -139,17 +139,16 @@ async function readUsers(): Promise<StoredUser[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as StoredUser[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Merge: always keep SAMPLE_USERS by id (so test accounts are always present)
-        const storedIds = new Set(parsed.map((u) => u.id));
-        const missing = SAMPLE_USERS.filter((u) => !storedIds.has(u.id));
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing];
-          await writeUsers(merged);
-          return merged;
+      const stored = JSON.parse(raw) as StoredUser[];
+      if (Array.isArray(stored) && stored.length > 0) {
+        // Upsert: always ensure SAMPLE_USERS entries are present with up-to-date data
+        const storedMap = new Map(stored.map((u) => [u.id, u]));
+        for (const sample of SAMPLE_USERS) {
+          storedMap.set(sample.id, sample);
         }
-        return parsed;
+        const merged = Array.from(storedMap.values());
+        await writeUsers(merged);
+        return merged;
       }
     }
   } catch {}
