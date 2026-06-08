@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Platform,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -30,12 +31,13 @@ export default function LawyerRequests() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { consultations, updateConsultationStatus } = useData();
+  const { consultations, updateConsultationStatus, refreshData } = useData();
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Accept an optional initialFilter from navigation params (e.g. from stat card taps)
   const { initialFilter } = useLocalSearchParams<{ initialFilter?: string }>();
-  const defaultFilter = (FILTERS.find((f) => f.value === initialFilter)?.value ?? "all") as ConsultationStatus | "all";
-
+  const defaultFilter = (
+    FILTERS.find((f) => f.value === initialFilter)?.value ?? "all"
+  ) as ConsultationStatus | "all";
   const [filter, setFilter] = useState<ConsultationStatus | "all">(defaultFilter);
 
   const myConsults = useMemo(() => {
@@ -43,6 +45,12 @@ export default function LawyerRequests() {
     if (filter === "all") return mine;
     return mine.filter((c) => c.status === filter);
   }, [consultations, user, filter]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
 
   async function handleAccept(id: string) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -96,11 +104,19 @@ export default function LawyerRequests() {
           { paddingBottom: insets.bottom + (Platform.OS === "web" ? 100 : 80) },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={C.gold}
+            colors={[C.navy, C.gold]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Feather name="inbox" size={44} color={C.border} />
             <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
-            <Text style={styles.emptyText}>ستظهر هنا طلبات الاستشارة من العملاء</Text>
+            <Text style={styles.emptyText}>اسحب للأسفل للتحديث والبحث عن طلبات جديدة</Text>
           </View>
         }
       />

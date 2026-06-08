@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,7 +22,8 @@ export default function LawyerDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, updateUser } = useAuth();
-  const { consultations } = useData();
+  const { consultations, refreshData } = useData();
+  const [refreshing, setRefreshing] = useState(false);
 
   const myConsults = useMemo(
     () => consultations.filter((c) => c.lawyerId === user?.id),
@@ -39,6 +41,12 @@ export default function LawyerDashboard() {
     .filter((c) => c.status === "accepted")
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 5);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
 
   async function toggleAvailability() {
     await updateUser({ available: !user?.available });
@@ -59,6 +67,14 @@ export default function LawyerDashboard() {
         },
       ]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={C.gold}
+          colors={[C.navy, C.gold]}
+        />
+      }
     >
       {/* Header */}
       <View style={styles.header}>
@@ -89,25 +105,21 @@ export default function LawyerDashboard() {
       <View style={styles.statsGrid}>
         <StatCard
           icon="clock" label="طلبات معلّقة" value={pending.toString()}
-          color={C.warning} bg="#FEF3C7"
-          onPress={() => goFiltered("pending")}
+          color={C.warning} bg="#FEF3C7" onPress={() => goFiltered("pending")}
         />
         <StatCard
           icon="check-circle" label="استشارات مقبولة" value={accepted.toString()}
-          color={C.success} bg="#ECFDF5"
-          onPress={() => goFiltered("accepted")}
+          color={C.success} bg="#ECFDF5" onPress={() => goFiltered("accepted")}
         />
         <StatCard
           icon="check" label="مكتملة" value={completed.toString()}
-          color={C.primary} bg="#EEF2F8"
-          onPress={() => goFiltered("completed")}
+          color={C.primary} bg="#EEF2F8" onPress={() => goFiltered("completed")}
         />
         <StatCard
-          icon="dollar-sign"
+          icon="trending-up"
           label={`الأرباح (${user?.country ? rateLabel(user.country) : "ر.ق"})`}
           value={totalEarnings.toString()}
-          color={C.gold} bg="#FEF9EC"
-          onPress={() => goFiltered("completed")}
+          color={C.gold} bg="#FEF9EC" onPress={() => goFiltered("completed")}
         />
       </View>
 
@@ -124,6 +136,7 @@ export default function LawyerDashboard() {
           <View style={styles.emptyCard}>
             <Feather name="calendar" size={28} color={C.border} />
             <Text style={styles.emptyText}>لا توجد استشارات قادمة</Text>
+            <Text style={styles.emptyHint}>اسحب للأعلى للتحديث</Text>
           </View>
         ) : (
           upcomingConsults.map((c) => (
@@ -195,10 +208,10 @@ function StatCard({ icon, label, value, color, bg, onPress }: {
     <TouchableOpacity
       style={[styles.statCard, { backgroundColor: bg }]}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.78}
     >
       <View style={styles.statCardTop}>
-        <Feather name="chevron-left" size={14} color={color} style={{ opacity: 0.5 }} />
+        <Feather name="chevron-left" size={14} color={color} style={{ opacity: 0.45 }} />
         <Feather name={icon as any} size={20} color={color} />
       </View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
@@ -231,30 +244,24 @@ const styles = StyleSheet.create({
     marginBottom: 20, borderWidth: 1, borderColor: "#D1FAE5",
   },
   licenseBadgeText: { fontSize: 13, color: C.success, fontFamily: "Inter_500Medium" },
-
-  // Stats
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 24 },
   statCard: { width: "47%", borderRadius: colors.radius, padding: 16, gap: 6 },
   statCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   statValue: { fontSize: 26, fontFamily: "Inter_700Bold" },
   statLabel: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right" },
-
-  // Section
   section: { marginBottom: 20 },
   sectionHeader: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12,
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 12,
   },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.foreground },
   sectionLink: { fontSize: 13, color: C.primary, fontFamily: "Inter_500Medium" },
-
-  // Empty
   emptyCard: {
     backgroundColor: C.card, borderRadius: colors.radius, borderWidth: 1,
-    borderColor: C.border, padding: 32, alignItems: "center", gap: 10,
+    borderColor: C.border, padding: 32, alignItems: "center", gap: 8,
   },
   emptyText: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-
-  // Upcoming
+  emptyHint: { fontSize: 11, color: C.border, fontFamily: "Inter_400Regular" },
   upcomingCard: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: C.card, borderRadius: colors.radius, padding: 14,

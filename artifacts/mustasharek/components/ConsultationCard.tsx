@@ -64,8 +64,12 @@ export function ConsultationCard({ consultation, viewAs, onPress, onAccept, onRe
           <Text style={styles.footerText}>{consultation.time}</Text>
         </View>
         <View style={styles.footerItem}>
-          <Feather name="dollar-sign" size={12} color={C.mutedForeground} />
-          <Text style={styles.footerText}>{consultation.price} {rateLabel(consultation.lawyerCountry ?? "qatar")}</Text>
+          <View style={styles.pricePill}>
+            <Text style={styles.priceText}>{consultation.price} {rateLabel(consultation.lawyerCountry ?? "qatar")}</Text>
+          </View>
+          {consultation.paymentStatus === "paid" && (
+            <View style={styles.paidDot} />
+          )}
         </View>
       </View>
 
@@ -198,5 +202,23 @@ const styles = StyleSheet.create({
     color: C.destructive,
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
+  },
+  pricePill: {
+    backgroundColor: "#EEF2F8",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  priceText: {
+    fontSize: 11,
+    color: C.navy,
+    fontFamily: "Inter_600SemiBold",
+  },
+  paidDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.success,
+    marginLeft: 4,
   },
 });
