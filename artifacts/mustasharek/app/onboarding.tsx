@@ -58,7 +58,7 @@ export default function Onboarding() {
 
         <TouchableOpacity
           style={styles.lawyerBtn}
-          onPress={() => router.push("/auth/login?role=lawyer")}
+          onPress={() => router.push("/auth/lawyer-auth")}
           activeOpacity={0.85}
         >
           <Feather name="briefcase" size={18} color={C.navy} />
