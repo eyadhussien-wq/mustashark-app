@@ -27,6 +27,12 @@ export type ConsultationStatus =
   | "rejected"
   | "completed";
 
+export interface ConsultationRating {
+  stars: number;
+  comment?: string;
+  createdAt: string;
+}
+
 export interface Consultation {
   id: string;
   clientId: string;
@@ -45,6 +51,7 @@ export interface Consultation {
   price: number;
   paymentStatus?: "paid" | "unpaid";
   attachments?: Array<{ name: string; uri: string }>;
+  rating?: ConsultationRating;
 }
 
 interface DataContextValue {
@@ -57,6 +64,11 @@ interface DataContextValue {
   updateConsultationStatus: (
     id: string,
     status: ConsultationStatus
+  ) => Promise<void>;
+  rateLawyer: (
+    consultationId: string,
+    stars: number,
+    comment: string
   ) => Promise<void>;
   refreshData: () => Promise<void>;
 }
@@ -200,7 +212,7 @@ const SAMPLE_LAWYERS: Lawyer[] = [
     hourlyRate: 140,
     available: false,
   },
-  // ── Test / Demo accounts (synced with AuthContext SAMPLE_USERS) ──────────────
+  // ── Test / Demo accounts ─────────────────────────────────────────────────────
   {
     id: "lawyer-test",
     name: "د. محامٍ تجريبي",
@@ -275,12 +287,44 @@ const SAMPLE_CONSULTATIONS: Consultation[] = [
   },
 ];
 
+// ── Lawyer dynamic ratings (persisted separately so SAMPLE_LAWYERS don't reset them) ──
+const RATINGS_KEY = "mustasharek_lawyer_ratings";
+
+async function loadLawyerRatingOverrides(): Promise<
+  Record<string, { rating: number; reviewsCount: number }>
+> {
+  try {
+    const raw = await AsyncStorage.getItem(RATINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+async function saveLawyerRatingOverrides(
+  overrides: Record<string, { rating: number; reviewsCount: number }>
+) {
+  await AsyncStorage.setItem(RATINGS_KEY, JSON.stringify(overrides));
+}
+
+function applyRatingOverrides(
+  lawyers: Lawyer[],
+  overrides: Record<string, { rating: number; reviewsCount: number }>
+): Lawyer[] {
+  return lawyers.map((l) =>
+    overrides[l.id]
+      ? { ...l, rating: overrides[l.id].rating, reviewsCount: overrides[l.id].reviewsCount }
+      : l
+  );
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [lawyers, setLawyers] = useState<Lawyer[]>(SAMPLE_LAWYERS);
   const [consultations, setConsultations] =
     useState<Consultation[]>(SAMPLE_CONSULTATIONS);
 
   const refreshData = useCallback(async () => {
+    const ratingOverrides = await loadLawyerRatingOverrides();
+
     const stored = await AsyncStorage.getItem("mustasharek_consultations");
     if (stored) {
       try {
@@ -292,17 +336,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         JSON.stringify(SAMPLE_CONSULTATIONS)
       );
     }
+
     const storedLawyers = await AsyncStorage.getItem("mustasharek_lawyers");
     if (storedLawyers) {
       try {
         const parsed: Lawyer[] = JSON.parse(storedLawyers);
-        // Upsert: SAMPLE_LAWYERS always win by ID (keeps test accounts in sync)
         const sampleIds = new Set(SAMPLE_LAWYERS.map((l) => l.id));
         const extras = parsed.filter((l) => !sampleIds.has(l.id));
-        setLawyers([...SAMPLE_LAWYERS, ...extras]);
+        const merged = [...SAMPLE_LAWYERS, ...extras];
+        setLawyers(applyRatingOverrides(merged, ratingOverrides));
       } catch {}
     } else {
-      setLawyers(SAMPLE_LAWYERS);
+      setLawyers(applyRatingOverrides(SAMPLE_LAWYERS, ratingOverrides));
     }
   }, []);
 
@@ -347,6 +392,65 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [consultations]
   );
 
+  const rateLawyer = useCallback(
+    async (consultationId: string, stars: number, comment: string) => {
+      const newRating: ConsultationRating = {
+        stars,
+        comment: comment.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Update the consultation with the rating
+      const updatedConsultations = consultations.map((c) =>
+        c.id === consultationId ? { ...c, rating: newRating } : c
+      );
+      setConsultations(updatedConsultations);
+      await AsyncStorage.setItem(
+        "mustasharek_consultations",
+        JSON.stringify(updatedConsultations)
+      );
+
+      // Recalculate lawyer's average rating from all rated consultations
+      const targetConsult = consultations.find((c) => c.id === consultationId);
+      if (!targetConsult) return;
+      const lawyerId = targetConsult.lawyerId;
+
+      const allRated = updatedConsultations.filter(
+        (c) => c.lawyerId === lawyerId && c.rating
+      );
+      const avgRating =
+        allRated.reduce((sum, c) => sum + (c.rating?.stars ?? 0), 0) /
+        allRated.length;
+
+      // Load existing overrides and merge
+      const existingOverrides = await loadLawyerRatingOverrides();
+      const baseReviewCount =
+        SAMPLE_LAWYERS.find((l) => l.id === lawyerId)?.reviewsCount ?? 0;
+      const newOverrides = {
+        ...existingOverrides,
+        [lawyerId]: {
+          rating: Math.round(avgRating * 10) / 10,
+          reviewsCount: baseReviewCount + allRated.length,
+        },
+      };
+      await saveLawyerRatingOverrides(newOverrides);
+
+      // Update in-memory lawyer state
+      setLawyers((prev) =>
+        prev.map((l) =>
+          l.id === lawyerId
+            ? {
+                ...l,
+                rating: newOverrides[lawyerId].rating,
+                reviewsCount: newOverrides[lawyerId].reviewsCount,
+              }
+            : l
+        )
+      );
+    },
+    [consultations]
+  );
+
   return (
     <DataContext.Provider
       value={{
@@ -355,6 +459,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         getLawyerById,
         bookConsultation,
         updateConsultationStatus,
+        rateLawyer,
         refreshData,
       }}
     >

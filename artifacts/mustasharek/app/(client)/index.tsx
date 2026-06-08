@@ -54,12 +54,17 @@ export default function ClientHome() {
 
   return (
     <View style={[styles.container, { paddingTop: topPad }]}>
+      {/* ── Header ── */}
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.greeting}>أهلاً، {user?.name?.split(" ")[0]}</Text>
           <Text style={styles.greetingSub}>ابحث عن مستشارك القانوني</Text>
         </View>
-        <Image source={LOGO} style={styles.logoMini} resizeMode="contain" />
+        {/* Premium logo badge */}
+        <View style={styles.logoBadge}>
+          <View style={styles.logoGlowDot} />
+          <Image source={LOGO} style={styles.logoMini} resizeMode="contain" />
+        </View>
       </View>
 
       <View style={styles.searchBar}>
@@ -152,11 +157,47 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground },
   greetingSub: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right" },
-  logoMini: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+
+  // ── Premium logo badge ────────────────────────────────────────────────────
+  logoBadge: {
+    position: "relative",
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: C.navy,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: C.gold,
+    ...Platform.select({
+      ios: {
+        shadowColor: C.gold,
+        shadowOpacity: 0.55,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 },
+      },
+      android: { elevation: 8 },
+      web: { boxShadow: `0 0 14px rgba(201,160,53,0.5)` } as any,
+    }),
   },
+  logoGlowDot: {
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: C.gold,
+    borderWidth: 2,
+    borderColor: C.background,
+    zIndex: 1,
+  },
+  logoMini: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     marginHorizontal: 20, marginBottom: 12,

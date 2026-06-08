@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useData } from "@/contexts/DataContext";
 import { formatPrice } from "@/utils/currency";
 
 const C = colors.light;
@@ -20,6 +21,20 @@ export default function LawyerProfile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { getLawyerById, consultations } = useData();
+
+  // Get live rating data from DataContext (updated by client reviews)
+  const liveProfile = user?.id ? getLawyerById(user.id) : undefined;
+  const displayRating = liveProfile?.rating ?? (user as any)?.rating;
+  const displayReviews = liveProfile?.reviewsCount ?? (user as any)?.reviewsCount;
+
+  // Count completed consultations
+  const completedCount = consultations.filter(
+    (c) => c.lawyerId === user?.id && c.status === "completed"
+  ).length;
+  const ratedCount = consultations.filter(
+    (c) => c.lawyerId === user?.id && c.status === "completed" && c.rating
+  ).length;
 
   async function handleLogout() {
     await logout();
@@ -60,11 +75,39 @@ export default function LawyerProfile() {
             <Text style={styles.verifiedText}>محامٍ موثّق ومرخّص</Text>
           </View>
         )}
-        {user?.rating !== undefined && user.rating > 0 && (
-          <View style={styles.ratingRow}>
-            <Feather name="star" size={14} color={C.gold} />
-            <Text style={styles.ratingText}>{user.rating.toFixed(1)}</Text>
-            <Text style={styles.reviewsText}>({user.reviewsCount} تقييم)</Text>
+
+        {/* ── Live Star Rating display ── */}
+        {displayRating !== undefined && displayRating > 0 && (
+          <View style={styles.ratingCard}>
+            {/* Stars row */}
+            <View style={styles.ratingStarsRow}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Feather
+                  key={s}
+                  name="star"
+                  size={18}
+                  color={s <= Math.round(displayRating) ? C.gold : "rgba(201,160,53,0.25)"}
+                />
+              ))}
+            </View>
+            {/* Number + reviews */}
+            <View style={styles.ratingNumRow}>
+              <Text style={styles.ratingNum}>{displayRating.toFixed(1)}</Text>
+              <View style={styles.ratingDivider} />
+              <View style={styles.reviewsBox}>
+                <Text style={styles.reviewsCount}>{displayReviews}</Text>
+                <Text style={styles.reviewsLabel}>تقييم</Text>
+              </View>
+              {ratedCount > 0 && (
+                <>
+                  <View style={styles.ratingDivider} />
+                  <View style={styles.reviewsBox}>
+                    <Text style={styles.reviewsCount}>{completedCount}</Text>
+                    <Text style={styles.reviewsLabel}>مكتملة</Text>
+                  </View>
+                </>
+              )}
+            </View>
           </View>
         )}
       </View>
@@ -113,9 +156,51 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#D1FAE5",
   },
   verifiedText: { fontSize: 12, color: C.success, fontFamily: "Inter_600SemiBold" },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  ratingText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground },
-  reviewsText: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+
+  // ── Live rating card ──────────────────────────────────────────────────────
+  ratingCard: {
+    backgroundColor: C.navy,
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "rgba(201,160,53,0.25)",
+    ...Platform.select({
+      ios: {
+        shadowColor: C.navy,
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  ratingStarsRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  ratingNumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  ratingNum: {
+    fontSize: 32,
+    fontFamily: "Inter_700Bold",
+    color: C.gold,
+  },
+  ratingDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  reviewsBox: { alignItems: "center", gap: 2 },
+  reviewsCount: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
+  reviewsLabel: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
+
   bioCard: {
     backgroundColor: C.card, borderRadius: colors.radius, padding: 16,
     borderWidth: 1, borderColor: C.border, marginBottom: 14, gap: 6,
