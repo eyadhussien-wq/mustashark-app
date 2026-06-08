@@ -44,7 +44,7 @@ export interface Consultation {
   type: "video" | "chat" | "phone";
   price: number;
   paymentStatus?: "paid" | "unpaid";
-  attachments?: string[];
+  attachments?: Array<{ name: string; uri: string }>;
 }
 
 interface DataContextValue {

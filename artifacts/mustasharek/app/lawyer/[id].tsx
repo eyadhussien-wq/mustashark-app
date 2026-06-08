@@ -119,7 +119,7 @@ export default function LawyerDetail() {
         time: selectedTime,
         type: selectedType,
         price: String(lawyer!.hourlyRate),
-        attachments: JSON.stringify(attachments.map((a) => a.name)),
+        attachments: JSON.stringify(attachments.map((a) => ({ name: a.name, uri: a.uri }))),
       },
     });
   }

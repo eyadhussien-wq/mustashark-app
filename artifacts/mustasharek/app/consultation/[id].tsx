@@ -5,7 +5,9 @@ import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
+  Dimensions,
+  Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,11 +22,12 @@ import { useData } from "@/contexts/DataContext";
 import { getCurrency } from "@/utils/currency";
 
 const C = colors.light;
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 const TYPE_META: Record<string, { label: string; icon: string; color: string }> = {
-  video: { label: "مكالمة فيديو",    icon: "video",          color: "#7C3AED" },
-  phone: { label: "مكالمة هاتفية",   icon: "phone",          color: "#2563EB" },
-  chat:  { label: "محادثة نصية",     icon: "message-square", color: "#059669" },
+  video: { label: "مكالمة فيديو",   icon: "video",          color: "#7C3AED" },
+  phone: { label: "مكالمة هاتفية",  icon: "phone",          color: "#2563EB" },
+  chat:  { label: "محادثة نصية",    icon: "message-square", color: "#059669" },
 };
 
 const STATUS_CONFIG = {
@@ -34,7 +37,6 @@ const STATUS_CONFIG = {
   completed: { label: "مكتمل", color: C.primary,      bg: "#EEF2F8", icon: "check" },
 };
 
-// ── File helpers ───────────────────────────────────────────────────────────────
 function getFileExt(name: string) {
   return (name.split(".").pop() ?? "").toUpperCase();
 }
@@ -44,7 +46,7 @@ function isImageFile(name: string) {
 function getFileColor(name: string) {
   const ext = getFileExt(name);
   if (["JPG", "JPEG", "PNG", "WEBP"].includes(ext)) return { bg: "rgba(201,160,53,0.12)", color: C.gold };
-  if (ext === "PDF") return { bg: "rgba(220,38,38,0.1)",   color: "#DC2626" };
+  if (ext === "PDF") return { bg: "rgba(220,38,38,0.1)", color: "#DC2626" };
   return { bg: "#EEF2F8", color: C.navy };
 }
 
@@ -55,6 +57,8 @@ export default function ConsultationDetail() {
   const { user } = useAuth();
   const { consultations, updateConsultationStatus } = useData();
   const [loading, setLoading] = useState<"accept" | "reject" | "complete" | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState<string>("");
 
   const consult = useMemo(
     () => consultations.find((c) => c.id === id),
@@ -79,12 +83,17 @@ export default function ConsultationDetail() {
   const currency = getCurrency(consult.lawyerCountry ?? "qatar");
   const attachments = consult.attachments ?? [];
 
+  function openPreview(item: { name: string; uri: string }) {
+    setPreviewName(item.name);
+    setPreviewUri(item.uri);
+  }
+
   async function handleAccept() {
     setLoading("accept");
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await updateConsultationStatus(consult!.id, "accepted");
     setLoading(null);
-    Alert.alert("تم القبول ✓", "تم قبول طلب الاستشارة بنجاح. سيتم إبلاغ العميل.", [{ text: "حسناً" }]);
+    Alert.alert("تم القبول ✓", "تم قبول طلب الاستشارة. سيتم إبلاغ العميل.", [{ text: "حسناً" }]);
   }
 
   async function handleReject() {
@@ -103,216 +112,279 @@ export default function ConsultationDetail() {
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: C.background }}
-      contentContainerStyle={[
-        styles.container,
-        {
-          paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
-          paddingBottom: insets.bottom + (Platform.OS === "web" ? 40 : 36),
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ── Top bar ─────────────────────────────────────────────── */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-right" size={22} color={C.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.pageTitle}>ملف الاستشارة</Text>
-        <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
-          <Feather name={statusCfg.icon as any} size={12} color={statusCfg.color} />
-          <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
-        </View>
-      </View>
-
-      {/* ── Client / Lawyer hero ─────────────────────────────────── */}
-      <View style={styles.heroCard}>
-        <View style={styles.heroAvatar}>
-          <Text style={styles.heroAvatarText}>
-            {(isLawyer ? consult.clientName : consult.lawyerName).charAt(0)}
-          </Text>
-        </View>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={styles.heroName}>
-            {isLawyer ? consult.clientName : consult.lawyerName}
-          </Text>
-          <Text style={styles.heroRole}>
-            {isLawyer ? "العميل" : consult.lawyerSpecialization}
-          </Text>
-          <Text style={styles.heroDate}>
-            {consult.date} — {consult.time}
-          </Text>
-        </View>
-        <View style={[styles.typeTagOuter, { backgroundColor: typeMeta.color + "18" }]}>
-          <Feather name={typeMeta.icon as any} size={18} color={typeMeta.color} />
-        </View>
-      </View>
-
-      {/* ── Section 1: نوع الاستشارة ────────────────────────────── */}
-      <SectionCard title="نوع الاستشارة / القضية" icon="briefcase">
-        <View style={styles.caseTypeRow}>
-          <View style={[styles.caseTypeIcon, { backgroundColor: typeMeta.color + "15" }]}>
-            <Feather name={typeMeta.icon as any} size={16} color={typeMeta.color} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.caseTypeLabel}>{typeMeta.label}</Text>
-            <Text style={styles.caseTypeSpec}>{consult.lawyerSpecialization}</Text>
-          </View>
-          <View style={styles.countryTag}>
-            <Text style={styles.countryFlag}>
-              {consult.lawyerCountry === "qatar" ? "🇶🇦" : "🇯🇴"}
-            </Text>
-            <Text style={styles.countryLabel}>
-              {consult.lawyerCountry === "qatar" ? "قطر" : "الأردن"}
-            </Text>
-          </View>
-        </View>
-      </SectionCard>
-
-      {/* ── Section 2: الموضوع ──────────────────────────────────── */}
-      <SectionCard title="الموضوع" icon="file-text">
-        <Text style={styles.subjectText}>{consult.subject}</Text>
-      </SectionCard>
-
-      {/* ── Section 3: تفاصيل القضية ───────────────────────────── */}
-      <SectionCard title="تفاصيل ومحتوى القضية" icon="align-right">
-        <Text style={styles.descriptionText}>{consult.description}</Text>
-      </SectionCard>
-
-      {/* ── Section 4: المرفقات ─────────────────────────────────── */}
-      <SectionCard
-        title="المرفقات والمستندات"
-        icon="paperclip"
-        badge={attachments.length > 0 ? attachments.length.toString() : undefined}
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: C.background }}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
+            paddingBottom: insets.bottom + (Platform.OS === "web" ? 40 : 36),
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
-        {attachments.length === 0 ? (
-          <View style={styles.noAttach}>
-            <Feather name="paperclip" size={26} color={C.border} />
-            <Text style={styles.noAttachText}>لم يرفق العميل أي مستندات</Text>
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Feather name="arrow-right" size={22} color={C.foreground} />
+          </TouchableOpacity>
+          <Text style={styles.pageTitle}>ملف الاستشارة</Text>
+          <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
+            <Feather name={statusCfg.icon as any} size={12} color={statusCfg.color} />
+            <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
           </View>
-        ) : (
-          <View style={styles.attachGrid}>
-            {attachments.map((name, i) => {
-              const { bg, color } = getFileColor(name);
-              const ext = getFileExt(name);
-              const isImg = isImageFile(name);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.attachThumb}
-                  onPress={() => {
-                    Alert.alert(name, isImg ? "معاينة الصورة" : "فتح المستند", [
-                      { text: "إلغاء", style: "cancel" },
-                      { text: "فتح", onPress: () => {} },
-                    ]);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.attachThumbIcon, { backgroundColor: bg }]}>
-                    <Feather
-                      name={isImg ? "image" : "file-text"}
-                      size={22}
-                      color={color}
-                    />
-                  </View>
-                  <View style={[styles.attachExtPill, { backgroundColor: bg }]}>
-                    <Text style={[styles.attachExtText, { color }]}>{ext}</Text>
-                  </View>
-                  <Text style={styles.attachThumbName} numberOfLines={2}>{name}</Text>
-                </TouchableOpacity>
-              );
-            })}
+        </View>
+
+        {/* Hero */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroAvatar}>
+            <Text style={styles.heroAvatarText}>
+              {(isLawyer ? consult.clientName : consult.lawyerName).charAt(0)}
+            </Text>
+          </View>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={styles.heroName}>
+              {isLawyer ? consult.clientName : consult.lawyerName}
+            </Text>
+            <Text style={styles.heroRole}>
+              {isLawyer ? "العميل" : consult.lawyerSpecialization}
+            </Text>
+            <Text style={styles.heroDate}>{consult.date} — {consult.time}</Text>
+          </View>
+          <View style={[styles.typeTagOuter, { backgroundColor: typeMeta.color + "18" }]}>
+            <Feather name={typeMeta.icon as any} size={18} color={typeMeta.color} />
+          </View>
+        </View>
+
+        {/* Section 1: نوع الاستشارة */}
+        <SectionCard title="نوع الاستشارة / القضية" icon="briefcase">
+          <View style={styles.caseTypeRow}>
+            <View style={[styles.caseTypeIcon, { backgroundColor: typeMeta.color + "15" }]}>
+              <Feather name={typeMeta.icon as any} size={16} color={typeMeta.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.caseTypeLabel}>{typeMeta.label}</Text>
+              <Text style={styles.caseTypeSpec}>{consult.lawyerSpecialization}</Text>
+            </View>
+            <View style={styles.countryTag}>
+              <Text style={styles.countryFlag}>
+                {consult.lawyerCountry === "qatar" ? "🇶🇦" : "🇯🇴"}
+              </Text>
+              <Text style={styles.countryLabel}>
+                {consult.lawyerCountry === "qatar" ? "قطر" : "الأردن"}
+              </Text>
+            </View>
+          </View>
+        </SectionCard>
+
+        {/* Section 2: الموضوع */}
+        <SectionCard title="الموضوع" icon="file-text">
+          <Text style={styles.subjectText}>{consult.subject}</Text>
+        </SectionCard>
+
+        {/* Section 3: تفاصيل القضية */}
+        <SectionCard title="تفاصيل ومحتوى القضية" icon="align-right">
+          <Text style={styles.descriptionText}>{consult.description}</Text>
+        </SectionCard>
+
+        {/* Section 4: المرفقات */}
+        <SectionCard
+          title="المرفقات والمستندات"
+          icon="paperclip"
+          badge={attachments.length > 0 ? attachments.length.toString() : undefined}
+        >
+          {attachments.length === 0 ? (
+            <View style={styles.noAttach}>
+              <Feather name="paperclip" size={26} color={C.border} />
+              <Text style={styles.noAttachText}>لم يرفق العميل أي مستندات</Text>
+            </View>
+          ) : (
+            <View style={styles.attachGrid}>
+              {attachments.map((item, i) => {
+                const { bg, color } = getFileColor(item.name);
+                const ext = getFileExt(item.name);
+                const isImg = isImageFile(item.name);
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.attachThumb}
+                    onPress={() => openPreview(item)}
+                    activeOpacity={0.75}
+                  >
+                    {/* Thumbnail — actual image or file icon */}
+                    {isImg && item.uri ? (
+                      <View style={styles.attachImgWrap}>
+                        <Image
+                          source={{ uri: item.uri }}
+                          style={styles.attachImgThumb}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.attachImgOverlay}>
+                          <Feather name="zoom-in" size={16} color="#fff" />
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={[styles.attachThumbIcon, { backgroundColor: bg }]}>
+                        <Feather name="file-text" size={22} color={color} />
+                      </View>
+                    )}
+                    {/* Extension badge */}
+                    <View style={[styles.attachExtPill, { backgroundColor: bg }]}>
+                      <Text style={[styles.attachExtText, { color }]}>{ext}</Text>
+                    </View>
+                    <Text style={styles.attachThumbName} numberOfLines={2}>{item.name}</Text>
+                    {/* "اضغط للمعاينة" hint */}
+                    <Text style={styles.attachHint}>
+                      {isImg ? "اضغط للمعاينة" : "اضغط للفتح"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </SectionCard>
+
+        {/* Section 5: حالة الدفع */}
+        <SectionCard title="حالة الدفع" icon="credit-card">
+          <View style={styles.paymentRow}>
+            <View style={[
+              styles.paymentStatusBadge,
+              {
+                backgroundColor: consult.paymentStatus === "paid" ? "#ECFDF5" : "#FEF3C7",
+                borderColor: consult.paymentStatus === "paid" ? "#A7F3D0" : "#FDE68A",
+              },
+            ]}>
+              <Feather
+                name={consult.paymentStatus === "paid" ? "check-circle" : "clock"}
+                size={15}
+                color={consult.paymentStatus === "paid" ? C.success : C.warning}
+              />
+              <Text style={[
+                styles.paymentStatusLabel,
+                { color: consult.paymentStatus === "paid" ? C.success : C.warning },
+              ]}>
+                {consult.paymentStatus === "paid" ? "مدفوع بالكامل" : "في انتظار الدفع"}
+              </Text>
+            </View>
+            <View style={styles.paymentAmountBox}>
+              <Text style={styles.paymentAmount}>{consult.price}</Text>
+              <Text style={styles.paymentCurrency}>{currency}</Text>
+            </View>
+          </View>
+        </SectionCard>
+
+        {/* Actions */}
+        {isLawyer && consult.status === "pending" && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.rejectBtn, loading === "reject" && { opacity: 0.65 }]}
+              onPress={handleReject}
+              disabled={!!loading}
+              activeOpacity={0.85}
+            >
+              {loading === "reject"
+                ? <ActivityIndicator color={C.destructive} size="small" />
+                : <><Feather name="x-circle" size={17} color={C.destructive} /><Text style={styles.rejectBtnText}>رفض</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.acceptBtn, loading === "accept" && { opacity: 0.65 }]}
+              onPress={handleAccept}
+              disabled={!!loading}
+              activeOpacity={0.85}
+            >
+              {loading === "accept"
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <><Feather name="check-circle" size={17} color="#fff" /><Text style={styles.acceptBtnText}>قبول الاستشارة</Text></>
+              }
+            </TouchableOpacity>
           </View>
         )}
-      </SectionCard>
 
-      {/* ── Section 5: حالة الدفع ───────────────────────────────── */}
-      <SectionCard title="حالة الدفع" icon="credit-card">
-        <View style={styles.paymentRow}>
-          {/* Status badge */}
-          <View style={[
-            styles.paymentStatusBadge,
-            {
-              backgroundColor: consult.paymentStatus === "paid" ? "#ECFDF5" : "#FEF3C7",
-              borderColor: consult.paymentStatus === "paid" ? "#A7F3D0" : "#FDE68A",
-            },
-          ]}>
-            <Feather
-              name={consult.paymentStatus === "paid" ? "check-circle" : "clock"}
-              size={15}
-              color={consult.paymentStatus === "paid" ? C.success : C.warning}
-            />
-            <Text style={[
-              styles.paymentStatusLabel,
-              { color: consult.paymentStatus === "paid" ? C.success : C.warning },
-            ]}>
-              {consult.paymentStatus === "paid" ? "مدفوع بالكامل" : "في انتظار الدفع"}
-            </Text>
-          </View>
-          {/* Amount */}
-          <View style={styles.paymentAmountBox}>
-            <Text style={styles.paymentAmount}>{consult.price}</Text>
-            <Text style={styles.paymentCurrency}>{currency}</Text>
-          </View>
-        </View>
-      </SectionCard>
-
-      {/* ── Actions (lawyer only) ────────────────────────────────── */}
-      {isLawyer && consult.status === "pending" && (
-        <View style={styles.actionRow}>
+        {isLawyer && consult.status === "accepted" && (
           <TouchableOpacity
-            style={[styles.rejectBtn, loading === "reject" && { opacity: 0.65 }]}
-            onPress={handleReject}
+            style={[styles.completeBtn, loading === "complete" && { opacity: 0.65 }]}
+            onPress={handleComplete}
             disabled={!!loading}
             activeOpacity={0.85}
           >
-            {loading === "reject"
-              ? <ActivityIndicator color={C.destructive} size="small" />
-              : <>
-                  <Feather name="x-circle" size={17} color={C.destructive} />
-                  <Text style={styles.rejectBtnText}>رفض</Text>
-                </>
-            }
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.acceptBtn, loading === "accept" && { opacity: 0.65 }]}
-            onPress={handleAccept}
-            disabled={!!loading}
-            activeOpacity={0.85}
-          >
-            {loading === "accept"
+            {loading === "complete"
               ? <ActivityIndicator color="#fff" size="small" />
-              : <>
-                  <Feather name="check-circle" size={17} color="#fff" />
-                  <Text style={styles.acceptBtnText}>قبول الاستشارة</Text>
-                </>
+              : <><Feather name="check-circle" size={18} color="#fff" /><Text style={styles.completeBtnText}>تحديد كمكتملة</Text></>
             }
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </ScrollView>
 
-      {isLawyer && consult.status === "accepted" && (
-        <TouchableOpacity
-          style={[styles.completeBtn, loading === "complete" && { opacity: 0.65 }]}
-          onPress={handleComplete}
-          disabled={!!loading}
-          activeOpacity={0.85}
-        >
-          {loading === "complete"
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <>
-                <Feather name="check-circle" size={18} color="#fff" />
-                <Text style={styles.completeBtnText}>تحديد كمكتملة</Text>
-              </>
-          }
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+      {/* ── Full-screen image preview modal ──────────────────────── */}
+      <Modal
+        visible={previewUri !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setPreviewUri(null)}
+      >
+        <View style={styles.modalOverlay}>
+          {/* Header bar */}
+          <View style={[styles.modalHeader, { paddingTop: insets.top + 10 }]}>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setPreviewUri(null)}
+              activeOpacity={0.8}
+            >
+              <Feather name="x" size={20} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle} numberOfLines={1}>{previewName}</Text>
+            <View style={styles.modalBadge}>
+              <Feather name="image" size={13} color={C.gold} />
+              <Text style={styles.modalBadgeText}>مستند العميل</Text>
+            </View>
+          </View>
+
+          {/* Image */}
+          <View style={styles.modalImageWrap}>
+            {previewUri && isImageFile(previewName) ? (
+              <Image
+                source={{ uri: previewUri }}
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+            ) : (
+              /* Non-image file placeholder */
+              <View style={styles.filePreviewBox}>
+                <View style={styles.filePreviewIcon}>
+                  <Feather name="file-text" size={48} color={C.gold} />
+                </View>
+                <Text style={styles.filePreviewName}>{previewName}</Text>
+                <Text style={styles.filePreviewSub}>
+                  لا يمكن معاينة هذا النوع من الملفات مباشرةً
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Footer */}
+          <View style={[styles.modalFooter, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.modalFooterInfo}>
+              <Feather name="shield" size={13} color={C.success} />
+              <Text style={styles.modalFooterText}>المستند مرفوع من العميل بشكل آمن</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalCloseFullBtn}
+              onPress={() => setPreviewUri(null)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalCloseBtnText}>إغلاق المعاينة</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
-// ── Reusable section card ──────────────────────────────────────────────────────
+// ── Section card ───────────────────────────────────────────────────────────────
 function SectionCard({
   title, icon, badge, children,
 }: {
@@ -345,23 +417,12 @@ const styles = StyleSheet.create({
   notFoundText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: C.foreground },
   backLink: { fontSize: 14, color: C.primary, fontFamily: "Inter_500Medium" },
 
-  // Top bar
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    gap: 10, marginBottom: 18,
-  },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18 },
   backBtn: { padding: 4 },
-  pageTitle: {
-    flex: 1, fontSize: 18, fontFamily: "Inter_700Bold",
-    color: C.foreground, textAlign: "right",
-  },
-  statusPill: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
+  pageTitle: { flex: 1, fontSize: 18, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statusText: { fontSize: 12, fontFamily: "Inter_700Bold" },
 
-  // Hero card
   heroCard: {
     backgroundColor: C.navy, borderRadius: 20, padding: 18,
     flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 14,
@@ -376,38 +437,27 @@ const styles = StyleSheet.create({
   heroName: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", textAlign: "right" },
   heroRole: { fontSize: 12, color: C.gold, fontFamily: "Inter_500Medium", textAlign: "right" },
   heroDate: { fontSize: 11, color: "rgba(255,255,255,0.45)", fontFamily: "Inter_400Regular", textAlign: "right" },
-  typeTagOuter: {
-    width: 44, height: 44, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
-  },
+  typeTagOuter: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 
-  // Section card
   sectionCard: {
     backgroundColor: C.card, borderRadius: 16,
-    borderWidth: 1, borderColor: C.border,
-    marginBottom: 12, overflow: "hidden",
+    borderWidth: 1, borderColor: C.border, marginBottom: 12, overflow: "hidden",
   },
   sectionCardHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 14, paddingVertical: 11,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-    backgroundColor: "#F8FAFF",
+    borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#F8FAFF",
   },
   sectionCardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionIconDot: {
     width: 26, height: 26, borderRadius: 8,
-    backgroundColor: "rgba(201,160,53,0.13)",
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(201,160,53,0.13)", alignItems: "center", justifyContent: "center",
   },
   sectionCardTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.navy },
   sectionCardBody: { padding: 14 },
-  badgeCircle: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: C.navy, alignItems: "center", justifyContent: "center",
-  },
+  badgeCircle: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.navy, alignItems: "center", justifyContent: "center" },
   badgeText: { fontSize: 11, color: "#fff", fontFamily: "Inter_700Bold" },
 
-  // Case type
   caseTypeRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   caseTypeIcon: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   caseTypeLabel: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
@@ -416,64 +466,52 @@ const styles = StyleSheet.create({
   countryFlag: { fontSize: 20 },
   countryLabel: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
 
-  // Subject
-  subjectText: {
-    fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy,
-    textAlign: "right", lineHeight: 24,
-  },
+  subjectText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy, textAlign: "right", lineHeight: 24 },
+  descriptionText: { fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular", lineHeight: 24, textAlign: "right" },
 
-  // Description
-  descriptionText: {
-    fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular",
-    lineHeight: 24, textAlign: "right",
-  },
-
-  // Attachments
   noAttach: { alignItems: "center", paddingVertical: 16, gap: 8 },
   noAttachText: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+
   attachGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   attachThumb: {
     width: "47%", alignItems: "center", gap: 6,
-    backgroundColor: C.background, borderRadius: 12,
+    backgroundColor: C.background, borderRadius: 14,
     borderWidth: 1, borderColor: C.border,
-    paddingVertical: 14, paddingHorizontal: 10,
-    position: "relative",
+    paddingBottom: 12, overflow: "hidden", position: "relative",
+  },
+  attachImgWrap: { width: "100%", height: 110, position: "relative" },
+  attachImgThumb: { width: "100%", height: 110 },
+  attachImgOverlay: {
+    position: "absolute", inset: 0,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center", justifyContent: "center",
   },
   attachThumbIcon: {
-    width: 52, height: 52, borderRadius: 14,
+    width: "100%", height: 100, borderRadius: 0,
     alignItems: "center", justifyContent: "center",
   },
   attachExtPill: {
-    position: "absolute", top: 8, left: 8,
+    position: "absolute", top: 8, right: 8,
     borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
   },
   attachExtText: { fontSize: 9, fontFamily: "Inter_700Bold" },
-  attachThumbName: {
-    fontSize: 11, color: C.foreground, fontFamily: "Inter_500Medium",
-    textAlign: "center", lineHeight: 16,
-  },
+  attachThumbName: { fontSize: 11, color: C.foreground, fontFamily: "Inter_500Medium", textAlign: "center", lineHeight: 16, paddingHorizontal: 8 },
+  attachHint: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
 
-  // Payment
-  paymentRow: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-  },
+  paymentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   paymentStatusBadge: {
     flexDirection: "row", alignItems: "center", gap: 7,
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 20, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1,
   },
   paymentStatusLabel: { fontSize: 14, fontFamily: "Inter_700Bold" },
   paymentAmountBox: { flexDirection: "row", alignItems: "baseline", gap: 4 },
   paymentAmount: { fontSize: 28, fontFamily: "Inter_700Bold", color: C.navy },
   paymentCurrency: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
 
-  // Actions
   actionRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   rejectBtn: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, borderWidth: 1.5, borderColor: C.destructive,
-    borderRadius: 14, paddingVertical: 14,
+    gap: 8, borderWidth: 1.5, borderColor: C.destructive, borderRadius: 14, paddingVertical: 14,
   },
   rejectBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: C.destructive },
   acceptBtn: {
@@ -483,8 +521,81 @@ const styles = StyleSheet.create({
   acceptBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
   completeBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14,
-    marginBottom: 10,
+    gap: 8, backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, marginBottom: 10,
   },
   completeBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // ── Modal ────────────────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "space-between",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  modalCloseBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  modalTitle: {
+    flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold",
+    color: "#fff", textAlign: "right",
+  },
+  modalBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(201,160,53,0.15)",
+    borderWidth: 1, borderColor: "rgba(201,160,53,0.3)",
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+  },
+  modalBadgeText: { fontSize: 11, color: C.gold, fontFamily: "Inter_600SemiBold" },
+  modalImageWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 16,
+  },
+  modalImage: {
+    width: SCREEN_W - 16,
+    height: SCREEN_H * 0.62,
+    borderRadius: 12,
+  },
+  filePreviewBox: {
+    alignItems: "center", gap: 16, padding: 40,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+  },
+  filePreviewIcon: {
+    width: 88, height: 88, borderRadius: 22,
+    backgroundColor: "rgba(201,160,53,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  filePreviewName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff", textAlign: "center" },
+  filePreviewSub: { fontSize: 13, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular", textAlign: "center" },
+  modalFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
+  modalFooterInfo: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 6,
+  },
+  modalFooterText: { fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
+  modalCloseFullBtn: {
+    backgroundColor: "#fff",
+    borderRadius: 14, paddingVertical: 14,
+    alignItems: "center",
+  },
+  modalCloseBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy },
 });
