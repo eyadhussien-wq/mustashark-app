@@ -43,6 +43,8 @@ export interface Consultation {
   createdAt: string;
   type: "video" | "chat" | "phone";
   price: number;
+  paymentStatus?: "paid" | "unpaid";
+  attachments?: string[];
 }
 
 interface DataContextValue {

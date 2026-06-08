@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
@@ -13,23 +15,28 @@ import colors from "@/constants/colors";
 import { ConsultationCard } from "@/components/ConsultationCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData, type ConsultationStatus } from "@/contexts/DataContext";
-import * as Haptics from "expo-haptics";
 
 const C = colors.light;
 
 const FILTERS: { label: string; value: ConsultationStatus | "all" }[] = [
-  { label: "الكل", value: "all" },
-  { label: "معلّق", value: "pending" },
-  { label: "مقبول", value: "accepted" },
-  { label: "مكتمل", value: "completed" },
+  { label: "الكل",    value: "all" },
+  { label: "معلّق",  value: "pending" },
+  { label: "مقبول",  value: "accepted" },
+  { label: "مكتمل",  value: "completed" },
   { label: "مرفوض", value: "rejected" },
 ];
 
 export default function LawyerRequests() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user } = useAuth();
   const { consultations, updateConsultationStatus } = useData();
-  const [filter, setFilter] = useState<ConsultationStatus | "all">("all");
+
+  // Accept an optional initialFilter from navigation params (e.g. from stat card taps)
+  const { initialFilter } = useLocalSearchParams<{ initialFilter?: string }>();
+  const defaultFilter = (FILTERS.find((f) => f.value === initialFilter)?.value ?? "all") as ConsultationStatus | "all";
+
+  const [filter, setFilter] = useState<ConsultationStatus | "all">(defaultFilter);
 
   const myConsults = useMemo(() => {
     const mine = consultations.filter((c) => c.lawyerId === user?.id);
@@ -72,12 +79,17 @@ export default function LawyerRequests() {
         data={myConsults}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => (
-          <ConsultationCard
-            consultation={item}
-            viewAs="lawyer"
-            onAccept={() => handleAccept(item.id)}
-            onReject={() => handleReject(item.id)}
-          />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push(`/consultation/${item.id}`)}
+          >
+            <ConsultationCard
+              consultation={item}
+              viewAs="lawyer"
+              onAccept={() => handleAccept(item.id)}
+              onReject={() => handleReject(item.id)}
+            />
+          </TouchableOpacity>
         )}
         contentContainerStyle={[
           styles.list,

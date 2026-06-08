@@ -72,6 +72,9 @@ export default function Payment() {
     setLoading(true);
     try {
       await new Promise((r) => setTimeout(r, 1800));
+      const attachmentNames: string[] = (() => {
+        try { return JSON.parse(params.attachments ?? "[]"); } catch { return []; }
+      })();
       await bookConsultation({
         clientId: user.id,
         clientName: user.name,
@@ -85,6 +88,8 @@ export default function Payment() {
         time: params.time ?? "",
         type: (params.type ?? "video") as "video" | "phone" | "chat",
         price,
+        paymentStatus: "paid",
+        attachments: attachmentNames,
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSuccess(true);
