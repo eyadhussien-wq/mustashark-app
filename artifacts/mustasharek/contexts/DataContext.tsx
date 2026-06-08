@@ -198,6 +198,41 @@ const SAMPLE_LAWYERS: Lawyer[] = [
     hourlyRate: 140,
     available: false,
   },
+  // ── Test / Demo accounts (synced with AuthContext SAMPLE_USERS) ──────────────
+  {
+    id: "lawyer-test",
+    name: "د. محامٍ تجريبي",
+    email: "lawyer@mustashark.com",
+    phone: "+97450000002",
+    role: "lawyer",
+    country: "qatar",
+    specialization: "قانون تجاري",
+    licenseNumber: "QAT-99999",
+    licenseVerified: true,
+    bio: "حساب تجريبي لاختبار لوحة تحكم المحامي وجميع ميزات التطبيق — متاح للحجز في أي وقت.",
+    experience: 5,
+    rating: 4.5,
+    reviewsCount: 20,
+    hourlyRate: 200,
+    available: true,
+  },
+  {
+    id: "lawyer-demo",
+    name: "د. فاطمة الزهراني",
+    email: "fatima@example.com",
+    phone: "+97455234567",
+    role: "lawyer",
+    country: "qatar",
+    specialization: "قانون تجاري",
+    licenseNumber: "QAT-12345",
+    licenseVerified: true,
+    bio: "محامية متخصصة في القانون التجاري وعقود الأعمال مع خبرة 12 عاماً في المحاكم القطرية والدولية.",
+    experience: 12,
+    rating: 4.9,
+    reviewsCount: 87,
+    hourlyRate: 300,
+    available: true,
+  },
 ];
 
 const SAMPLE_CONSULTATIONS: Consultation[] = [
@@ -259,8 +294,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (storedLawyers) {
       try {
         const parsed: Lawyer[] = JSON.parse(storedLawyers);
-        setLawyers([...SAMPLE_LAWYERS, ...parsed.filter((l) => !SAMPLE_LAWYERS.find((sl) => sl.id === l.id))]);
+        // Upsert: SAMPLE_LAWYERS always win by ID (keeps test accounts in sync)
+        const sampleIds = new Set(SAMPLE_LAWYERS.map((l) => l.id));
+        const extras = parsed.filter((l) => !sampleIds.has(l.id));
+        setLawyers([...SAMPLE_LAWYERS, ...extras]);
       } catch {}
+    } else {
+      setLawyers(SAMPLE_LAWYERS);
     }
   }, []);
 
