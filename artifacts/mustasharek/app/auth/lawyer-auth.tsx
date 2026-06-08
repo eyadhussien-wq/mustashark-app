@@ -321,7 +321,9 @@ function LoginForm({
 
       <View style={styles.demoBox}>
         <Feather name="info" size={12} color={C.mutedForeground} />
-        <Text style={styles.demoText}>للتجربة: fatima@example.com / 123456</Text>
+        <Text style={styles.demoText}>
+          {"للاختبار: lawyer@mustashark.com / test1234\nأو: fatima@example.com / 123456"}
+        </Text>
       </View>
 
       <View style={styles.dividerRow}>

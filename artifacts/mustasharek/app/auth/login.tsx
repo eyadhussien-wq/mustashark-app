@@ -184,8 +184,8 @@ export default function Login() {
 
         <Text style={styles.hint}>
           {isLawyer
-            ? "للتجربة: fatima@example.com / 123456"
-            : "للتجربة: ahmed@example.com / 123456"}
+            ? "للاختبار: lawyer@mustashark.com / test1234"
+            : "للاختبار: client@mustashark.com / test1234"}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

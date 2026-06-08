@@ -101,6 +101,34 @@ const SAMPLE_USERS: StoredUser[] = [
     hourlyRate: 300,
     available: true,
   },
+  // ── Test accounts ──────────────────────────────────────────────────────────
+  {
+    id: "client-test",
+    name: "عميل تجريبي",
+    email: "client@mustashark.com",
+    password: "test1234",
+    phone: "+97450000001",
+    role: "client",
+    country: "qatar",
+  },
+  {
+    id: "lawyer-test",
+    name: "د. محامٍ تجريبي",
+    email: "lawyer@mustashark.com",
+    password: "test1234",
+    phone: "+97450000002",
+    role: "lawyer",
+    country: "qatar",
+    specialization: "قانون تجاري",
+    licenseNumber: "QAT-99999",
+    licenseVerified: true,
+    bio: "حساب تجريبي لاختبار لوحة تحكم المحامي وجميع ميزات التطبيق.",
+    experience: 5,
+    rating: 4.5,
+    reviewsCount: 20,
+    hourlyRate: 200,
+    available: true,
+  },
 ];
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -112,7 +140,17 @@ async function readUsers(): Promise<StoredUser[]> {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as StoredUser[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Merge: always keep SAMPLE_USERS by id (so test accounts are always present)
+        const storedIds = new Set(parsed.map((u) => u.id));
+        const missing = SAMPLE_USERS.filter((u) => !storedIds.has(u.id));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          await writeUsers(merged);
+          return merged;
+        }
+        return parsed;
+      }
     }
   } catch {}
   // First run — seed sample users
