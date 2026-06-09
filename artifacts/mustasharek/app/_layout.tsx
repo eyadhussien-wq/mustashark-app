@@ -34,10 +34,15 @@ function RootLayoutNav() {
       <Stack.Screen name="(lawyer)" />
       <Stack.Screen
         name="lawyer/[id]"
-        options={{
-          headerShown: false,
-          presentation: "card",
-        }}
+        options={{ headerShown: false, presentation: "card" }}
+      />
+      <Stack.Screen
+        name="consultation/[id]"
+        options={{ headerShown: false, presentation: "card" }}
+      />
+      <Stack.Screen
+        name="payment"
+        options={{ headerShown: false, presentation: "card" }}
       />
     </Stack>
   );

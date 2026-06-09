@@ -35,6 +35,7 @@ export interface ConsultationRating {
 
 export interface Consultation {
   id: string;
+  serialNumber: string;
   clientId: string;
   clientName: string;
   lawyerId: string;
@@ -59,7 +60,7 @@ interface DataContextValue {
   consultations: Consultation[];
   getLawyerById: (id: string) => Lawyer | undefined;
   bookConsultation: (
-    data: Omit<Consultation, "id" | "createdAt" | "status">
+    data: Omit<Consultation, "id" | "createdAt" | "status" | "serialNumber">
   ) => Promise<void>;
   updateConsultationStatus: (
     id: string,
@@ -252,6 +253,7 @@ const SAMPLE_LAWYERS: Lawyer[] = [
 const SAMPLE_CONSULTATIONS: Consultation[] = [
   {
     id: "consult-1",
+    serialNumber: "MST-2026-0001",
     clientId: "client-1",
     clientName: "أحمد الكواري",
     lawyerId: "lawyer-1",
@@ -270,6 +272,7 @@ const SAMPLE_CONSULTATIONS: Consultation[] = [
   },
   {
     id: "consult-2",
+    serialNumber: "MST-2026-0002",
     clientId: "client-1",
     clientName: "أحمد الكواري",
     lawyerId: "lawyer-4",
@@ -361,10 +364,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const bookConsultation = useCallback(
-    async (data: Omit<Consultation, "id" | "createdAt" | "status">) => {
+    async (data: Omit<Consultation, "id" | "createdAt" | "status" | "serialNumber">) => {
+      // Generate next serial number
+      const SERIAL_KEY = "mustasharek_serial_counter";
+      let counter = 1;
+      try {
+        const raw = await AsyncStorage.getItem(SERIAL_KEY);
+        if (raw) counter = parseInt(raw, 10) + 1;
+      } catch {}
+      await AsyncStorage.setItem(SERIAL_KEY, String(counter));
+      const year = new Date().getFullYear();
+      const serialNumber = `MST-${year}-${String(counter + 2).padStart(4, "0")}`;
+
       const newConsult: Consultation = {
         ...data,
         id: "consult-" + Date.now(),
+        serialNumber,
         createdAt: new Date().toISOString(),
         status: "pending",
       };

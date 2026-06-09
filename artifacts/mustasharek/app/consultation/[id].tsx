@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
@@ -50,13 +52,127 @@ function getFileColor(name: string) {
   return { bg: "#EEF2F8", color: C.navy };
 }
 
+// ── PDF HTML builder ──────────────────────────────────────────────────────────
+function buildPdfHtml(consult: ReturnType<typeof useData>["consultations"][0]) {
+  const typeLabels: Record<string, string> = { video: "مكالمة فيديو", phone: "مكالمة هاتفية", chat: "محادثة نصية" };
+  const statusLabels: Record<string, string> = { pending: "معلّق", accepted: "مقبول", rejected: "مرفوض", completed: "مكتمل" };
+  const country = consult.lawyerCountry === "qatar" ? "🇶🇦 قطر" : "🇯🇴 الأردن";
+  const currency = consult.lawyerCountry === "qatar" ? "ريال قطري" : "دينار أردني";
+  const attachmentRows = (consult.attachments ?? [])
+    .map((a) => `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;direction:rtl">${a.name}</td></tr>`)
+    .join("") || `<tr><td style="padding:6px 12px;color:#888;direction:rtl">لا توجد مرفقات</td></tr>`;
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Tajawal',Arial,sans-serif;background:#f9fafb;color:#1a2a4a;direction:rtl}
+  .page{max-width:760px;margin:0 auto;background:#fff;padding:40px;border-radius:12px}
+  .header{background:#1a2a4a;color:#fff;padding:28px 32px;border-radius:10px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center}
+  .header-left h1{font-size:26px;font-weight:700;margin-bottom:4px}
+  .header-left p{font-size:13px;opacity:0.7}
+  .serial{background:rgba(201,160,53,0.2);border:1px solid rgba(201,160,53,0.5);color:#c9a035;padding:8px 16px;border-radius:20px;font-size:14px;font-weight:700;text-align:center}
+  .section{margin-bottom:22px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+  .section-title{background:#f8f9fc;padding:10px 16px;font-weight:700;font-size:13px;color:#1a2a4a;border-bottom:1px solid #e5e7eb}
+  .section-body{padding:16px}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6}
+  .row:last-child{border-bottom:none}
+  .label{color:#6b7280;font-size:13px}
+  .value{font-weight:600;font-size:13px;color:#1a2a4a}
+  .status-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700}
+  .desc{font-size:14px;line-height:1.8;color:#374151}
+  .footer{margin-top:32px;text-align:center;color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:16px}
+  table{width:100%;border-collapse:collapse}
+  .paid{background:#ecfdf5;color:#059669}
+  .unpaid{background:#fef3c7;color:#d97706}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="header-left">
+      <h1>مستشارك — وثيقة الاستشارة</h1>
+      <p>منصة الاستشارات القانونية في قطر والأردن</p>
+    </div>
+    <div class="serial">${consult.serialNumber ?? consult.id}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">بيانات الاستشارة</div>
+    <div class="section-body">
+      <div class="row"><span class="label">الرقم التسلسلي</span><span class="value">${consult.serialNumber ?? consult.id}</span></div>
+      <div class="row"><span class="label">العميل</span><span class="value">${consult.clientName}</span></div>
+      <div class="row"><span class="label">المحامي</span><span class="value">${consult.lawyerName}</span></div>
+      <div class="row"><span class="label">التخصص</span><span class="value">${consult.lawyerSpecialization}</span></div>
+      <div class="row"><span class="label">الدولة</span><span class="value">${country}</span></div>
+      <div class="row"><span class="label">نوع الاستشارة</span><span class="value">${typeLabels[consult.type] ?? consult.type}</span></div>
+      <div class="row"><span class="label">التاريخ والوقت</span><span class="value">${consult.date} — ${consult.time}</span></div>
+      <div class="row">
+        <span class="label">الحالة</span>
+        <span class="status-badge" style="background:#ecfdf5;color:#059669">${statusLabels[consult.status] ?? consult.status}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">موضوع القضية</div>
+    <div class="section-body"><p class="desc" style="font-weight:700">${consult.subject}</p></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">تفاصيل القضية</div>
+    <div class="section-body"><p class="desc">${consult.description}</p></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">المرفقات والمستندات</div>
+    <table>${attachmentRows}</table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">حالة الدفع</div>
+    <div class="section-body">
+      <div class="row">
+        <span class="label">الحالة</span>
+        <span class="status-badge ${consult.paymentStatus === "paid" ? "paid" : "unpaid"}">
+          ${consult.paymentStatus === "paid" ? "✓ مدفوع بالكامل" : "في انتظار الدفع"}
+        </span>
+      </div>
+      <div class="row">
+        <span class="label">المبلغ</span>
+        <span class="value" style="font-size:18px;color:#1a2a4a">${consult.price} ${currency}</span>
+      </div>
+    </div>
+  </div>
+
+  ${consult.rating ? `
+  <div class="section">
+    <div class="section-title">تقييم العميل</div>
+    <div class="section-body">
+      <div class="row"><span class="label">التقييم</span><span class="value">${"⭐".repeat(consult.rating.stars)} (${consult.rating.stars}/5)</span></div>
+      ${consult.rating.comment ? `<div class="row"><span class="label">التعليق</span><span class="value">${consult.rating.comment}</span></div>` : ""}
+    </div>
+  </div>` : ""}
+
+  <div class="footer">
+    تم توليد هذه الوثيقة تلقائياً من منصة مستشارك • ${new Date().toLocaleDateString("ar-QA")}
+  </div>
+</div>
+</body>
+</html>`;
+}
+
 export default function ConsultationDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { consultations, updateConsultationStatus } = useData();
-  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | null>(null);
+  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
 
@@ -88,12 +204,44 @@ export default function ConsultationDetail() {
     setPreviewUri(item.uri);
   }
 
+  async function handleExportPdf() {
+    setLoading("pdf");
+    try {
+      const html = buildPdfHtml(consult!);
+      if (Platform.OS === "web") {
+        // Open print dialog in browser
+        const win = window.open("", "_blank");
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          win.focus();
+          win.print();
+        }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, {
+            mimeType: "application/pdf",
+            dialogTitle: `استشارة ${consult!.serialNumber ?? consult!.id}`,
+          });
+        } else {
+          Alert.alert("تصدير PDF", `تم حفظ الملف في:\n${uri}`);
+        }
+      }
+    } catch {
+      Alert.alert("خطأ", "تعذّر تصدير ملف PDF. حاول مجدداً.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
   async function handleAccept() {
     setLoading("accept");
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await updateConsultationStatus(consult!.id, "accepted");
     setLoading(null);
-    Alert.alert("تم القبول ✓", "تم قبول طلب الاستشارة. سيتم إبلاغ العميل.", [{ text: "حسناً" }]);
+    Alert.alert("تم القبول ✓", "تم قبول طلب الاستشارة.", [{ text: "حسناً" }]);
   }
 
   async function handleReject() {
@@ -130,10 +278,34 @@ export default function ConsultationDetail() {
             <Feather name="arrow-right" size={22} color={C.foreground} />
           </TouchableOpacity>
           <Text style={styles.pageTitle}>ملف الاستشارة</Text>
-          <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
-            <Feather name={statusCfg.icon as any} size={12} color={statusCfg.color} />
-            <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
+          <View style={styles.topBarRight}>
+            <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
+              <Feather name={statusCfg.icon as any} size={12} color={statusCfg.color} />
+              <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
+            </View>
           </View>
+        </View>
+
+        {/* Serial number banner */}
+        <View style={styles.serialBanner}>
+          <View style={styles.serialLeft}>
+            <Feather name="hash" size={13} color={C.gold} />
+            <Text style={styles.serialNumber}>{consult.serialNumber ?? consult.id}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.pdfBtn, loading === "pdf" && { opacity: 0.65 }]}
+            onPress={handleExportPdf}
+            disabled={loading === "pdf"}
+            activeOpacity={0.8}
+          >
+            {loading === "pdf"
+              ? <ActivityIndicator size="small" color={C.navy} />
+              : <>
+                  <Feather name="download" size={13} color={C.navy} />
+                  <Text style={styles.pdfBtnText}>تصدير PDF</Text>
+                </>
+            }
+          </TouchableOpacity>
         </View>
 
         {/* Hero */}
@@ -157,7 +329,7 @@ export default function ConsultationDetail() {
           </View>
         </View>
 
-        {/* Section 1: نوع الاستشارة */}
+        {/* Section 1 */}
         <SectionCard title="نوع الاستشارة / القضية" icon="briefcase">
           <View style={styles.caseTypeRow}>
             <View style={[styles.caseTypeIcon, { backgroundColor: typeMeta.color + "15" }]}>
@@ -178,17 +350,17 @@ export default function ConsultationDetail() {
           </View>
         </SectionCard>
 
-        {/* Section 2: الموضوع */}
+        {/* Section 2 */}
         <SectionCard title="الموضوع" icon="file-text">
           <Text style={styles.subjectText}>{consult.subject}</Text>
         </SectionCard>
 
-        {/* Section 3: تفاصيل القضية */}
+        {/* Section 3 */}
         <SectionCard title="تفاصيل ومحتوى القضية" icon="align-right">
           <Text style={styles.descriptionText}>{consult.description}</Text>
         </SectionCard>
 
-        {/* Section 4: المرفقات */}
+        {/* Section 4 */}
         <SectionCard
           title="المرفقات والمستندات"
           icon="paperclip"
@@ -212,14 +384,9 @@ export default function ConsultationDetail() {
                     onPress={() => openPreview(item)}
                     activeOpacity={0.75}
                   >
-                    {/* Thumbnail — actual image or file icon */}
                     {isImg && item.uri ? (
                       <View style={styles.attachImgWrap}>
-                        <Image
-                          source={{ uri: item.uri }}
-                          style={styles.attachImgThumb}
-                          resizeMode="cover"
-                        />
+                        <Image source={{ uri: item.uri }} style={styles.attachImgThumb} resizeMode="cover" />
                         <View style={styles.attachImgOverlay}>
                           <Feather name="zoom-in" size={16} color="#fff" />
                         </View>
@@ -229,15 +396,11 @@ export default function ConsultationDetail() {
                         <Feather name="file-text" size={22} color={color} />
                       </View>
                     )}
-                    {/* Extension badge */}
                     <View style={[styles.attachExtPill, { backgroundColor: bg }]}>
                       <Text style={[styles.attachExtText, { color }]}>{ext}</Text>
                     </View>
                     <Text style={styles.attachThumbName} numberOfLines={2}>{item.name}</Text>
-                    {/* "اضغط للمعاينة" hint */}
-                    <Text style={styles.attachHint}>
-                      {isImg ? "اضغط للمعاينة" : "اضغط للفتح"}
-                    </Text>
+                    <Text style={styles.attachHint}>{isImg ? "اضغط للمعاينة" : "اضغط للفتح"}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -245,7 +408,7 @@ export default function ConsultationDetail() {
           )}
         </SectionCard>
 
-        {/* Section 5: حالة الدفع */}
+        {/* Section 5 */}
         <SectionCard title="حالة الدفع" icon="credit-card">
           <View style={styles.paymentRow}>
             <View style={[
@@ -274,14 +437,30 @@ export default function ConsultationDetail() {
           </View>
         </SectionCard>
 
+        {/* Rating display (if rated) */}
+        {consult.rating && (
+          <SectionCard title="تقييم العميل" icon="star">
+            <View style={styles.ratingRow}>
+              <View style={styles.ratingStars}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Feather key={s} name="star" size={18}
+                    color={s <= consult.rating!.stars ? C.gold : C.border} />
+                ))}
+              </View>
+              <Text style={styles.ratingNum}>{consult.rating.stars}/5</Text>
+            </View>
+            {consult.rating.comment && (
+              <Text style={styles.ratingComment}>"{consult.rating.comment}"</Text>
+            )}
+          </SectionCard>
+        )}
+
         {/* Actions */}
         {isLawyer && consult.status === "pending" && (
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.rejectBtn, loading === "reject" && { opacity: 0.65 }]}
-              onPress={handleReject}
-              disabled={!!loading}
-              activeOpacity={0.85}
+              onPress={handleReject} disabled={!!loading} activeOpacity={0.85}
             >
               {loading === "reject"
                 ? <ActivityIndicator color={C.destructive} size="small" />
@@ -290,9 +469,7 @@ export default function ConsultationDetail() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.acceptBtn, loading === "accept" && { opacity: 0.65 }]}
-              onPress={handleAccept}
-              disabled={!!loading}
-              activeOpacity={0.85}
+              onPress={handleAccept} disabled={!!loading} activeOpacity={0.85}
             >
               {loading === "accept"
                 ? <ActivityIndicator color="#fff" size="small" />
@@ -305,9 +482,7 @@ export default function ConsultationDetail() {
         {isLawyer && consult.status === "accepted" && (
           <TouchableOpacity
             style={[styles.completeBtn, loading === "complete" && { opacity: 0.65 }]}
-            onPress={handleComplete}
-            disabled={!!loading}
-            activeOpacity={0.85}
+            onPress={handleComplete} disabled={!!loading} activeOpacity={0.85}
           >
             {loading === "complete"
               ? <ActivityIndicator color="#fff" size="small" />
@@ -317,22 +492,15 @@ export default function ConsultationDetail() {
         )}
       </ScrollView>
 
-      {/* ── Full-screen image preview modal ──────────────────────── */}
+      {/* Full-screen image preview modal */}
       <Modal
         visible={previewUri !== null}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setPreviewUri(null)}
+        transparent animationType="fade"
+        statusBarTranslucent onRequestClose={() => setPreviewUri(null)}
       >
         <View style={styles.modalOverlay}>
-          {/* Header bar */}
           <View style={[styles.modalHeader, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity
-              style={styles.modalCloseBtn}
-              onPress={() => setPreviewUri(null)}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setPreviewUri(null)} activeOpacity={0.8}>
               <Feather name="x" size={20} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.modalTitle} numberOfLines={1}>{previewName}</Text>
@@ -341,40 +509,25 @@ export default function ConsultationDetail() {
               <Text style={styles.modalBadgeText}>مستند العميل</Text>
             </View>
           </View>
-
-          {/* Image */}
           <View style={styles.modalImageWrap}>
             {previewUri && isImageFile(previewName) ? (
-              <Image
-                source={{ uri: previewUri }}
-                style={styles.modalImage}
-                resizeMode="contain"
-              />
+              <Image source={{ uri: previewUri }} style={styles.modalImage} resizeMode="contain" />
             ) : (
-              /* Non-image file placeholder */
               <View style={styles.filePreviewBox}>
                 <View style={styles.filePreviewIcon}>
                   <Feather name="file-text" size={48} color={C.gold} />
                 </View>
                 <Text style={styles.filePreviewName}>{previewName}</Text>
-                <Text style={styles.filePreviewSub}>
-                  لا يمكن معاينة هذا النوع من الملفات مباشرةً
-                </Text>
+                <Text style={styles.filePreviewSub}>لا يمكن معاينة هذا النوع مباشرةً</Text>
               </View>
             )}
           </View>
-
-          {/* Footer */}
           <View style={[styles.modalFooter, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalFooterInfo}>
               <Feather name="shield" size={13} color={C.success} />
               <Text style={styles.modalFooterText}>المستند مرفوع من العميل بشكل آمن</Text>
             </View>
-            <TouchableOpacity
-              style={styles.modalCloseFullBtn}
-              onPress={() => setPreviewUri(null)}
-              activeOpacity={0.85}
-            >
+            <TouchableOpacity style={styles.modalCloseFullBtn} onPress={() => setPreviewUri(null)} activeOpacity={0.85}>
               <Text style={styles.modalCloseBtnText}>إغلاق المعاينة</Text>
             </TouchableOpacity>
           </View>
@@ -384,10 +537,7 @@ export default function ConsultationDetail() {
   );
 }
 
-// ── Section card ───────────────────────────────────────────────────────────────
-function SectionCard({
-  title, icon, badge, children,
-}: {
+function SectionCard({ title, icon, badge, children }: {
   title: string; icon: string; badge?: string; children: React.ReactNode;
 }) {
   return (
@@ -410,18 +560,31 @@ function SectionCard({
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: 18 },
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   notFoundText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: C.foreground },
   backLink: { fontSize: 14, color: C.primary, fontFamily: "Inter_500Medium" },
 
-  topBar: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18 },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   backBtn: { padding: 4 },
   pageTitle: { flex: 1, fontSize: 18, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
+  topBarRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statusText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+
+  // Serial number banner
+  serialBanner: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: C.navy, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 14,
+  },
+  serialLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  serialNumber: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.gold, letterSpacing: 0.5 },
+  pdfBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  pdfBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: C.navy },
 
   heroCard: {
     backgroundColor: C.navy, borderRadius: 20, padding: 18,
@@ -429,8 +592,7 @@ const styles = StyleSheet.create({
   },
   heroAvatar: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: "rgba(201,160,53,0.22)",
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(201,160,53,0.22)", alignItems: "center", justifyContent: "center",
     borderWidth: 2, borderColor: C.gold,
   },
   heroAvatarText: { fontSize: 20, color: "#fff", fontFamily: "Inter_700Bold" },
@@ -471,29 +633,20 @@ const styles = StyleSheet.create({
 
   noAttach: { alignItems: "center", paddingVertical: 16, gap: 8 },
   noAttachText: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-
   attachGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   attachThumb: {
     width: "47%", alignItems: "center", gap: 6,
     backgroundColor: C.background, borderRadius: 14,
-    borderWidth: 1, borderColor: C.border,
-    paddingBottom: 12, overflow: "hidden", position: "relative",
+    borderWidth: 1, borderColor: C.border, paddingBottom: 12, overflow: "hidden", position: "relative",
   },
   attachImgWrap: { width: "100%", height: 110, position: "relative" },
   attachImgThumb: { width: "100%", height: 110 },
   attachImgOverlay: {
     position: "absolute", inset: 0,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.18)", alignItems: "center", justifyContent: "center",
   },
-  attachThumbIcon: {
-    width: "100%", height: 100, borderRadius: 0,
-    alignItems: "center", justifyContent: "center",
-  },
-  attachExtPill: {
-    position: "absolute", top: 8, right: 8,
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-  },
+  attachThumbIcon: { width: "100%", height: 100, alignItems: "center", justifyContent: "center" },
+  attachExtPill: { position: "absolute", top: 8, right: 8, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   attachExtText: { fontSize: 9, fontFamily: "Inter_700Bold" },
   attachThumbName: { fontSize: 11, color: C.foreground, fontFamily: "Inter_500Medium", textAlign: "center", lineHeight: 16, paddingHorizontal: 8 },
   attachHint: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
@@ -507,6 +660,11 @@ const styles = StyleSheet.create({
   paymentAmountBox: { flexDirection: "row", alignItems: "baseline", gap: 4 },
   paymentAmount: { fontSize: 28, fontFamily: "Inter_700Bold", color: C.navy },
   paymentCurrency: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+
+  ratingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  ratingStars: { flexDirection: "row", gap: 4 },
+  ratingNum: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.gold },
+  ratingComment: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", fontStyle: "italic", textAlign: "right", lineHeight: 20 },
 
   actionRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
   rejectBtn: {
@@ -525,77 +683,32 @@ const styles = StyleSheet.create({
   },
   completeBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
 
-  // ── Modal ────────────────────────────────────────────────────────────────────
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
-    justifyContent: "space-between",
-  },
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "space-between" },
   modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 12, gap: 10,
+    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)",
   },
-  modalCloseBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center", justifyContent: "center",
-  },
-  modalTitle: {
-    flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold",
-    color: "#fff", textAlign: "right",
-  },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
+  modalTitle: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", textAlign: "right" },
   modalBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "rgba(201,160,53,0.15)",
-    borderWidth: 1, borderColor: "rgba(201,160,53,0.3)",
+    backgroundColor: "rgba(201,160,53,0.15)", borderWidth: 1, borderColor: "rgba(201,160,53,0.3)",
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
   },
   modalBadgeText: { fontSize: 11, color: C.gold, fontFamily: "Inter_600SemiBold" },
-  modalImageWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 16,
-  },
-  modalImage: {
-    width: SCREEN_W - 16,
-    height: SCREEN_H * 0.62,
-    borderRadius: 12,
-  },
+  modalImageWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, paddingVertical: 16 },
+  modalImage: { width: SCREEN_W - 16, height: SCREEN_H * 0.62, borderRadius: 12 },
   filePreviewBox: {
     alignItems: "center", gap: 16, padding: 40,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
-  filePreviewIcon: {
-    width: 88, height: 88, borderRadius: 22,
-    backgroundColor: "rgba(201,160,53,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
+  filePreviewIcon: { width: 88, height: 88, borderRadius: 22, backgroundColor: "rgba(201,160,53,0.15)", alignItems: "center", justifyContent: "center" },
   filePreviewName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff", textAlign: "center" },
   filePreviewSub: { fontSize: 13, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular", textAlign: "center" },
-  modalFooter: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  modalFooterInfo: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 6,
-  },
+  modalFooter: { paddingHorizontal: 16, paddingTop: 12, gap: 12, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  modalFooterInfo: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   modalFooterText: { fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
-  modalCloseFullBtn: {
-    backgroundColor: "#fff",
-    borderRadius: 14, paddingVertical: 14,
-    alignItems: "center",
-  },
+  modalCloseFullBtn: { backgroundColor: "#fff", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
   modalCloseBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy },
 });
