@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  I18nManager,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatPrice } from "@/utils/currency";
 
 const C = colors.light;
@@ -22,6 +24,7 @@ export default function LawyerProfile() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { getLawyerById, consultations } = useData();
+  const { lang, setLang, t } = useLanguage();
 
   // Get live rating data from DataContext (updated by client reviews)
   const liveProfile = user?.id ? getLawyerById(user.id) : undefined;
@@ -41,15 +44,28 @@ export default function LawyerProfile() {
     router.replace("/onboarding");
   }
 
+  function toggleLanguage() {
+    const next = lang === "ar" ? "en" : "ar";
+    setLang(next);
+    if (next === "ar" && !I18nManager.isRTL) {
+      I18nManager.forceRTL(true);
+    } else if (next === "en" && I18nManager.isRTL) {
+      I18nManager.forceRTL(false);
+    }
+  }
+
+  const align = lang === "ar" ? "right" : "left";
+  const rowDir = lang === "ar" ? "row-reverse" : "row";
+
   const items = [
-    { icon: "user", label: "الاسم", value: user?.name },
-    { icon: "mail", label: "البريد الإلكتروني", value: user?.email },
-    { icon: "phone", label: "رقم الجوال", value: user?.phone },
-    { icon: "briefcase", label: "التخصص", value: user?.specialization },
-    { icon: "file-text", label: "رقم الترخيص", value: user?.licenseNumber },
-    { icon: "map-pin", label: "الدولة", value: user?.country === "qatar" ? "🇶🇦 قطر" : "🇯🇴 الأردن" },
-    { icon: "clock", label: "سنوات الخبرة", value: user?.experience ? `${user.experience} سنوات` : "—" },
-    { icon: "dollar-sign", label: "السعر بالساعة", value: user?.hourlyRate && user?.country ? formatPrice(user.hourlyRate, user.country) : "—" },
+    { icon: "user", label: t("name"), value: user?.name },
+    { icon: "mail", label: t("email"), value: user?.email },
+    { icon: "phone", label: t("phone"), value: user?.phone },
+    { icon: "briefcase", label: t("specialization"), value: user?.specialization },
+    { icon: "file-text", label: t("licenseNumber"), value: user?.licenseNumber },
+    { icon: "map-pin", label: t("country"), value: user?.country === "qatar" ? "🇶🇦 " + t("qatar") : "🇯🇴 " + t("jordan") },
+    { icon: "clock", label: t("experience"), value: user?.experience ? `${user.experience} سنوات` : "—" },
+    { icon: "dollar-sign", label: t("hourlyRate"), value: user?.hourlyRate && user?.country ? formatPrice(user.hourlyRate, user.country) : "—" },
   ];
 
   return (
@@ -72,7 +88,7 @@ export default function LawyerProfile() {
         {user?.licenseVerified && (
           <View style={styles.verifiedBadge}>
             <Feather name="shield" size={13} color={C.success} />
-            <Text style={styles.verifiedText}>محامٍ موثّق ومرخّص</Text>
+            <Text style={styles.verifiedText}>{t("verifiedLawyer")}</Text>
           </View>
         )}
 
@@ -119,11 +135,44 @@ export default function LawyerProfile() {
         </View>
       )}
 
+      {/* Availability & language */}
+      <TouchableOpacity
+        style={[styles.settingsCard, { flexDirection: rowDir }]}
+        onPress={() => router.push("/(lawyer)/settings")}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.settingsIcon, { backgroundColor: "rgba(26,42,74,0.1)" }]}>
+          <Feather name="calendar" size={18} color={C.navy} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingsName, { textAlign: align }]}>{t("availability")}</Text>
+          <Text style={[styles.settingsHint, { textAlign: align }]}>{t("tapToEditSchedule")}</Text>
+        </View>
+        <Feather name={lang === "ar" ? "chevron-left" : "chevron-right"} size={18} color={C.mutedForeground} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.settingsCard, { flexDirection: rowDir }]}
+        onPress={toggleLanguage}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.settingsIcon, { backgroundColor: lang === "ar" ? "#006B3F20" : "#1a2a4a15" }]}>
+          <Text style={{ fontSize: 20 }}>{lang === "ar" ? "🇸🇦" : "🇺🇸"}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingsName, { textAlign: align }]}>{t("language")}</Text>
+          <Text style={[styles.settingsHint, { textAlign: align }]}>
+            {lang === "ar" ? t("arabic") : t("english")} • {t("tapToSwitch")}
+          </Text>
+        </View>
+        <Feather name="globe" size={18} color={C.gold} />
+      </TouchableOpacity>
+
       <View style={styles.infoCard}>
         {items.map((item, i) => (
           <View key={item.label} style={[styles.item, i < items.length - 1 && styles.itemBorder]}>
-            <Text style={styles.itemValue}>{item.value ?? "—"}</Text>
-            <View style={styles.itemLeft}>
+            <Text style={[styles.itemValue, { textAlign: align }]}>{item.value ?? "—"}</Text>
+            <View style={[styles.itemLeft, { flexDirection: rowDir }]}>
               <Text style={styles.itemLabel}>{item.label}</Text>
               <Feather name={item.icon as any} size={15} color={C.primary} />
             </View>
@@ -131,8 +180,8 @@ export default function LawyerProfile() {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-        <Text style={styles.logoutText}>تسجيل الخروج</Text>
+      <TouchableOpacity style={[styles.logoutBtn, { flexDirection: rowDir }]} onPress={handleLogout} activeOpacity={0.85}>
+        <Text style={styles.logoutText}>{t("logout")}</Text>
         <Feather name="log-out" size={18} color={C.destructive} />
       </TouchableOpacity>
     </ScrollView>
@@ -219,6 +268,17 @@ const styles = StyleSheet.create({
   itemLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   itemLabel: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   itemValue: { fontSize: 14, color: C.foreground, fontFamily: "Inter_500Medium", textAlign: "right", flex: 1, marginLeft: 8 },
+  settingsCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border,
+    padding: 14, marginBottom: 14,
+  },
+  settingsIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+  },
+  settingsName: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground },
+  settingsHint: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10,
     borderWidth: 1.5, borderColor: "#FEE2E2", backgroundColor: "#FFF5F5",

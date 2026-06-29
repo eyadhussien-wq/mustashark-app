@@ -8,6 +8,13 @@ import React, {
 } from "react";
 import type { User } from "./AuthContext";
 
+export interface Availability {
+  workingDays: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
+  startHour: string;     // "09:00"
+  endHour: string;       // "17:00"
+  slotDuration: 30 | 60; // minutes
+}
+
 export interface Lawyer extends User {
   role: "lawyer";
   specialization: string;
@@ -19,6 +26,7 @@ export interface Lawyer extends User {
   reviewsCount: number;
   hourlyRate: number;
   available: boolean;
+  availability?: Availability;
 }
 
 export type ConsultationStatus =
@@ -55,6 +63,11 @@ export interface Consultation {
   rating?: ConsultationRating;
 }
 
+export interface SlotInfo {
+  time: string;
+  available: boolean;
+}
+
 interface DataContextValue {
   lawyers: Lawyer[];
   consultations: Consultation[];
@@ -72,6 +85,9 @@ interface DataContextValue {
     comment: string
   ) => Promise<void>;
   refreshData: () => Promise<void>;
+  updateLawyerAvailability: (lawyerId: string, availability: Availability) => Promise<void>;
+  getAvailableSlots: (lawyerId: string, date: string) => SlotInfo[];
+  getUpcomingConsultations: (userId: string, role: "client" | "lawyer") => Consultation[];
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -363,6 +379,84 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [lawyers]
   );
 
+  // Default availability for lawyers who haven't set one
+  const DEFAULT_AVAILABILITY: Availability = {
+    workingDays: [1, 2, 3, 4, 5], // Mon-Fri
+    startHour: "09:00",
+    endHour: "17:00",
+    slotDuration: 60,
+  };
+
+  const updateLawyerAvailability = useCallback(
+    async (lawyerId: string, availability: Availability) => {
+      const updated = lawyers.map((l) =>
+        l.id === lawyerId ? { ...l, availability } : l
+      );
+      setLawyers(updated);
+      await AsyncStorage.setItem("mustasharek_lawyers", JSON.stringify(updated));
+    },
+    [lawyers]
+  );
+
+  const getAvailableSlots = useCallback(
+    (lawyerId: string, date: string): SlotInfo[] => {
+      const lawyer = lawyers.find((l) => l.id === lawyerId);
+      const avail = lawyer?.availability ?? DEFAULT_AVAILABILITY;
+
+      // Check if date is a working day
+      const dayOfWeek = new Date(date).getDay(); // 0=Sun
+      if (!avail.workingDays.includes(dayOfWeek)) return [];
+
+      // Generate slots
+      const slots: SlotInfo[] = [];
+      const start = parseInt(avail.startHour.split(":")[0], 10);
+      const end = parseInt(avail.endHour.split(":")[0], 10);
+      for (let h = start; h < end; h += avail.slotDuration / 60) {
+        const timeStr = `${String(h).padStart(2, "0")}:00`;
+        // Check if booked
+        const booked = consultations.some(
+          (c) =>
+            c.lawyerId === lawyerId &&
+            c.date === date &&
+            c.time === timeStr &&
+            c.status !== "rejected"
+        );
+        slots.push({ time: timeStr, available: !booked });
+      }
+      return slots;
+    },
+    [lawyers, consultations]
+  );
+
+  const getUpcomingConsultations = useCallback(
+    (userId: string, role: "client" | "lawyer"): Consultation[] => {
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const currentHour = now.getHours();
+
+      return consultations
+        .filter((c) => {
+          if (role === "client" && c.clientId !== userId) return false;
+          if (role === "lawyer" && c.lawyerId !== userId) return false;
+          if (c.status === "rejected" || c.status === "completed") return false;
+          // Include pending and accepted where date >= today
+          const consultDate = c.date;
+          if (consultDate > today) return true;
+          if (consultDate === today) {
+            const hour = parseInt(c.time.split(":")[0], 10);
+            return hour >= currentHour;
+          }
+          return false;
+        })
+        .sort((a, b) => {
+          const dateCompare = a.date.localeCompare(b.date);
+          if (dateCompare !== 0) return dateCompare;
+          return a.time.localeCompare(b.time);
+        });
+    },
+    [consultations]
+  );
+
   const bookConsultation = useCallback(
     async (data: Omit<Consultation, "id" | "createdAt" | "status" | "serialNumber">) => {
       // Generate next serial number
@@ -476,6 +570,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateConsultationStatus,
         rateLawyer,
         refreshData,
+        updateLawyerAvailability,
+        getAvailableSlots,
+        getUpcomingConsultations,
       }}
     >
       {children}

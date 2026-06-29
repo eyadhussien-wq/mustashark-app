@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,6 +44,10 @@ function RootLayoutNav() {
       <Stack.Screen
         name="payment"
         options={{ headerShown: false, presentation: "card" }}
+      />
+      <Stack.Screen
+        name="language-splash"
+        options={{ headerShown: false, presentation: "fullScreenModal" }}
       />
     </Stack>
   );
@@ -75,11 +80,13 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <DataProvider>
-              <GestureHandlerRootView>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
+              <LanguageProvider>
+                <GestureHandlerRootView>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </LanguageProvider>
             </DataProvider>
           </AuthProvider>
         </QueryClientProvider>

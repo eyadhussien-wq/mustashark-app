@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const LOGO = require("../assets/images/logo-transparent.png");
 
@@ -22,6 +23,8 @@ const C = colors.light;
 export default function Onboarding() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t, lang } = useLanguage();
+  const isRTL = lang === "ar";
 
   // ── Fade + scale animation on mount ──────────────────────────────────────
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,20 +89,18 @@ export default function Onboarding() {
           <Image source={LOGO} style={styles.logo} resizeMode="contain" />
         </Animated.View>
 
-        <Text style={styles.appName}>مستشارك</Text>
-        <Text style={styles.tagline}>استشاراتك القانونية بين يديك</Text>
-        <Text style={styles.subtitle}>
-          منصة تربط العملاء بأفضل المحامين المرخصين{"\n"}في قطر والأردن
-        </Text>
+        <Text style={styles.appName}>{t("appName")}</Text>
+        <Text style={styles.tagline}>{t("tagline")}</Text>
+        <Text style={styles.subtitle}>{t("subtitle")}</Text>
       </Animated.View>
 
       <Animated.View style={[styles.features, { opacity: fadeAnim }]}>
         {[
-          { icon: "check-circle", text: "محامون معتمدون وموثّقون" },
-          { icon: "lock", text: "استشارة آمنة وسرية تامة" },
-          { icon: "clock", text: "متاح على مدار الساعة" },
+          { icon: "check-circle", text: t("feature1") },
+          { icon: "lock", text: t("feature2") },
+          { icon: "clock", text: t("feature3") },
         ].map((f) => (
-          <View style={styles.featureRow} key={f.text}>
+          <View style={[styles.featureRow, { flexDirection: isRTL ? "row-reverse" : "row" }]} key={f.text}>
             <Feather name={f.icon as any} size={18} color={C.gold} />
             <Text style={styles.featureText}>{f.text}</Text>
           </View>
@@ -108,29 +109,29 @@ export default function Onboarding() {
 
       <Animated.View style={[styles.actions, { opacity: fadeAnim }]}>
         <TouchableOpacity
-          style={styles.clientBtn}
+          style={[styles.clientBtn, { flexDirection: isRTL ? "row-reverse" : "row" }]}
           onPress={() => router.push("/auth/login?role=client")}
           activeOpacity={0.85}
         >
           <Feather name="user" size={18} color="#fff" />
-          <Text style={styles.clientBtnText}>أنا عميل — أبحث عن محامٍ</Text>
+          <Text style={styles.clientBtnText}>{t("iAmClient")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.lawyerBtn}
+          style={[styles.lawyerBtn, { flexDirection: isRTL ? "row-reverse" : "row" }]}
           onPress={() => router.push("/auth/lawyer-auth")}
           activeOpacity={0.85}
         >
           <Feather name="briefcase" size={18} color={C.navy} />
-          <Text style={styles.lawyerBtnText}>أنا محامٍ — أقدم استشارة</Text>
+          <Text style={styles.lawyerBtnText}>{t("iAmLawyer")}</Text>
         </TouchableOpacity>
       </Animated.View>
 
       <Animated.View style={[styles.countries, { opacity: fadeAnim }]}>
-        <Text style={styles.countriesLabel}>نخدمك في</Text>
+        <Text style={styles.countriesLabel}>{t("serveIn")}</Text>
         <View style={styles.countriesRow}>
-          <Text style={styles.countryTag}>🇶🇦 قطر</Text>
-          <Text style={styles.countryTag}>🇯🇴 الأردن</Text>
+          <Text style={styles.countryTag}>🇶🇦 {t("qatar")}</Text>
+          <Text style={styles.countryTag}>🇯🇴 {t("jordan")}</Text>
         </View>
       </Animated.View>
     </View>
