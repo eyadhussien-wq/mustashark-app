@@ -44,6 +44,7 @@ interface AuthContextValue {
   updateUser: (updates: Partial<User>) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 export interface RegisterClientData {

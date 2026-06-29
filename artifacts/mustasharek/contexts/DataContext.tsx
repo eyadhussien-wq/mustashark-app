@@ -88,6 +88,7 @@ interface DataContextValue {
   updateLawyerAvailability: (lawyerId: string, availability: Availability) => Promise<void>;
   getAvailableSlots: (lawyerId: string, date: string) => SlotInfo[];
   getUpcomingConsultations: (userId: string, role: "client" | "lawyer") => Consultation[];
+  deleteUserData: (userId: string, role: "client" | "lawyer") => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
