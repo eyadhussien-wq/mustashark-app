@@ -36,8 +36,11 @@ export function ConsultationCard({ consultation, viewAs, onPress, onAccept, onRe
   const typeIcon = TYPE_ICON[consultation.type] ?? "help-circle";
   const otherName = viewAs === "client" ? consultation.lawyerName : consultation.clientName;
 
+  const Wrapper = onPress ? TouchableOpacity : View;
+  const wrapperProps = onPress ? { onPress, activeOpacity: 0.88 } : {};
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.88}>
+    <Wrapper style={styles.card} {...wrapperProps}>
       <View style={styles.header}>
         <View style={styles.typeIcon}>
           <Feather name={typeIcon as any} size={16} color={C.primary} />
@@ -85,7 +88,7 @@ export function ConsultationCard({ consultation, viewAs, onPress, onAccept, onRe
           </TouchableOpacity>
         </View>
       )}
-    </TouchableOpacity>
+    </Wrapper>
   );
 }
 

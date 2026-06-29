@@ -87,17 +87,13 @@ export default function LawyerRequests() {
         data={myConsults}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            activeOpacity={0.85}
+          <ConsultationCard
+            consultation={item}
+            viewAs="lawyer"
             onPress={() => router.push(`/consultation/${item.id}`)}
-          >
-            <ConsultationCard
-              consultation={item}
-              viewAs="lawyer"
-              onAccept={() => handleAccept(item.id)}
-              onReject={() => handleReject(item.id)}
-            />
-          </TouchableOpacity>
+            onAccept={() => handleAccept(item.id)}
+            onReject={() => handleReject(item.id)}
+          />
         )}
         contentContainerStyle={[
           styles.list,
