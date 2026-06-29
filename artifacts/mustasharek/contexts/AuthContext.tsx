@@ -353,6 +353,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  // ── Delete account ──────────────────────────────────────────────────────────
+
+  const deleteAccount = useCallback(async () => {
+    if (!user) return;
+    const users = await readUsers();
+    const filtered = users.filter((u) => u.id !== user.id);
+    await writeUsers(filtered);
+    await AsyncStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  }, [user]);
+
   // ── Update user ────────────────────────────────────────────────────────────
 
   const updateUser = useCallback(
@@ -430,6 +441,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerClient,
         registerLawyer,
         logout,
+        deleteAccount,
         updateUser,
         requestPasswordReset,
         resetPassword,

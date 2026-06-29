@@ -19,6 +19,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "tray", selected: "tray.fill" }} />
         <Label>الطلبات</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="wallet">
+        <Icon sf={{ default: "creditcard", selected: "creditcard.fill" }} />
+        <Label>المحفظة</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
         <Label>إعداداتي</Label>
@@ -74,6 +78,14 @@ function ClassicTabLayout() {
           title: "الطلبات",
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="tray" tintColor={color} size={24} /> : <Feather name="inbox" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: "المحفظة",
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="creditcard" tintColor={color} size={24} /> : <Feather name="credit-card" size={22} color={color} />,
         }}
       />
       <Tabs.Screen

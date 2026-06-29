@@ -241,6 +241,14 @@ export default function RegisterLawyer() {
           <Field label={`السعر بالساعة (${rateLabel(form.country)})`} icon="dollar-sign">
             <TextInput style={styles.input} placeholder="200" value={form.hourlyRate} onChangeText={(v) => set("hourlyRate", v)} keyboardType="number-pad" placeholderTextColor={C.mutedForeground} />
           </Field>
+          {form.hourlyRate ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: -8, marginBottom: 8 }}>
+              <Feather name="info" size={12} color={C.primary} />
+              <Text style={{ fontSize: 12, color: C.primary, fontFamily: "Inter_400Regular" }}>
+                صافي ربحك: {Math.round((parseInt(form.hourlyRate) || 0) * 0.85)} {rateLabel(form.country)} بعد خصم 15% عمولة المنصة
+              </Text>
+            </View>
+          ) : null}
 
           <View style={styles.field}>
             <Text style={styles.label}>نبذة مختصرة</Text>

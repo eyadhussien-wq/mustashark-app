@@ -435,6 +435,14 @@ export default function ConsultationDetail() {
               <Text style={styles.paymentCurrency}>{currency}</Text>
             </View>
           </View>
+          {consult.paymentStatus === "paid" && (
+            <View style={styles.commissionNote}>
+              <Feather name="percent" size={12} color={C.primary} />
+              <Text style={styles.commissionNoteText}>
+                عمولة المنصة 15% • صافي المحامي {(consult.price * 0.85).toFixed(1)} {currency} • تسوية شهرية
+              </Text>
+            </View>
+          )}
         </SectionCard>
 
         {/* Rating display (if rated) */}
@@ -711,4 +719,6 @@ const styles = StyleSheet.create({
   modalFooterText: { fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
   modalCloseFullBtn: { backgroundColor: "#fff", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
   modalCloseBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy },
+  commissionNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
+  commissionNoteText: { fontSize: 12, color: C.primary, fontFamily: "Inter_400Regular" },
 });

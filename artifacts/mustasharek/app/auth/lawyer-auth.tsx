@@ -573,6 +573,11 @@ function RegisterForm({
               onFocus={() => setFocusedField("rate")} onBlur={() => setFocusedField(null)}
             />
           </GoldInput>
+          {form.hourlyRate ? (
+            <Text style={[styles.hint, { marginTop: 4 }]}>
+              صافي ربحك: {Math.round((parseInt(form.hourlyRate) || 0) * 0.85)} {rateLabel(form.country)} بعد خصم 15% عمولة المنصة
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -876,6 +881,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.muted, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14,
   },
   demoText: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+  hint: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   divider: { flex: 1, height: 1, backgroundColor: C.border },
   dividerText: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },

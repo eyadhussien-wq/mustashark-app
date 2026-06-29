@@ -490,6 +490,10 @@ function SuccessScreen({ price, currency, method, onDone }: {
         <Text style={styles.successAmountLabel}>المبلغ المدفوع</Text>
         <Text style={styles.successAmount}>{price} {currency}</Text>
         <Text style={styles.successMethod}>عبر {methodLabel}</Text>
+        <View style={styles.commissionRow}>
+          <Feather name="percent" size={12} color={C.gold} />
+          <Text style={styles.commissionText}>رسوم المنصة 15% • صافي المحامي {(price * 0.85).toFixed(1)} {currency}</Text>
+        </View>
       </View>
       <View style={styles.successDetails}>
         {[
@@ -684,4 +688,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(201,160,53,0.3)",
   },
   successBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  commissionRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" },
+  commissionText: { fontSize: 12, color: C.gold, fontFamily: "Inter_500Medium" },
 });

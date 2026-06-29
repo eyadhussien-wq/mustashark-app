@@ -68,6 +68,29 @@ export interface SlotInfo {
   available: boolean;
 }
 
+export interface LawyerWallet {
+  lawyerId: string;
+  monthKey: string; // "2026-06"
+  monthlyGross: number;
+  platformFee: number;
+  pendingBalance: number;
+  completedCount: number;
+  lastPayoutAt?: string;
+  nextPayoutDate: string;
+}
+
+export interface PayoutRecord {
+  id: string;
+  lawyerId: string;
+  monthKey: string;
+  gross: number;
+  platformFee: number;
+  net: number;
+  status: "pending" | "processing" | "paid";
+  createdAt: string;
+  paidAt?: string;
+}
+
 interface DataContextValue {
   lawyers: Lawyer[];
   consultations: Consultation[];
@@ -89,6 +112,9 @@ interface DataContextValue {
   getAvailableSlots: (lawyerId: string, date: string) => SlotInfo[];
   getUpcomingConsultations: (userId: string, role: "client" | "lawyer") => Consultation[];
   deleteUserData: (userId: string, role: "client" | "lawyer") => Promise<void>;
+  getLawyerWallet: (lawyerId: string) => Promise<LawyerWallet>;
+  recordPayout: (lawyerId: string) => Promise<PayoutRecord | null>;
+  getPayoutHistory: (lawyerId: string) => Promise<PayoutRecord[]>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -561,6 +587,109 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [consultations]
   );
 
+  // ── Delete user data ───────────────────────────────────────────────────────
+
+  const deleteUserData = useCallback(
+    async (userId: string, role: "client" | "lawyer") => {
+      if (role === "lawyer") {
+        const updatedLawyers = lawyers.filter((l) => l.id !== userId);
+        setLawyers(updatedLawyers);
+        await AsyncStorage.setItem("mustasharek_lawyers", JSON.stringify(updatedLawyers));
+      }
+      const updatedConsultations = consultations.filter(
+        (c) => c.clientId !== userId && c.lawyerId !== userId
+      );
+      setConsultations(updatedConsultations);
+      await AsyncStorage.setItem(
+        "mustasharek_consultations",
+        JSON.stringify(updatedConsultations)
+      );
+    },
+    [lawyers, consultations]
+  );
+
+  // ── Wallet / Commission ────────────────────────────────────────────────────
+
+  const getLawyerWallet = useCallback(
+    async (lawyerId: string): Promise<LawyerWallet> => {
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const firstDay = `${monthKey}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toISOString()
+        .split("T")[0];
+
+      // Gross = sum of completed + paid consultations this month
+      const monthlyPaid = consultations.filter(
+        (c) =>
+          c.lawyerId === lawyerId &&
+          c.status === "completed" &&
+          c.paymentStatus === "paid" &&
+          c.createdAt >= firstDay &&
+          c.createdAt <= lastDay
+      );
+      const monthlyGross = monthlyPaid.reduce((sum, c) => sum + c.price, 0);
+      const completedCount = monthlyPaid.length;
+
+      const platformFee = Math.round(monthlyGross * 0.15 * 100) / 100;
+      const pendingBalance = Math.round(monthlyGross * 0.85 * 100) / 100;
+
+      // Check if payout already recorded this month
+      const payouts = await getPayoutHistory(lawyerId);
+      const thisMonthPayout = payouts.find((p) => p.monthKey === monthKey);
+      const lastPayoutAt = thisMonthPayout?.createdAt;
+
+      // Next payout = last day of month
+      const nextPayoutDate = lastDay;
+
+      return {
+        lawyerId,
+        monthKey,
+        monthlyGross,
+        platformFee,
+        pendingBalance: thisMonthPayout ? 0 : pendingBalance,
+        completedCount,
+        lastPayoutAt,
+        nextPayoutDate,
+      };
+    },
+    [consultations]
+  );
+
+  const getPayoutHistory = useCallback(async (lawyerId: string): Promise<PayoutRecord[]> => {
+    const raw = await AsyncStorage.getItem("mustasharek_payouts");
+    if (!raw) return [];
+    const all: PayoutRecord[] = JSON.parse(raw);
+    return all.filter((p) => p.lawyerId === lawyerId).sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt)
+    );
+  }, []);
+
+  const recordPayout = useCallback(
+    async (lawyerId: string): Promise<PayoutRecord | null> => {
+      const wallet = await getLawyerWallet(lawyerId);
+      if (wallet.pendingBalance <= 0) return null;
+
+      const record: PayoutRecord = {
+        id: `payout-${Date.now()}`,
+        lawyerId,
+        monthKey: wallet.monthKey,
+        gross: wallet.monthlyGross,
+        platformFee: wallet.platformFee,
+        net: wallet.pendingBalance,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+
+      const raw = await AsyncStorage.getItem("mustasharek_payouts");
+      const all: PayoutRecord[] = raw ? JSON.parse(raw) : [];
+      all.push(record);
+      await AsyncStorage.setItem("mustasharek_payouts", JSON.stringify(all));
+      return record;
+    },
+    [getLawyerWallet]
+  );
+
   return (
     <DataContext.Provider
       value={{
@@ -574,6 +703,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateLawyerAvailability,
         getAvailableSlots,
         getUpcomingConsultations,
+        deleteUserData,
+        getLawyerWallet,
+        recordPayout,
+        getPayoutHistory,
       }}
     >
       {children}
