@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -25,25 +26,52 @@ type Tab = "active" | "archive";
 
 // ── Star Rating ──────────────────────────────────────────────────────────────
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [pressed, setPressed] = useState(0);
+
   return (
     <View style={starStyles.row}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <TouchableOpacity
-          key={star}
-          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onChange(star); }}
-          activeOpacity={0.7}
-          style={starStyles.btn}
-        >
-          <Feather name="star" size={36} color={star <= value ? C.gold : C.border}
-            style={star <= value ? undefined : { opacity: 0.35 }} />
-        </TouchableOpacity>
-      ))}
+      {[1, 2, 3, 4, 5].map((star) => {
+        const filled = star <= value;
+        return (
+          <TouchableOpacity
+            key={star}
+            onPressIn={() => setPressed(star)}
+            onPressOut={() => setPressed(0)}
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onChange(star);
+            }}
+            activeOpacity={0.6}
+            style={[
+              starStyles.btn,
+              pressed === star && starStyles.btnPressed,
+            ]}
+          >
+            <Feather name="star" size={40}
+              color={filled ? C.gold : C.border}
+              style={filled
+                ? { ...starStyles.filled, textShadowColor: "rgba(201,160,53,0.3)", textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }
+                : starStyles.empty
+              }
+            />
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
 const starStyles = StyleSheet.create({
-  row: { flexDirection: "row-reverse", justifyContent: "center", gap: 6 },
-  btn: { padding: 4 },
+  row: { flexDirection: "row", justifyContent: "center", gap: 8, alignItems: "center" },
+  btn: {
+    padding: 6, borderRadius: 10,
+    transform: [{ scale: 1 }],
+  },
+  btnPressed: {
+    transform: [{ scale: 1.2 }],
+    backgroundColor: "rgba(201,160,53,0.12)",
+  },
+  filled: {},
+  empty: { opacity: 0.25 },
 });
 const STAR_LABELS: Record<number, string> = { 1: "ضعيف", 2: "مقبول", 3: "جيد", 4: "جيد جداً", 5: "ممتاز" };
 
@@ -102,11 +130,23 @@ function RatingModal({ consultation, onSubmit, onSkip }: {
                 <Text style={styles.skipBtnText}>تخطّى</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.submitBtn, stars === 0 && styles.submitBtnDisabled, submitting && { opacity: 0.7 }]}
-                onPress={handleSubmit} disabled={stars === 0 || submitting} activeOpacity={0.85}
+                style={[
+                  styles.submitBtn,
+                  stars === 0 && styles.submitBtnDisabled,
+                  submitting && { opacity: 0.7 },
+                ]}
+                onPress={handleSubmit}
+                disabled={stars === 0 || submitting}
+                activeOpacity={0.85}
               >
-                <Feather name="send" size={15} color="#fff" />
-                <Text style={styles.submitBtnText}>إرسال التقييم</Text>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Feather name="send" size={15} color="#fff" />
+                    <Text style={styles.submitBtnText}>إرسال التقييم</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </Animated.View>
