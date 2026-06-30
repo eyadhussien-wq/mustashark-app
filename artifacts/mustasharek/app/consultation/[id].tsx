@@ -14,6 +14,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -37,6 +38,11 @@ const STATUS_CONFIG = {
   accepted:  { label: "مقبول",  color: C.success,     bg: "#ECFDF5", icon: "check-circle" },
   rejected:  { label: "مرفوض", color: C.destructive,  bg: "#FEE2E2", icon: "x-circle" },
   completed: { label: "مكتمل", color: C.primary,      bg: "#EEF2F8", icon: "check" },
+  cancelled_by_lawyer: { label: "ملغية (محامي)", color: C.destructive, bg: "#FEE2E2", icon: "x-octagon" },
+  cancelled_by_client: { label: "ملغية (عميل)", color: C.destructive, bg: "#FEE2E2", icon: "x-octagon" },
+  no_show_lawyer: { label: "تأخر المحامي", color: C.destructive, bg: "#FEE2E2", icon: "alert-triangle" },
+  no_show_client: { label: "غياب العميل", color: C.warning, bg: "#FEF3C7", icon: "user-x" },
+  disputed: { label: "نزاع", color: "#7C3AED", bg: "#EDE9FE", icon: "alert-circle" },
 };
 
 function getFileExt(name: string) {
@@ -171,10 +177,18 @@ export default function ConsultationDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { consultations, updateConsultationStatus } = useData();
-  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | null>(null);
+  const {
+    consultations,
+    updateConsultationStatus,
+    cancelConsultation,
+    markNoShow,
+    raiseDispute,
+  } = useData();
+  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | "cancel" | "noShow" | "dispute" | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
+  const [disputeModal, setDisputeModal] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
 
   const consult = useMemo(
     () => consultations.find((c) => c.id === id),
@@ -257,6 +271,93 @@ export default function ConsultationDetail() {
     await updateConsultationStatus(consult!.id, "completed");
     setLoading(null);
     Alert.alert("تم الإكمال ✓", "تم تحديد الاستشارة كمكتملة.", [{ text: "حسناً" }]);
+  }
+
+  // ── Cancel ──
+  async function handleCancel() {
+    if (!user) return;
+    const role = user.role === "lawyer" ? "lawyer" : "client";
+    const apptDate = new Date(`${consult!.date}T${consult!.time}`);
+    const hoursUntil = (apptDate.getTime() - Date.now()) / (1000 * 60 * 60);
+
+    if (role === "client" && hoursUntil < 24) {
+      Alert.alert(
+        "إلغاء الاستشارة",
+        "أنت على وشك إلغاء الاستشارة قبل أقل من 24 ساعة. سيتم مصادرة المبلغ بالكامل دون استرجاع. هل أنت متأكد؟",
+        [
+          { text: "لا", style: "cancel" },
+          {
+            text: "نعم، إلغاء",
+            style: "destructive",
+            onPress: async () => {
+              setLoading("cancel");
+              const result = await cancelConsultation(consult!.id, "client");
+              setLoading(null);
+              Alert.alert(
+                result.refundedToClient ? "تم الإلغاء والاسترجاع" : "تم الإلغاء",
+                result.refundedToClient
+                  ? `تم إلغاء الاستشارة واسترجاع ${result.refundAmount} ${currency} إلى محفظتك.`
+                  : "تم إلغاء الاستشارة. لقد تجاوزت المدة المسموحة للاسترجاع (24 ساعة)."
+              );
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setLoading("cancel");
+    const result = await cancelConsultation(consult!.id, role);
+    setLoading(null);
+    Alert.alert(
+      result.refundedToClient ? "تم الإلغاء والاسترجاع" : "تم الإلغاء",
+      result.refundedToClient
+        ? `تم إلغاء الاستشارة واسترجاع ${result.refundAmount} ${currency} إلى محفظتك.`
+        : "تم إلغاء الاستشارة."
+    );
+  }
+
+  // ── No-Show ──
+  async function handleNoShow() {
+    if (!user) return;
+    const role = user.role === "lawyer" ? "lawyer" : "client";
+    const otherRole = role === "lawyer" ? "العميل" : "المحامي";
+
+    Alert.alert(
+      `تأخر ${otherRole} عن الموعد`,
+      `هل تريد الإبلاغ عن ${otherRole} بأنه لم يحضر الموعد؟`,
+      [
+        { text: "لا", style: "cancel" },
+        {
+          text: "نعم، الإبلاغ",
+          style: "destructive",
+          onPress: async () => {
+            setLoading("noShow");
+            await markNoShow(consult!.id, role === "lawyer" ? "lawyer" : "client");
+            setLoading(null);
+            if (role === "client") {
+              Alert.alert("تم الإبلاغ", "تم الإبلاغ عن تأخر المحامي. سيتم استرجاع المبلغ لمحفظتك.");
+            } else {
+              Alert.alert("تم الإبلاغ", "تم الإبلاغ عن غياب العميل. المبلغ سيتم إضافته لرصيدك.");
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // ── Dispute ──
+  async function handleRaiseDispute() {
+    if (!disputeReason.trim()) {
+      Alert.alert("السبب مطلوب", "يرجى كتابة سبب النزاع.");
+      return;
+    }
+    setLoading("dispute");
+    await raiseDispute(consult!.id, disputeReason.trim());
+    setLoading(null);
+    setDisputeModal(false);
+    setDisputeReason("");
+    Alert.alert("تم رفع النزاع", "سيتم مراجعة النزاع من قبل فريق المنصة خلال 48 ساعة.");
   }
 
   return (
@@ -463,7 +564,33 @@ export default function ConsultationDetail() {
           </SectionCard>
         )}
 
-        {/* Actions */}
+        {/* Refund / Dispute / Cancel badges */}
+        {consult.paymentStatus === "refunded" && (
+          <View style={styles.refundBadge}>
+            <Feather name="corner-up-left" size={14} color={C.success} />
+            <Text style={styles.refundBadgeText}>
+              مُعاد: {consult.refundAmount ?? consult.price} {currency} • {consult.refundReason || "استرجاع أموال"}
+            </Text>
+          </View>
+        )}
+        {consult.paymentStatus === "forfeited" && (
+          <View style={[styles.refundBadge, { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" }]}>
+            <Feather name="alert-circle" size={14} color={C.warning} />
+            <Text style={[styles.refundBadgeText, { color: C.warning }]}>
+              مصادرة: {consult.price} {currency} (غياب العميل عن الموعد)
+            </Text>
+          </View>
+        )}
+        {consult.status === "disputed" && (
+          <View style={[styles.refundBadge, { backgroundColor: "#EDE9FE", borderColor: "#DDD6FE" }]}>
+            <Feather name="alert-circle" size={14} color="#7C3AED" />
+            <Text style={[styles.refundBadgeText, { color: "#7C3AED" }]}>
+              نزاع قيد المراجعة: {consult.disputeReason}
+            </Text>
+          </View>
+        )}
+
+        {/* Actions — Lawyer */}
         {isLawyer && consult.status === "pending" && (
           <View style={styles.actionRow}>
             <TouchableOpacity
@@ -488,17 +615,119 @@ export default function ConsultationDetail() {
         )}
 
         {isLawyer && consult.status === "accepted" && (
-          <TouchableOpacity
-            style={[styles.completeBtn, loading === "complete" && { opacity: 0.65 }]}
-            onPress={handleComplete} disabled={!!loading} activeOpacity={0.85}
-          >
-            {loading === "complete"
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <><Feather name="check-circle" size={18} color="#fff" /><Text style={styles.completeBtnText}>تحديد كمكتملة</Text></>
-            }
-          </TouchableOpacity>
+          <View style={styles.actionCol}>
+            <TouchableOpacity
+              style={[styles.completeBtn, loading === "complete" && { opacity: 0.65 }]}
+              onPress={handleComplete} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "complete"
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <><Feather name="check-circle" size={18} color="#fff" /><Text style={styles.completeBtnText}>تحديد كمكتملة</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cancelBtn, loading === "cancel" && { opacity: 0.65 }]}
+              onPress={handleCancel} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "cancel"
+                ? <ActivityIndicator color={C.destructive} size="small" />
+                : <><Feather name="x-octagon" size={16} color={C.destructive} /><Text style={styles.cancelBtnText}>إلغاء الاستشارة (استرجاع كامل للعميل)</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.noShowBtn, loading === "noShow" && { opacity: 0.65 }]}
+              onPress={handleNoShow} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "noShow"
+                ? <ActivityIndicator color={C.warning} size="small" />
+                : <><Feather name="user-x" size={16} color={C.warning} /><Text style={styles.noShowBtnText}>العميل لم يحضر • إبلاغ غياب</Text></>
+              }
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Actions — Client */}
+        {!isLawyer && consult.status === "accepted" && (
+          <View style={styles.actionCol}>
+            <TouchableOpacity
+              style={[styles.cancelBtn, loading === "cancel" && { opacity: 0.65 }]}
+              onPress={handleCancel} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "cancel"
+                ? <ActivityIndicator color={C.destructive} size="small" />
+                : <><Feather name="x-octagon" size={16} color={C.destructive} /><Text style={styles.cancelBtnText}>إلغاء الاستشارة</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.noShowBtn, loading === "noShow" && { opacity: 0.65 }]}
+              onPress={handleNoShow} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "noShow"
+                ? <ActivityIndicator color={C.warning} size="small" />
+                : <><Feather name="alert-triangle" size={16} color={C.warning} /><Text style={styles.noShowBtnText}>المحامي لم يحضر • إبلاغ تأخر</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.disputeBtn, loading === "dispute" && { opacity: 0.65 }]}
+              onPress={() => setDisputeModal(true)} disabled={!!loading} activeOpacity={0.85}
+            >
+              {loading === "dispute"
+                ? <ActivityIndicator color="#7C3AED" size="small" />
+                : <><Feather name="alert-circle" size={16} color="#7C3AED" /><Text style={styles.disputeBtnText}>رفع نزاع على الاستشارة</Text></>
+              }
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
+
+      {/* Dispute Modal */}
+      <Modal
+        visible={disputeModal}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => { setDisputeModal(false); setDisputeReason(""); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.disputeBox, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+            <View style={styles.disputeHeader}>
+              <Feather name="alert-circle" size={22} color="#7C3AED" />
+              <Text style={styles.disputeTitle}>رفع نزاع على الاستشارة</Text>
+            </View>
+            <Text style={styles.disputeHint}>
+              اشرح السبب وسنراجع فريق المنصة في غضون 48 ساعة.
+            </Text>
+            <TextInput
+              style={styles.disputeInput}
+              multiline
+              numberOfLines={4}
+              placeholder="مثال: لم يُتم توصيل الخدمة بالجودة المعمولة..."
+              placeholderTextColor={C.mutedForeground}
+              value={disputeReason}
+              onChangeText={setDisputeReason}
+              textAlign="right"
+            />
+            <View style={styles.disputeActions}>
+              <TouchableOpacity
+                style={styles.disputeCancelBtn}
+                onPress={() => { setDisputeModal(false); setDisputeReason(""); }}
+              >
+                <Text style={styles.disputeCancelText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.disputeSubmitBtn, !disputeReason.trim() && { opacity: 0.5 }]}
+                onPress={handleRaiseDispute}
+                disabled={!disputeReason.trim() || !!loading}
+              >
+                {loading === "dispute"
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.disputeSubmitText}>تقديم النزاع</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Full-screen image preview modal */}
       <Modal
@@ -690,6 +919,54 @@ const styles = StyleSheet.create({
     gap: 8, backgroundColor: C.primary, borderRadius: 14, paddingVertical: 14, marginBottom: 10,
   },
   completeBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
+  actionCol: { gap: 10, marginTop: 6 },
+  cancelBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#FEE2E2", borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "#FECACA",
+  },
+  cancelBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.destructive },
+  noShowBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#FEF3C7", borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "#FDE68A",
+  },
+  noShowBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.warning },
+  disputeBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#EDE9FE", borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "#DDD6FE",
+  },
+  disputeBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#7C3AED" },
+
+  // Refund / Dispute badges
+  refundBadge: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#ECFDF5", borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: "#A7F3D0", marginTop: 4,
+  },
+  refundBadgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.success, textAlign: "right", flex: 1 },
+
+  // Dispute Modal
+  disputeBox: {
+    backgroundColor: C.card, borderRadius: 24,
+    paddingHorizontal: 20, margin: 20,
+    shadowColor: "#000", shadowOpacity: 0.25, shadowOffset: { width: 0, height: 8 }, shadowRadius: 24,
+    elevation: 24,
+  },
+  disputeHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  disputeTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: C.foreground },
+  disputeHint: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginBottom: 14, textAlign: "right" },
+  disputeInput: {
+    backgroundColor: C.background, borderRadius: 14, borderWidth: 1, borderColor: C.border,
+    padding: 14, fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular",
+    minHeight: 100, textAlignVertical: "top", textAlign: "right",
+  },
+  disputeActions: { flexDirection: "row", gap: 10, marginTop: 16 },
+  disputeCancelBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, backgroundColor: C.muted },
+  disputeCancelText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.foreground },
+  disputeSubmitBtn: { flex: 1.5, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 14, backgroundColor: "#7C3AED" },
+  disputeSubmitText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff" },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "space-between" },

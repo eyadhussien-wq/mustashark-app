@@ -24,6 +24,7 @@ const FILTERS: { label: string; value: ConsultationStatus | "all" }[] = [
   { label: "معلّق",  value: "pending" },
   { label: "مقبول",  value: "accepted" },
   { label: "مكتمل",  value: "completed" },
+  { label: "ملغية", value: "cancelled_by_client" },
   { label: "مرفوض", value: "rejected" },
 ];
 
@@ -31,7 +32,7 @@ export default function LawyerRequests() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { consultations, updateConsultationStatus, refreshData } = useData();
+  const { consultations, updateConsultationStatus, refreshData, cancelConsultation } = useData();
   const [refreshing, setRefreshing] = useState(false);
 
   const { initialFilter } = useLocalSearchParams<{ initialFilter?: string }>();
@@ -60,6 +61,11 @@ export default function LawyerRequests() {
   async function handleReject(id: string) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateConsultationStatus(id, "rejected");
+  }
+
+  async function handleCancel(id: string) {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await cancelConsultation(id, "lawyer", "إلغاء من قبل المحامي");
   }
 
   return (

@@ -177,7 +177,17 @@ export default function ClientConsultations() {
   );
 
   const archivedConsultations = useMemo(
-    () => myConsultations.filter((c) => c.status === "completed" || c.status === "rejected"),
+    () =>
+      myConsultations.filter(
+        (c) =>
+          c.status === "completed" ||
+          c.status === "rejected" ||
+          c.status === "cancelled_by_lawyer" ||
+          c.status === "cancelled_by_client" ||
+          c.status === "no_show_lawyer" ||
+          c.status === "no_show_client" ||
+          c.status === "disputed"
+      ),
     [myConsultations]
   );
 

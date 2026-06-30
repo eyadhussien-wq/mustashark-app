@@ -33,7 +33,12 @@ export type ConsultationStatus =
   | "pending"
   | "accepted"
   | "rejected"
-  | "completed";
+  | "completed"
+  | "cancelled_by_lawyer"
+  | "cancelled_by_client"
+  | "no_show_lawyer"
+  | "no_show_client"
+  | "disputed";
 
 export interface ConsultationRating {
   stars: number;
@@ -58,7 +63,13 @@ export interface Consultation {
   createdAt: string;
   type: "video" | "chat" | "phone";
   price: number;
-  paymentStatus?: "paid" | "unpaid";
+  paymentStatus?: "paid" | "unpaid" | "refunded" | "forfeited";
+  refundAmount?: number;
+  refundReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: "client" | "lawyer";
+  disputedAt?: string;
+  disputeReason?: string;
   attachments?: Array<{ name: string; uri: string }>;
   rating?: ConsultationRating;
 }
@@ -91,6 +102,15 @@ export interface PayoutRecord {
   paidAt?: string;
 }
 
+export interface ClientWallet {
+  clientId: string;
+  totalRefunded: number;
+  availableCredits: number;
+  pendingCredits: number; // refunds for month-end cleared consultations
+  forfeitedTotal: number; // money lost to no-shows
+  lastUpdated: string;
+}
+
 interface DataContextValue {
   lawyers: Lawyer[];
   consultations: Consultation[];
@@ -115,6 +135,15 @@ interface DataContextValue {
   getLawyerWallet: (lawyerId: string) => Promise<LawyerWallet>;
   recordPayout: (lawyerId: string) => Promise<PayoutRecord | null>;
   getPayoutHistory: (lawyerId: string) => Promise<PayoutRecord[]>;
+  // Refund & Cancellation
+  cancelConsultation: (
+    id: string,
+    cancelledBy: "client" | "lawyer",
+    reason?: string
+  ) => Promise<{ refundAmount: number; refundedToClient: boolean }>;
+  markNoShow: (id: string, role: "client" | "lawyer") => Promise<void>;
+  raiseDispute: (id: string, reason: string) => Promise<void>;
+  getClientWallet: (clientId: string) => Promise<ClientWallet>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -608,7 +637,210 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [lawyers, consultations]
   );
 
-  // ── Wallet / Commission ────────────────────────────────────────────────────
+  // ── Refund & Cancellation ───────────────────────────────────────────────────────
+
+  /**
+   * Cancels a consultation and determines refund eligibility:
+   * - Lawyer cancels anytime → 100% refund to client (full refund)
+   * - Client cancels 24h+ before appointment → 100% refund
+   * - Client cancels <24h before → no refund (forfeited)
+   */
+  const cancelConsultation = useCallback(
+    async (
+      id: string,
+      cancelledBy: "client" | "lawyer",
+      reason?: string
+    ): Promise<{ refundAmount: number; refundedToClient: boolean }> => {
+      const consult = consultations.find((c) => c.id === id);
+      if (!consult) return { refundAmount: 0, refundedToClient: false };
+      if (consult.status === "cancelled_by_lawyer" || consult.status === "cancelled_by_client") {
+        return { refundAmount: 0, refundedToClient: false };
+      }
+
+      const apptDate = new Date(`${consult.date}T${consult.time}`);
+      const now = new Date();
+      const hoursUntilAppt = (apptDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+      const isPaid = consult.paymentStatus === "paid";
+      const price = consult.price;
+
+      // Determine refund eligibility
+      let refundAmount = 0;
+      let refundedToClient = false;
+      let newStatus: ConsultationStatus =
+        cancelledBy === "lawyer" ? "cancelled_by_lawyer" : "cancelled_by_client";
+      let newPaymentStatus: Consultation["paymentStatus"] = consult.paymentStatus;
+
+      if (cancelledBy === "lawyer") {
+        // Lawyer cancellation = always 100% refund to client
+        refundAmount = isPaid ? price : 0;
+        refundedToClient = isPaid;
+        if (isPaid) newPaymentStatus = "refunded";
+      } else if (cancelledBy === "client") {
+        if (hoursUntilAppt >= 24) {
+          // Client cancelled 24h+ before = full refund
+          refundAmount = isPaid ? price : 0;
+          refundedToClient = isPaid;
+          if (isPaid) newPaymentStatus = "refunded";
+        } else {
+          // Client cancelled <24h before = forfeited (no refund, lawyer keeps it)
+          refundAmount = 0;
+          refundedToClient = false;
+          if (isPaid) newPaymentStatus = "forfeited";
+        }
+      }
+
+      const updated = consultations.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: newStatus,
+              paymentStatus: newPaymentStatus,
+              cancelledAt: now.toISOString(),
+              cancelledBy,
+              refundAmount,
+              refundReason: reason,
+            }
+          : c
+      );
+      setConsultations(updated);
+      await AsyncStorage.setItem(
+        "mustasharek_consultations",
+        JSON.stringify(updated)
+      );
+
+      // Credit client wallet if refunded
+      if (refundedToClient && refundAmount > 0) {
+        await creditClientWallet(consult.clientId, refundAmount);
+      }
+
+      return { refundAmount, refundedToClient };
+    },
+    [consultations]
+  );
+
+  /**
+   * Mark a no-show. The reporter's role determines who didn't show:
+   * - role="client" → lawyer didn't show → full refund to client
+   * - role="lawyer" → client didn't show → no refund (forfeited to lawyer)
+   */
+  const markNoShow = useCallback(
+    async (id: string, role: "client" | "lawyer") => {
+      const consult = consultations.find((c) => c.id === id);
+      if (!consult) return;
+
+      const newStatus: ConsultationStatus =
+        role === "client" ? "no_show_lawyer" : "no_show_client";
+      let newPaymentStatus: Consultation["paymentStatus"] = consult.paymentStatus;
+      let refundAmount = 0;
+
+      if (role === "client") {
+        // Lawyer no-show → full refund to client
+        if (consult.paymentStatus === "paid") {
+          newPaymentStatus = "refunded";
+          refundAmount = consult.price;
+          await creditClientWallet(consult.clientId, consult.price);
+        }
+      } else {
+        // Client no-show → forfeited to lawyer
+        if (consult.paymentStatus === "paid") {
+          newPaymentStatus = "forfeited";
+          refundAmount = 0;
+        }
+      }
+
+      const updated = consultations.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: newStatus,
+              paymentStatus: newPaymentStatus,
+              refundAmount,
+              refundReason:
+                role === "client"
+                  ? "تأخر المحامي عن الموعد"
+                  : "تأخر العميل عن الموعد",
+            }
+          : c
+      );
+      setConsultations(updated);
+      await AsyncStorage.setItem(
+        "mustasharek_consultations",
+        JSON.stringify(updated)
+      );
+    },
+    [consultations]
+  );
+
+  const raiseDispute = useCallback(
+    async (id: string, reason: string) => {
+      const updated = consultations.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: "disputed" as ConsultationStatus,
+              disputedAt: new Date().toISOString(),
+              disputeReason: reason,
+            }
+          : c
+      );
+      setConsultations(updated);
+      await AsyncStorage.setItem(
+        "mustasharek_consultations",
+        JSON.stringify(updated)
+      );
+    },
+    [consultations]
+  );
+
+  // ── Client Wallet Helpers ────────────────────────────────────────────────────────────
+
+  const CLIENT_WALLET_KEY = "mustasharek_client_wallets";
+
+  async function loadClientWallets(): Promise<Record<string, ClientWallet>> {
+    try {
+      const raw = await AsyncStorage.getItem(CLIENT_WALLET_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  }
+
+  async function saveClientWallets(wallets: Record<string, ClientWallet>) {
+    await AsyncStorage.setItem(CLIENT_WALLET_KEY, JSON.stringify(wallets));
+  }
+
+  async function creditClientWallet(clientId: string, amount: number) {
+    const wallets = await loadClientWallets();
+    const existing = wallets[clientId] ?? {
+      clientId,
+      totalRefunded: 0,
+      availableCredits: 0,
+      pendingCredits: 0,
+      forfeitedTotal: 0,
+      lastUpdated: new Date().toISOString(),
+    };
+    existing.totalRefunded += amount;
+    existing.availableCredits += amount;
+    existing.pendingCredits += amount;
+    existing.lastUpdated = new Date().toISOString();
+    wallets[clientId] = existing;
+    await saveClientWallets(wallets);
+  }
+
+  const getClientWallet = useCallback(async (clientId: string): Promise<ClientWallet> => {
+    const wallets = await loadClientWallets();
+    return (
+      wallets[clientId] ?? {
+        clientId,
+        totalRefunded: 0,
+        availableCredits: 0,
+        pendingCredits: 0,
+        forfeitedTotal: 0,
+        lastUpdated: new Date().toISOString(),
+      }
+    );
+  }, []);
+
+  // ── Wallet / Commission ────────────────────────────────────────────────────────────
 
   const getLawyerWallet = useCallback(
     async (lawyerId: string): Promise<LawyerWallet> => {
@@ -619,17 +851,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         .toISOString()
         .split("T")[0];
 
-      // Gross = sum of completed + paid consultations this month
+      // Gross = sum of completed + paid consultations this month, excluding refunded/cancelled/disputed
+      const excludedStatuses: ConsultationStatus[] = [
+        "cancelled_by_lawyer",
+        "cancelled_by_client",
+        "disputed",
+        "no_show_lawyer", // lawyer no-show = refund to client, not lawyer earnings
+      ];
+      const excludedPayments: Consultation["paymentStatus"][] = ["refunded"];
+
       const monthlyPaid = consultations.filter(
         (c) =>
           c.lawyerId === lawyerId &&
           c.status === "completed" &&
           c.paymentStatus === "paid" &&
+          !excludedStatuses.includes(c.status) &&
+          !excludedPayments.includes(c.paymentStatus ?? "paid") &&
           c.createdAt >= firstDay &&
           c.createdAt <= lastDay
       );
-      const monthlyGross = monthlyPaid.reduce((sum, c) => sum + c.price, 0);
-      const completedCount = monthlyPaid.length;
+
+      // Forfeited consultations (client no-show) count as lawyer earnings minus commission
+      const monthlyForfeited = consultations.filter(
+        (c) =>
+          c.lawyerId === lawyerId &&
+          c.status === "no_show_client" &&
+          c.paymentStatus === "forfeited" &&
+          c.createdAt >= firstDay &&
+          c.createdAt <= lastDay
+      );
+
+      const monthlyGross =
+        monthlyPaid.reduce((sum, c) => sum + c.price, 0) +
+        monthlyForfeited.reduce((sum, c) => sum + c.price, 0);
+      const completedCount = monthlyPaid.length + monthlyForfeited.length;
 
       const platformFee = Math.round(monthlyGross * 0.15 * 100) / 100;
       const pendingBalance = Math.round(monthlyGross * 0.85 * 100) / 100;
@@ -707,6 +962,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         getLawyerWallet,
         recordPayout,
         getPayoutHistory,
+        cancelConsultation,
+        markNoShow,
+        raiseDispute,
+        getClientWallet,
       }}
     >
       {children}

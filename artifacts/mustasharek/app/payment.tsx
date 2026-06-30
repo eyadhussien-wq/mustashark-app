@@ -175,6 +175,29 @@ export default function Payment() {
           </View>
         </View>
 
+        {/* Escrow Legal Notice */}
+        <View style={styles.escrowBox}>
+          <View style={styles.escrowHeader}>
+            <Feather name="shield" size={18} color={C.gold} />
+            <Text style={styles.escrowTitle}>نظام الأمانة (Escrow)</Text>
+          </View>
+          <Text style={styles.escrowBody}>
+            تُحفظ الأموال من قبل منصة مستشارك حتى تأكيد إتمام الاستشارة بنجاح. يتم إطلاق الأموال لحساب المحامي فقط في نهاية الشهر بعد حل كل النزاعات العليقة. لا تتراج التواصل إلاً عن طريق المنصة.
+          </Text>
+          <View style={styles.escrowRow}>
+            <Feather name="check-circle" size={12} color={C.success} />
+            <Text style={styles.escrowItem}>لك الحق في استرجاع كامل الأموال في حالة عدم التوصيل</Text>
+          </View>
+          <View style={styles.escrowRow}>
+            <Feather name="clock" size={12} color={C.warning} />
+            <Text style={styles.escrowItem}>تاريخ التسوية: نهاية الشهر الجاري</Text>
+          </View>
+          <View style={styles.escrowRow}>
+            <Feather name="percent" size={12} color={C.primary} />
+            <Text style={styles.escrowItem}>عمولة المنصة 15% • صافي المحامي {(price * 0.85).toFixed(1)} {currency}</Text>
+          </View>
+        </View>
+
         {/* Payment Methods */}
         <Text style={styles.sectionTitle}>طريقة الدفع</Text>
 
@@ -690,4 +713,24 @@ const styles = StyleSheet.create({
   successBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
   commissionRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" },
   commissionText: { fontSize: 12, color: C.gold, fontFamily: "Inter_500Medium" },
+  escrowBox: {
+    backgroundColor: "rgba(201,160,53,0.06)",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(201,160,53,0.2)",
+    marginTop: 4,
+  },
+  escrowHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  escrowTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.navy },
+  escrowBody: {
+    fontSize: 12,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 20,
+    textAlign: "right",
+    marginBottom: 10,
+  },
+  escrowRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  escrowItem: { fontSize: 11, color: C.foreground, fontFamily: "Inter_500Medium" },
 });

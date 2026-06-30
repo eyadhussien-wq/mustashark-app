@@ -24,10 +24,12 @@ export default function LawyerWallet() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { getLawyerWallet, recordPayout, getPayoutHistory } = useData();
+  const { getLawyerWallet, recordPayout, getPayoutHistory, consultations } = useData();
 
   const [wallet, setWallet] = useState<LawyerWallet | null>(null);
   const [history, setHistory] = useState<PayoutRecord[]>([]);
+  const [disputeCount, setDisputeCount] = useState(0);
+  const [cancelledCount, setCancelledCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,11 +37,25 @@ export default function LawyerWallet() {
     (async () => {
       const w = await getLawyerWallet(user.id);
       const h = await getPayoutHistory(user.id);
+      // Count disputes and cancelled consultations this month
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const firstDay = `${monthKey}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const monthConsults = consultations.filter(
+        (c) => c.lawyerId === user.id && c.createdAt >= firstDay && c.createdAt <= lastDay
+      );
+      const disputes = monthConsults.filter((c) => c.status === "disputed").length;
+      const cancelled = monthConsults.filter(
+        (c) => c.status === "cancelled_by_lawyer" || c.status === "cancelled_by_client"
+      ).length;
+      setDisputeCount(disputes);
+      setCancelledCount(cancelled);
       setWallet(w);
       setHistory(h);
       setLoading(false);
     })();
-  }, [user, getLawyerWallet, getPayoutHistory]);
+  }, [user, getLawyerWallet, getPayoutHistory, consultations]);
 
   async function handlePayout() {
     if (!user) return;
@@ -135,8 +151,16 @@ export default function LawyerWallet() {
           <Text style={styles.statLabel}>استشارات مدفوعة</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>{wallet.nextPayoutDate}</Text>
-          <Text style={styles.statLabel}>تاريخ التسوية القادم</Text>
+          <Text style={[styles.statValue, { color: disputeCount > 0 ? "#7C3AED" : C.foreground }]}>
+            {disputeCount}
+          </Text>
+          <Text style={styles.statLabel}>نزاعات عليقة</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={[styles.statValue, { color: cancelledCount > 0 ? C.destructive : C.foreground }]}>
+            {cancelledCount}
+          </Text>
+          <Text style={styles.statLabel}>استشارات ملغية</Text>
         </View>
       </View>
 
@@ -152,7 +176,7 @@ export default function LawyerWallet() {
       <View style={styles.noteBox}>
         <Feather name="info" size={14} color={C.primary} />
         <Text style={styles.noteText}>
-          تم خصم {COMMISSION_PCT}% من كل استشارة مدفوعة كعمولة منصة، وتتم التسويات آخر كل شهر.
+          تم خصم {COMMISSION_PCT}% من كل استشارة مدفوعة كعمولة منصة. الاستشارات الملغية والنزاعات لا تُحتسب في الرصيد وتُراجع أولاً. التسويات في نهاية كل شهر.
         </Text>
       </View>
 

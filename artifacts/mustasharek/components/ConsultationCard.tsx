@@ -23,6 +23,11 @@ const STATUS_CONFIG: Record<
   accepted: { label: "مقبولة", color: C.success, bg: "#ECFDF5", icon: "check-circle" },
   rejected: { label: "مرفوضة", color: C.destructive, bg: "#FEE2E2", icon: "x-circle" },
   completed: { label: "مكتملة", color: C.mutedForeground, bg: C.muted, icon: "check" },
+  cancelled_by_lawyer: { label: "ملغية (محامي)", color: C.destructive, bg: "#FEE2E2", icon: "x-octagon" },
+  cancelled_by_client: { label: "ملغية (عميل)", color: C.destructive, bg: "#FEE2E2", icon: "x-octagon" },
+  no_show_lawyer: { label: "تأخر المحامي", color: C.destructive, bg: "#FEE2E2", icon: "alert-triangle" },
+  no_show_client: { label: "غياب العميل", color: C.warning, bg: "#FEF3C7", icon: "user-x" },
+  disputed: { label: "نزاع", color: "#7C3AED", bg: "#EDE9FE", icon: "alert-circle" },
 };
 
 const TYPE_ICON: Record<string, string> = {
@@ -86,6 +91,25 @@ export function ConsultationCard({ consultation, viewAs, onPress, onAccept, onRe
             <Feather name="x" size={14} color={C.destructive} />
             <Text style={styles.rejectText}>رفض</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Refund / Payment status badge */}
+      {(consultation.paymentStatus === "refunded" || consultation.paymentStatus === "forfeited") && (
+        <View style={styles.refundRow}>
+          <Feather
+            name={consultation.paymentStatus === "refunded" ? "corner-up-left" : "alert-circle"}
+            size={12}
+            color={consultation.paymentStatus === "refunded" ? C.success : C.warning}
+          />
+          <Text style={[
+            styles.refundText,
+            { color: consultation.paymentStatus === "refunded" ? C.success : C.warning },
+          ]}>
+            {consultation.paymentStatus === "refunded"
+              ? `مُعاد ${consultation.refundAmount ?? consultation.price}`
+              : "مصادرة (غياب العميل)"}
+          </Text>
         </View>
       )}
     </Wrapper>
@@ -205,6 +229,19 @@ const styles = StyleSheet.create({
     color: C.destructive,
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
+  },
+  refundRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  refundText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
   },
   pricePill: {
     backgroundColor: "#EEF2F8",
