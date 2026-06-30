@@ -3,12 +3,13 @@ import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Image,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -183,12 +184,14 @@ export default function ConsultationDetail() {
     cancelConsultation,
     markNoShow,
     raiseDispute,
+    recordAttendance,
   } = useData();
-  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | "cancel" | "noShow" | "dispute" | null>(null);
+  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | "cancel" | "noShow" | "dispute" | "join" | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
   const [disputeModal, setDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
+  const [joinCountdown, setJoinCountdown] = useState("");
 
   const consult = useMemo(
     () => consultations.find((c) => c.id === id),
@@ -212,6 +215,54 @@ export default function ConsultationDetail() {
   const typeMeta = TYPE_META[consult.type] ?? TYPE_META.video;
   const currency = getCurrency(consult.lawyerCountry ?? "qatar");
   const attachments = consult.attachments ?? [];
+
+  // ── Meeting window logic ──
+  const meetingWindow = useMemo(() => {
+    const appt = new Date(`${consult.date}T${consult.time}`);
+    const now = new Date();
+    const slotDuration = 30; // minutes
+    const earlyOpen = 5 * 60 * 1000; // 5 min before
+    const openAt = new Date(appt.getTime() - earlyOpen);
+    const closeAt = new Date(appt.getTime() + slotDuration * 60 * 1000);
+    const canJoin = now >= openAt && now <= closeAt;
+    const minsUntil = Math.max(0, Math.ceil((openAt.getTime() - now.getTime()) / (60 * 1000)));
+    const minsRemaining = Math.max(0, Math.ceil((closeAt.getTime() - now.getTime()) / (60 * 1000)));
+    return { canJoin, openAt, closeAt, minsUntil, minsRemaining, slotDuration };
+  }, [consult.date, consult.time]);
+
+  // Countdown tick
+  useEffect(() => {
+    if (consult.status !== "accepted" || !consult.meetLink) return;
+    const tick = () => {
+      if (meetingWindow.canJoin) {
+        setJoinCountdown(`ينتهي بعد ${meetingWindow.minsRemaining} دقيقة`);
+      } else if (meetingWindow.minsUntil > 0) {
+        setJoinCountdown(`تفتح بعد ${meetingWindow.minsUntil} دقيقة`);
+      } else {
+        setJoinCountdown("");
+      }
+    };
+    tick();
+    const iv = setInterval(tick, 30000);
+    return () => clearInterval(iv);
+  }, [consult.status, consult.meetLink, meetingWindow.canJoin, meetingWindow.minsUntil, meetingWindow.minsRemaining]);
+
+  // ── Join Meeting ──
+  async function handleJoinMeeting() {
+    if (!consult || !consult.meetLink) return;
+    setLoading("join");
+    const role = isLawyer ? "lawyer" : "client";
+    await recordAttendance(consult.id, role);
+    setLoading(null);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Open Google Meet
+    const supported = await Linking.canOpenURL(consult.meetLink);
+    if (supported) {
+      await Linking.openURL(consult.meetLink);
+    } else {
+      Alert.alert("لا يمكن فتح الرابط", `الرابط: ${consult.meetLink}`);
+    }
+  }
 
   function openPreview(item: { name: string; uri: string }) {
     setPreviewName(item.name);
@@ -429,6 +480,72 @@ export default function ConsultationDetail() {
             <Feather name={typeMeta.icon as any} size={18} color={typeMeta.color} />
           </View>
         </View>
+
+        {/* Meeting Card (video/phone only) */}
+        {(consult.type === "video" || consult.type === "phone") && consult.meetLink && (
+          <View style={styles.meetCard}>
+            <View style={styles.meetHeader}>
+              <Feather name="video" size={18} color="#7C3AED" />
+              <Text style={styles.meetTitle}>
+                {consult.type === "video" ? "مكالمة فيديو (Google Meet)" : "مكالمة صوتية (Google Meet)"}
+              </Text>
+            </View>
+            <Text style={styles.meetLink}>{consult.meetLink}</Text>
+            {consult.status === "accepted" && (
+              <>
+                {meetingWindow.canJoin ? (
+                  <TouchableOpacity
+                    style={[styles.joinBtn, loading === "join" && { opacity: 0.65 }]}
+                    onPress={handleJoinMeeting}
+                    disabled={!!loading}
+                    activeOpacity={0.85}
+                  >
+                    {loading === "join" ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Feather name="log-in" size={18} color="#fff" />
+                        <Text style={styles.joinBtnText}>الدخول للمكالمة الآن</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.joinDisabled}>
+                    <Feather name="clock" size={16} color={C.mutedForeground} />
+                    <Text style={styles.joinDisabledText}>
+                      {joinCountdown || "يتم تفعيل الرابط قبيل 5 دقائق من الموعد"}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+            {/* Attendance badges */}
+            <View style={styles.attendanceRow}>
+              {consult.lawyerJoinedAt && (
+                <View style={[styles.attBadge, { backgroundColor: "#ECFDF5" }]}>
+                  <Feather name="check-circle" size={12} color={C.success} />
+                  <Text style={[styles.attText, { color: C.success }]}>
+                    المحامي داخل {new Date(consult.lawyerJoinedAt).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                </View>
+              )}
+              {consult.clientJoinedAt && (
+                <View style={[styles.attBadge, { backgroundColor: "#ECFDF5" }]}>
+                  <Feather name="check-circle" size={12} color={C.success} />
+                  <Text style={[styles.attText, { color: C.success }]}>
+                    العميل داخل {new Date(consult.clientJoinedAt).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                </View>
+              )}
+              {!consult.lawyerJoinedAt && !consult.clientJoinedAt && consult.status === "accepted" && (
+                <View style={[styles.attBadge, { backgroundColor: "#FEF3C7" }]}>
+                  <Feather name="clock" size={12} color={C.warning} />
+                  <Text style={[styles.attText, { color: C.warning }]}>لم يبدأ الحضور بعد</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Section 1 */}
         <SectionCard title="نوع الاستشارة / القضية" icon="briefcase">
@@ -998,4 +1115,32 @@ const styles = StyleSheet.create({
   modalCloseBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.navy },
   commissionNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
   commissionNoteText: { fontSize: 12, color: C.primary, fontFamily: "Inter_400Regular" },
+
+  // ── Meeting card ──
+  meetCard: {
+    backgroundColor: C.card, borderRadius: colors.radius,
+    borderWidth: 1, borderColor: C.border,
+    padding: 18, gap: 10, marginBottom: 16,
+  },
+  meetHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  meetTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.foreground },
+  meetLink: { fontSize: 12, color: C.primary, fontFamily: "Inter_400Regular", textAlign: "center" },
+  joinBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, backgroundColor: "#7C3AED", borderRadius: 14,
+    paddingVertical: 14, marginTop: 4,
+  },
+  joinBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
+  joinDisabled: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, backgroundColor: C.border, borderRadius: 14,
+    paddingVertical: 12, marginTop: 4,
+  },
+  joinDisabledText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.mutedForeground },
+  attendanceRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  attBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
+  },
+  attText: { fontSize: 11, fontFamily: "Inter_500Medium" },
 });

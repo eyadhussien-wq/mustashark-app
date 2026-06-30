@@ -72,6 +72,10 @@ export interface Consultation {
   disputeReason?: string;
   attachments?: Array<{ name: string; uri: string }>;
   rating?: ConsultationRating;
+  meetLink?: string;            // Google Meet URL for video/phone consultations
+  lawyerJoinedAt?: string;      // ISO timestamp when lawyer entered the meeting
+  clientJoinedAt?: string;      // ISO timestamp when client entered the meeting
+  durationMinutes?: number;     // Actual meeting duration (calculated on end)
 }
 
 export interface SlotInfo {
@@ -144,6 +148,8 @@ interface DataContextValue {
   markNoShow: (id: string, role: "client" | "lawyer") => Promise<void>;
   raiseDispute: (id: string, reason: string) => Promise<void>;
   getClientWallet: (clientId: string) => Promise<ClientWallet>;
+  // Google Meet integration
+  recordAttendance: (id: string, role: "client" | "lawyer") => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -526,12 +532,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const year = new Date().getFullYear();
       const serialNumber = `MST-${year}-${String(counter + 2).padStart(4, "0")}`;
 
+      // Generate Google Meet link for video/phone consultations
+      const meetLink =
+        data.type === "video" || data.type === "phone"
+          ? `https://meet.google.com/mst-${Date.now().toString(36).slice(-3)}${serialNumber.slice(-4)}`
+          : undefined;
+
       const newConsult: Consultation = {
         ...data,
         id: "consult-" + Date.now(),
         serialNumber,
         createdAt: new Date().toISOString(),
         status: "pending",
+        meetLink,
       };
       const updated = [...consultations, newConsult];
       setConsultations(updated);
@@ -840,6 +853,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const recordAttendance = useCallback(
+    async (id: string, role: "client" | "lawyer") => {
+      const now = new Date().toISOString();
+      const updated = consultations.map((c) => {
+        if (c.id !== id) return c;
+        return role === "client"
+          ? { ...c, clientJoinedAt: now }
+          : { ...c, lawyerJoinedAt: now };
+      });
+      setConsultations(updated);
+      await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(updated));
+    },
+    [consultations]
+  );
+
   // ── Wallet / Commission ────────────────────────────────────────────────────────────
 
   const getLawyerWallet = useCallback(
@@ -966,6 +994,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         markNoShow,
         raiseDispute,
         getClientWallet,
+        recordAttendance,
       }}
     >
       {children}
