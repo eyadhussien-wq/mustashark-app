@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
-import { useData, type Availability } from "@/contexts/DataContext";
+import { useData, type Availability, type CommunicationChannels } from "@/contexts/DataContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const C = colors.light;
@@ -34,7 +34,7 @@ export default function LawyerSettings() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { lawyers, updateLawyerAvailability } = useData();
+  const { lawyers, updateLawyerAvailability, updateLawyerChannels } = useData();
   const { t, lang } = useLanguage();
 
   const lawyer = lawyers.find((l) => l.id === user?.id);
@@ -49,6 +49,11 @@ export default function LawyerSettings() {
     currentAvail?.slotDuration ?? 60
   );
   const [saving, setSaving] = useState(false);
+
+  // Communication channels state
+  const defaultChannels: CommunicationChannels = { chat: true, phone: true, video: true };
+  const currentChannels = lawyer?.channels ?? defaultChannels;
+  const [channels, setChannels] = useState<CommunicationChannels>(currentChannels);
 
   function toggleDay(day: number) {
     setWorkingDays((prev) =>
@@ -72,6 +77,7 @@ export default function LawyerSettings() {
     setSaving(true);
     const availability: Availability = { workingDays, startHour, endHour, slotDuration };
     await updateLawyerAvailability(user.id, availability);
+    await updateLawyerChannels(user.id, channels);
     setSaving(false);
     Alert.alert(t("done"), t("consultationSent"), [{ text: t("back"), onPress: () => router.back() }]);
   }
@@ -191,6 +197,37 @@ export default function LawyerSettings() {
         </Text>
       </View>
 
+      {/* Communication Channels */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { textAlign: labelAlign }]}>قنوات التواصل</Text>
+        <Text style={[styles.sectionHint, { textAlign: labelAlign }]}>
+          اختر القنوات المتاحة للعملاء لحجز استشاراتك
+        </Text>
+        {[
+          { key: "chat" as const, label: "محادثة نصية", icon: "message-square" },
+          { key: "phone" as const, label: "مكالمة صوتية", icon: "phone" },
+          { key: "video" as const, label: "مكالمة فيديو", icon: "video" },
+        ].map((ch) => (
+          <View key={ch.key} style={[styles.channelRow, { flexDirection: rowDir }]}>
+            <View style={[styles.channelLeft, { flexDirection: rowDir }]}>
+              <View style={[styles.channelIcon, { backgroundColor: channels[ch.key] ? C.navy + "18" : C.border + "30" }]}>
+                <Feather name={ch.icon as any} size={16} color={channels[ch.key] ? C.navy : C.mutedForeground} />
+              </View>
+              <Text style={[styles.channelLabel, channels[ch.key] ? styles.channelLabelActive : styles.channelLabelInactive]}>
+                {ch.label}
+              </Text>
+            </View>
+            <Switch
+              value={channels[ch.key]}
+              onValueChange={(v) => setChannels((prev) => ({ ...prev, [ch.key]: v }))}
+              trackColor={{ false: C.border, true: C.navy }}
+              thumbColor={"#fff"}
+              ios_backgroundColor={C.border}
+            />
+          </View>
+        ))}
+      </View>
+
       {/* Save */}
       <TouchableOpacity
         style={[styles.saveBtn, saving && { opacity: 0.65 }]}
@@ -256,4 +293,16 @@ const styles = StyleSheet.create({
     backgroundColor: C.navy, borderRadius: 14, paddingVertical: 16,
   },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // ── Communication Channels ──
+  sectionHint: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginBottom: 12, marginTop: -4 },
+  channelRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  channelLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  channelIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  channelLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  channelLabelActive: { color: C.foreground },
+  channelLabelInactive: { color: C.mutedForeground },
 });

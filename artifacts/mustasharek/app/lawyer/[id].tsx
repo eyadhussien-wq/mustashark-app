@@ -72,11 +72,16 @@ export default function LawyerDetail() {
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
 
+  // Available channels from lawyer settings (default all enabled)
+  const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
+  const availableTypes = TYPES.filter((t) => channels[t.id]);
+  const defaultType = availableTypes[0]?.id ?? "chat";
+
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
-  const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">("video");
+  const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">(defaultType);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [error, setError] = useState("");
 
@@ -268,11 +273,19 @@ export default function LawyerDetail() {
           </View>
         )}
 
-        {/* Consultation type */}
+        {/* Consultation type — filtered by lawyer channels */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { textAlign: textAlign }]}>{t("consultationType")}</Text>
+          {availableTypes.length === 0 ? (
+            <View style={styles.noChannelBox}>
+              <Feather name="alert-circle" size={20} color={C.warning} />
+              <Text style={styles.noChannelText}>
+                المحامي غير متاح حالياً للاستشارات
+              </Text>
+            </View>
+          ) : (
           <View style={styles.typesRow}>
-            {TYPES.map((type) => {
+            {availableTypes.map((type) => {
               const active = selectedType === type.id;
               return (
                 <TouchableOpacity
@@ -294,6 +307,7 @@ export default function LawyerDetail() {
               );
             })}
           </View>
+          )}
         </View>
 
         {/* Subject */}
@@ -465,4 +479,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.navy, borderRadius: 14, paddingVertical: 16, marginBottom: 24,
   },
   proceedText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // ── No available channels ──
+  noChannelBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#FEF3C7", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, marginTop: 4,
+  },
+  noChannelText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#92400E" },
 });

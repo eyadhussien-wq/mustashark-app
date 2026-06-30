@@ -15,6 +15,12 @@ export interface Availability {
   slotDuration: 30 | 60; // minutes
 }
 
+export interface CommunicationChannels {
+  chat: boolean;
+  phone: boolean;
+  video: boolean;
+}
+
 export interface Lawyer extends User {
   role: "lawyer";
   specialization: string;
@@ -27,6 +33,7 @@ export interface Lawyer extends User {
   hourlyRate: number;
   available: boolean;
   availability?: Availability;
+  channels?: CommunicationChannels;
 }
 
 export type ConsultationStatus =
@@ -133,6 +140,7 @@ interface DataContextValue {
   ) => Promise<void>;
   refreshData: () => Promise<void>;
   updateLawyerAvailability: (lawyerId: string, availability: Availability) => Promise<void>;
+  updateLawyerChannels: (lawyerId: string, channels: CommunicationChannels) => Promise<void>;
   getAvailableSlots: (lawyerId: string, date: string) => SlotInfo[];
   getUpcomingConsultations: (userId: string, role: "client" | "lawyer") => Consultation[];
   deleteUserData: (userId: string, role: "client" | "lawyer") => Promise<void>;
@@ -453,6 +461,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (lawyerId: string, availability: Availability) => {
       const updated = lawyers.map((l) =>
         l.id === lawyerId ? { ...l, availability } : l
+      );
+      setLawyers(updated);
+      await AsyncStorage.setItem("mustasharek_lawyers", JSON.stringify(updated));
+    },
+    [lawyers]
+  );
+
+  const updateLawyerChannels = useCallback(
+    async (lawyerId: string, channels: CommunicationChannels) => {
+      const updated = lawyers.map((l) =>
+        l.id === lawyerId ? { ...l, channels } : l
       );
       setLawyers(updated);
       await AsyncStorage.setItem("mustasharek_lawyers", JSON.stringify(updated));
@@ -984,6 +1003,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         rateLawyer,
         refreshData,
         updateLawyerAvailability,
+        updateLawyerChannels,
         getAvailableSlots,
         getUpcomingConsultations,
         deleteUserData,
