@@ -158,17 +158,8 @@ export default function Login() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.forgotBtn}
-          onPress={() => router.push("/auth/forgot-password")}
-        >
-          <Text style={styles.forgotText}>نسيت كلمة المرور؟</Text>
-        </TouchableOpacity>
-
-        <SocialLoginButtons role={role} />
-
-        <View style={styles.registerRow}>
-          <Text style={styles.registerLabel}>ليس لديك حساب؟</Text>
+        {/* Inline row: Forgot Password + Sign Up */}
+        <View style={styles.actionLinksRow}>
           <TouchableOpacity
             onPress={() =>
               router.push(
@@ -180,7 +171,14 @@ export default function Login() {
               {isLawyer ? "تسجيل محامٍ جديد" : "إنشاء حساب"}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push("/auth/forgot-password")}
+          >
+            <Text style={styles.forgotText}>نسيت كلمة المرور؟</Text>
+          </TouchableOpacity>
         </View>
+
+        <SocialLoginButtons role={role} />
 
         <Text style={styles.hint}>
           {isLawyer
@@ -282,28 +280,23 @@ const styles = StyleSheet.create({
   loginBtn: {
     backgroundColor: C.navy,
     borderRadius: colors.radius,
-    paddingVertical: 16,
+    height: 56,
     alignItems: "center",
-    marginBottom: 10,
+    justifyContent: "center",
+    marginBottom: 14,
   },
-  loginText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-  forgotBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 16 },
+  loginText: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold" },
+  actionLinksRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    marginBottom: 16,
+  },
   forgotText: {
     fontSize: 13,
     color: C.primary,
     fontFamily: "Inter_500Medium",
-  },
-  registerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 16,
-  },
-  registerLabel: {
-    fontSize: 13,
-    color: C.mutedForeground,
-    fontFamily: "Inter_400Regular",
   },
   registerLink: {
     fontSize: 13,
