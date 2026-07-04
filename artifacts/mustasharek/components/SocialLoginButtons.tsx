@@ -3,9 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -31,9 +29,6 @@ interface ProviderConfig {
   bg: string;
   border: string;
   icon: string;
-  configKey: string;
-  setupUrl: string;
-  steps: string[];
 }
 
 const PROVIDERS: ProviderConfig[] = [
@@ -44,16 +39,6 @@ const PROVIDERS: ProviderConfig[] = [
     bg: "#FFFFFF",
     border: "#DADCE0",
     icon: "google",
-    configKey: "EXPO_PUBLIC_GOOGLE_CLIENT_ID",
-    setupUrl: "console.cloud.google.com",
-    steps: [
-      "افتح Google Cloud Console",
-      "أنشئ مشروعاً جديداً أو اختر مشروعاً موجوداً",
-      'اذهب إلى "APIs & Services" → "Credentials"',
-      'اضغط "Create Credentials" → "OAuth 2.0 Client ID"',
-      "اختر نوع التطبيق: Android / iOS",
-      "أضف Client ID في متغير EXPO_PUBLIC_GOOGLE_CLIENT_ID",
-    ],
   },
   {
     id: "facebook",
@@ -62,15 +47,6 @@ const PROVIDERS: ProviderConfig[] = [
     bg: "#1877F2",
     border: "#1877F2",
     icon: "facebook",
-    configKey: "EXPO_PUBLIC_FACEBOOK_APP_ID",
-    setupUrl: "developers.facebook.com",
-    steps: [
-      "افتح Facebook Developers Portal",
-      'اضغط "Create App" واختر نوع "Consumer"',
-      'أضف منتج "Facebook Login"',
-      "من لوحة التحكم انسخ App ID",
-      "أضفه في متغير EXPO_PUBLIC_FACEBOOK_APP_ID",
-    ],
   },
 ];
 
@@ -84,20 +60,16 @@ function isConfigured(provider: SocialProvider): boolean {
 export function SocialLoginButtons({ role, onSuccess }: Props) {
   const { loginWithSocial } = useAuth();
   const { loading, loginWithGoogle, loginWithFacebook, loginWithApple } = useSocialAuth();
-  const [guide, setGuide] = useState<ProviderConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handle(p: ProviderConfig) {
-    if (!isConfigured(p.id)) {
-      setGuide(p);
-      return;
-    }
+    // Unconfigured providers are rendered as disabled — guard just in case
+    if (!isConfigured(p.id)) return;
     setError(null);
     try {
       let profile;
       if (p.id === "google") profile = await loginWithGoogle();
-      else if (p.id === "facebook") profile = await loginWithFacebook();
-      else profile = await loginWithApple();
+      else profile = await loginWithFacebook();
       await loginWithSocial(profile, role);
       onSuccess?.();
     } catch (e: any) {
@@ -116,7 +88,11 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
       onSuccess?.();
     } catch (e: any) {
       const msg: string = e?.message ?? "حدث خطأ أثناء تسجيل الدخول بـ Apple";
-      if (!msg.includes("إلغاء") && !msg.includes("cancel") && !msg.includes("ERR_CANCELED")) {
+      if (
+        !msg.includes("إلغاء") &&
+        !msg.includes("cancel") &&
+        !msg.includes("ERR_CANCELED")
+      ) {
         setError(msg);
       }
     }
@@ -142,11 +118,11 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
               key={p.id}
               style={[
                 styles.btn,
-                { backgroundColor: p.bg, borderColor: p.border },
-                !configured && styles.btnUnconfigured,
+                { backgroundColor: configured ? p.bg : C.secondary, borderColor: configured ? p.border : C.border },
+                (!configured || isBusy) && styles.btnDisabled,
               ]}
               onPress={() => handle(p)}
-              disabled={isBusy}
+              disabled={!configured || isBusy}
               activeOpacity={0.8}
             >
               {busy ? (
@@ -177,7 +153,7 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
         })}
       </View>
 
-      {/* Apple Sign-In — iOS only, uses native button */}
+      {/* Apple — native iOS button or disabled fallback */}
       {Platform.OS === "ios" ? (
         <View style={styles.appleWrapper}>
           <AppleAuthentication.AppleAuthenticationButton
@@ -205,69 +181,6 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
       {error ? (
         <Text style={styles.errorText}>{error}</Text>
       ) : null}
-
-      {/* Setup guide modal (Google / Facebook when not configured) */}
-      <Modal
-        visible={!!guide}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setGuide(null)}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-
-            <View style={styles.sheetHeader}>
-              <MaterialCommunityIcons
-                name={guide?.icon as any}
-                size={28}
-                color={C.navy}
-              />
-              <View style={styles.sheetTitleWrap}>
-                <Text style={styles.sheetTitle}>
-                  تفعيل الدخول بـ {guide?.label}
-                </Text>
-                <Text style={styles.sheetSub}>
-                  يتطلب تسجيل التطبيق في {guide?.setupUrl}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.stepsCard}>
-              <Text style={styles.stepsTitle}>خطوات الإعداد</Text>
-              <ScrollView
-                style={{ maxHeight: 200 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {guide?.steps.map((step, i) => (
-                  <View key={i} style={styles.step}>
-                    <View style={styles.stepNum}>
-                      <Text style={styles.stepNumText}>{i + 1}</Text>
-                    </View>
-                    <Text style={styles.stepText}>{step}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-
-            <View style={styles.envBox}>
-              <Text style={styles.envLabel}>متغير البيئة المطلوب</Text>
-              <Text style={styles.envKey}>{guide?.configKey}</Text>
-            </View>
-
-            <Text style={styles.envNote}>
-              بعد الحصول على المفتاح، أضفه في إعدادات المشروع ← Secrets
-            </Text>
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => setGuide(null)}
-            >
-              <Text style={styles.closeBtnText}>حسناً، فهمت</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -297,10 +210,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
   },
-  btnUnconfigured: {
-    backgroundColor: C.secondary,
-    borderColor: C.border,
-    opacity: 0.75,
+  btnDisabled: {
+    opacity: 0.6,
   },
   btnLabel: {
     fontSize: 12,
@@ -315,7 +226,6 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 4,
   },
-  // Apple button
   appleWrapper: {
     marginBottom: 4,
     position: "relative",
@@ -339,7 +249,6 @@ const styles = StyleSheet.create({
     opacity: 0.65,
     marginBottom: 4,
   },
-  // Error
   errorText: {
     marginTop: 8,
     fontSize: 12,
@@ -347,129 +256,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     lineHeight: 18,
-  },
-  // Modal
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: C.border,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 20,
-  },
-  sheetTitleWrap: { flex: 1 },
-  sheetTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: C.foreground,
-    textAlign: "right",
-  },
-  sheetSub: {
-    fontSize: 12,
-    color: C.mutedForeground,
-    fontFamily: "Inter_400Regular",
-    textAlign: "right",
-    marginTop: 2,
-  },
-  stepsCard: {
-    backgroundColor: "#F8FAFF",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E5EBF5",
-    marginBottom: 14,
-    gap: 10,
-  },
-  stepsTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: C.navy,
-    textAlign: "right",
-  },
-  step: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginTop: 8,
-  },
-  stepNum: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: C.navy,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  stepNumText: {
-    color: "#fff",
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-  },
-  stepText: {
-    flex: 1,
-    fontSize: 13,
-    color: C.foreground,
-    fontFamily: "Inter_400Regular",
-    textAlign: "right",
-    lineHeight: 20,
-  },
-  envBox: {
-    backgroundColor: "#1B3A6B",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  envLabel: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.65)",
-    fontFamily: "Inter_400Regular",
-  },
-  envKey: {
-    fontSize: 12,
-    color: "#C9A035",
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.3,
-  },
-  envNote: {
-    fontSize: 11,
-    color: C.mutedForeground,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    marginBottom: 16,
-    lineHeight: 17,
-  },
-  closeBtn: {
-    backgroundColor: C.navy,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  closeBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
   },
 });

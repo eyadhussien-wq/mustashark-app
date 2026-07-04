@@ -567,7 +567,7 @@ function RegisterForm({
             />
           </GoldInput>
           {form.hourlyRate ? (
-            <Text style={[styles.hint, { marginTop: 4 }]}>
+            <Text style={{ fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 4 }}>
               صافي ربحك: {Math.round((parseInt(form.hourlyRate) || 0) * 0.85)} {rateLabel(form.country)} بعد خصم 15% عمولة المنصة
             </Text>
           ) : null}
