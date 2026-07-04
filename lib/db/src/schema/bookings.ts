@@ -20,6 +20,7 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "no_show_lawyer",
   "no_show_client",
   "disputed",
+  "refunded_absent",
 ]);
 
 export const bookingTypeEnum = pgEnum("booking_type", [

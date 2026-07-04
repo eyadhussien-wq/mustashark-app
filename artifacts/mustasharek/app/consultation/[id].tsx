@@ -44,6 +44,7 @@ const STATUS_CONFIG = {
   no_show_lawyer: { label: "تأخر المحامي", color: C.destructive, bg: "#FEE2E2", icon: "alert-triangle" },
   no_show_client: { label: "غياب العميل", color: C.warning, bg: "#FEF3C7", icon: "user-x" },
   disputed: { label: "نزاع", color: "#7C3AED", bg: "#EDE9FE", icon: "alert-circle" },
+  refunded_absent: { label: "مسترد (غياب)", color: "#0369A1", bg: "#E0F2FE", icon: "shield" },
 };
 
 function getFileExt(name: string) {
@@ -185,13 +186,15 @@ export default function ConsultationDetail() {
     markNoShow,
     raiseDispute,
     recordAttendance,
+    checkLawyerAbsence,
   } = useData();
-  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | "cancel" | "noShow" | "dispute" | "join" | null>(null);
+  const [loading, setLoading] = useState<"accept" | "reject" | "complete" | "pdf" | "cancel" | "noShow" | "dispute" | "join" | "absenceCheck" | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
   const [disputeModal, setDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [joinCountdown, setJoinCountdown] = useState("");
+  const [absenceSecondsLeft, setAbsenceSecondsLeft] = useState<number | null>(null);
 
   const consult = useMemo(
     () => consultations.find((c) => c.id === id),
@@ -230,22 +233,47 @@ export default function ConsultationDetail() {
     return { canJoin, openAt, closeAt, minsUntil, minsRemaining, slotDuration };
   }, [consult.date, consult.time]);
 
-  // Countdown tick
+  // Countdown tick — every second for precision
   useEffect(() => {
     if (consult.status !== "accepted" || !consult.meetLink) return;
+
+    const ABSENCE_WINDOW_MS = 15 * 60 * 1000;
+
     const tick = () => {
-      if (meetingWindow.canJoin) {
-        setJoinCountdown(`ينتهي بعد ${meetingWindow.minsRemaining} دقيقة`);
-      } else if (meetingWindow.minsUntil > 0) {
-        setJoinCountdown(`تفتح بعد ${meetingWindow.minsUntil} دقيقة`);
+      const appt = new Date(`${consult.date}T${consult.time}`);
+      const now = new Date();
+      const earlyOpen = 5 * 60 * 1000;
+      const openAt = new Date(appt.getTime() - earlyOpen);
+      const closeAt = new Date(appt.getTime() + 30 * 60 * 1000);
+
+      const canJoinNow = now >= openAt && now <= closeAt;
+      const secsUntilOpen = Math.max(0, Math.ceil((openAt.getTime() - now.getTime()) / 1000));
+      const minsRemaining = Math.max(0, Math.ceil((closeAt.getTime() - now.getTime()) / (60 * 1000)));
+
+      if (canJoinNow) {
+        setJoinCountdown(`ينتهي بعد ${minsRemaining} دقيقة`);
+      } else if (secsUntilOpen > 0) {
+        const m = Math.floor(secsUntilOpen / 60);
+        const s = secsUntilOpen % 60;
+        setJoinCountdown(m > 0 ? `تفتح بعد ${m}:${String(s).padStart(2, "0")}` : `تفتح بعد ${s} ثانية`);
       } else {
         setJoinCountdown("");
       }
+
+      // 15-min absence countdown (shown to client when lawyer hasn't joined)
+      if (consult.clientJoinedAt && !consult.lawyerJoinedAt) {
+        const elapsed = now.getTime() - appt.getTime();
+        const secsLeft = Math.max(0, Math.ceil((ABSENCE_WINDOW_MS - elapsed) / 1000));
+        setAbsenceSecondsLeft(secsLeft);
+      } else {
+        setAbsenceSecondsLeft(null);
+      }
     };
+
     tick();
-    const iv = setInterval(tick, 30000);
+    const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [consult.status, consult.meetLink, meetingWindow.canJoin, meetingWindow.minsUntil, meetingWindow.minsRemaining]);
+  }, [consult.status, consult.meetLink, consult.clientJoinedAt, consult.lawyerJoinedAt, consult.date, consult.time]);
 
   // ── Join Meeting ──
   async function handleJoinMeeting() {
@@ -255,12 +283,35 @@ export default function ConsultationDetail() {
     await recordAttendance(consult.id, role);
     setLoading(null);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Open Google Meet
     const supported = await Linking.canOpenURL(consult.meetLink);
     if (supported) {
       await Linking.openURL(consult.meetLink);
     } else {
       Alert.alert("لا يمكن فتح الرابط", `الرابط: ${consult.meetLink}`);
+    }
+  }
+
+  // ── Auto-absence check (15-min rule) ──
+  async function handleCheckAbsence() {
+    if (!consult) return;
+    setLoading("absenceCheck");
+    try {
+      const result = await checkLawyerAbsence(consult.id);
+      if (result.refunded) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Alert.alert(
+          "تم الاسترداد التلقائي",
+          `لم يحضر المحامي خلال 15 دقيقة من الموعد.\n\nتم استرداد ${result.refundAmount} ${currency} بالكامل إلى محفظتك.\n\nسيتم إخطار الإدارة بهذا الحادث.`,
+          [{ text: "حسناً" }],
+        );
+      } else {
+        Alert.alert(
+          "لم تنتهِ مهلة الانتظار بعد",
+          "لا يزال بإمكان المحامي الانضمام ضمن النافذة الزمنية المسموحة (15 دقيقة).",
+        );
+      }
+    } finally {
+      setLoading(null);
     }
   }
 
@@ -544,6 +595,43 @@ export default function ConsultationDetail() {
                 </View>
               )}
             </View>
+
+            {/* 15-min absence alert — shown to client when they've joined but lawyer hasn't */}
+            {!isLawyer && consult.clientJoinedAt && !consult.lawyerJoinedAt && consult.status === "accepted" && (
+              <View style={styles.absencePanel}>
+                <View style={styles.absencePanelHeader}>
+                  <Feather name="alert-triangle" size={15} color="#B45309" />
+                  <Text style={styles.absencePanelTitle}>المحامي لم يصل بعد</Text>
+                </View>
+                {absenceSecondsLeft !== null && absenceSecondsLeft > 0 ? (
+                  <Text style={styles.absenceCountdown}>
+                    {`سيتم الاسترداد التلقائي خلال ${Math.floor(absenceSecondsLeft / 60)}:${String(absenceSecondsLeft % 60).padStart(2, "0")}`}
+                  </Text>
+                ) : (
+                  <Text style={styles.absenceCountdownReady}>
+                    انتهت مهلة الانتظار — يمكنك المطالبة بالاسترداد الآن
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.absenceBtn,
+                    (loading === "absenceCheck" || (absenceSecondsLeft ?? 1) > 0) && { opacity: 0.55 },
+                  ]}
+                  onPress={handleCheckAbsence}
+                  disabled={!!loading || (absenceSecondsLeft ?? 1) > 0}
+                  activeOpacity={0.8}
+                >
+                  {loading === "absenceCheck" ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Feather name="shield" size={15} color="#fff" />
+                      <Text style={styles.absenceBtnText}>استرداد تلقائي — غياب المحامي</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -1143,4 +1231,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
   },
   attText: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  absencePanel: {
+    marginTop: 12,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+  },
+  absencePanelHeader: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+  },
+  absencePanelTitle: {
+    fontSize: 13, fontFamily: "Inter_700Bold", color: "#92400E",
+  },
+  absenceCountdown: {
+    fontSize: 14, fontFamily: "Inter_700Bold", color: "#B45309",
+    textAlign: "center", letterSpacing: 0.5,
+  },
+  absenceCountdownReady: {
+    fontSize: 13, fontFamily: "Inter_500Medium", color: "#B45309",
+    textAlign: "center",
+  },
+  absenceBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, backgroundColor: "#B45309", borderRadius: 12,
+    paddingVertical: 12, marginTop: 4,
+  },
+  absenceBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff" },
 });

@@ -28,6 +28,7 @@ const STATUS_CONFIG: Record<
   no_show_lawyer: { label: "تأخر المحامي", color: C.destructive, bg: "#FEE2E2", icon: "alert-triangle" },
   no_show_client: { label: "غياب العميل", color: C.warning, bg: "#FEF3C7", icon: "user-x" },
   disputed: { label: "نزاع", color: "#7C3AED", bg: "#EDE9FE", icon: "alert-circle" },
+  refunded_absent: { label: "مسترد (غياب)", color: "#0369A1", bg: "#E0F2FE", icon: "shield" },
 };
 
 const TYPE_ICON: Record<string, string> = {

@@ -45,7 +45,8 @@ export type ConsultationStatus =
   | "cancelled_by_client"
   | "no_show_lawyer"
   | "no_show_client"
-  | "disputed";
+  | "disputed"
+  | "refunded_absent";
 
 export interface ConsultationRating {
   stars: number;
@@ -158,6 +159,7 @@ interface DataContextValue {
   getClientWallet: (clientId: string) => Promise<ClientWallet>;
   // Google Meet integration
   recordAttendance: (id: string, role: "client" | "lawyer") => Promise<void>;
+  checkLawyerAbsence: (id: string) => Promise<{ refunded: boolean; refundAmount: number }>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -887,6 +889,61 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [consultations]
   );
 
+  /**
+   * 15-minute absence rule: if the client has joined but the lawyer hasn't
+   * within 15 minutes of the scheduled start, trigger a 100% auto-refund
+   * and close the session (status → refunded_absent, meetLink cleared).
+   */
+  const ABSENCE_WINDOW_MS = 15 * 60 * 1000;
+
+  const checkLawyerAbsence = useCallback(
+    async (id: string): Promise<{ refunded: boolean; refundAmount: number }> => {
+      const consult = consultations.find((c) => c.id === id);
+      if (!consult) return { refunded: false, refundAmount: 0 };
+
+      if (
+        consult.status !== "accepted" ||
+        !consult.clientJoinedAt ||
+        consult.lawyerJoinedAt
+      ) {
+        return { refunded: false, refundAmount: 0 };
+      }
+
+      const scheduledStart = new Date(`${consult.date}T${consult.time}`);
+      const elapsed = Date.now() - scheduledStart.getTime();
+
+      if (elapsed < ABSENCE_WINDOW_MS) {
+        return { refunded: false, refundAmount: 0 };
+      }
+
+      // ── Trigger auto-refund ──
+      const refundAmount = consult.paymentStatus === "paid" ? consult.price : 0;
+
+      const updated = consultations.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: "refunded_absent" as ConsultationStatus,
+              paymentStatus: "refunded" as Consultation["paymentStatus"],
+              refundAmount,
+              refundReason: "المحامي لم يحضر الجلسة خلال 15 دقيقة — تم الاسترداد التلقائي الكامل",
+              meetLink: undefined,
+            }
+          : c
+      );
+      setConsultations(updated);
+      await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(updated));
+
+      if (refundAmount > 0) {
+        await creditClientWallet(consult.clientId, refundAmount);
+      }
+
+      return { refunded: true, refundAmount };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [consultations]
+  );
+
   // ── Wallet / Commission ────────────────────────────────────────────────────────────
 
   const getLawyerWallet = useCallback(
@@ -1015,6 +1072,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         raiseDispute,
         getClientWallet,
         recordAttendance,
+        checkLawyerAbsence,
       }}
     >
       {children}
