@@ -7,6 +7,7 @@ export const countryEnum = pgEnum("country", ["qatar", "jordan"]);
 export const authProviderEnum = pgEnum("auth_provider", [
   "local",
   "google",
+  "facebook",
   "apple",
 ]);
 

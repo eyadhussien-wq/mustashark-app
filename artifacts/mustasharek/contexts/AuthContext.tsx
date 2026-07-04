@@ -45,6 +45,7 @@ interface AuthContextValue {
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
+  getAuthToken: () => Promise<string | null>;
 }
 
 export interface RegisterClientData {
@@ -70,6 +71,7 @@ export interface RegisterLawyerData {
 
 const STORAGE_KEY = "mustasharek_users_v2";
 const SESSION_KEY = "mustasharek_session_v2";
+const JWT_KEY = "mustasharek_jwt_v1";
 const OTP_KEY = "mustasharek_reset_otp";
 
 const normalizeEmail = (e: string) => e.trim().toLowerCase();
@@ -221,13 +223,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithSocial = useCallback(
     async (profile: SocialProfile, role: UserRole) => {
+      // Store backend JWT if provided (enables authenticated API calls)
+      if (profile.jwt) {
+        await AsyncStorage.setItem(JWT_KEY, profile.jwt);
+      }
+
       const users = await readUsers();
       const email = normalizeEmail(profile.email);
 
       const existing = users.find((u) => normalizeEmail(u.email) === email);
       if (existing) {
-        // Already registered — just log in
-        const { password: _, ...safe } = existing;
+        // Already registered — just log in (update socialProvider if changed)
+        const updated = { ...existing, socialProvider: profile.provider };
+        const { password: _, ...safe } = updated;
         await persist(safe);
         return;
       }
@@ -349,8 +357,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Logout ─────────────────────────────────────────────────────────────────
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(SESSION_KEY);
+    await AsyncStorage.multiRemove([SESSION_KEY, JWT_KEY]);
     setUser(null);
+  }, []);
+
+  // ── Get stored JWT (for authenticated API calls) ───────────────────────────
+
+  const getAuthToken = useCallback(async (): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem(JWT_KEY);
+    } catch {
+      return null;
+    }
   }, []);
 
   // ── Delete account ──────────────────────────────────────────────────────────
@@ -445,6 +463,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateUser,
         requestPasswordReset,
         resetPassword,
+        getAuthToken,
       }}
     >
       {children}

@@ -1,8 +1,10 @@
+import * as AppleAuthentication from "expo-apple-authentication";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,7 +24,7 @@ interface Props {
 
 const C = colors.light;
 
-const PROVIDERS: {
+interface ProviderConfig {
   id: SocialProvider;
   label: string;
   color: string;
@@ -32,7 +34,9 @@ const PROVIDERS: {
   configKey: string;
   setupUrl: string;
   steps: string[];
-}[] = [
+}
+
+const PROVIDERS: ProviderConfig[] = [
   {
     id: "google",
     label: "Google",
@@ -44,10 +48,10 @@ const PROVIDERS: {
     setupUrl: "console.cloud.google.com",
     steps: [
       "افتح Google Cloud Console",
-      'أنشئ مشروعاً جديداً أو اختر مشروعاً موجوداً',
+      "أنشئ مشروعاً جديداً أو اختر مشروعاً موجوداً",
       'اذهب إلى "APIs & Services" → "Credentials"',
       'اضغط "Create Credentials" → "OAuth 2.0 Client ID"',
-      "اختر نوع التطبيق: Android / iOS / Web",
+      "اختر نوع التطبيق: Android / iOS",
       "أضف Client ID في متغير EXPO_PUBLIC_GOOGLE_CLIENT_ID",
     ],
   },
@@ -68,55 +72,57 @@ const PROVIDERS: {
       "أضفه في متغير EXPO_PUBLIC_FACEBOOK_APP_ID",
     ],
   },
-  {
-    id: "microsoft",
-    label: "Microsoft",
-    color: "#FFFFFF",
-    bg: "#2F2F2F",
-    border: "#2F2F2F",
-    icon: "microsoft",
-    configKey: "EXPO_PUBLIC_MICROSOFT_CLIENT_ID",
-    setupUrl: "portal.azure.com",
-    steps: [
-      "افتح Azure Portal",
-      'اذهب إلى "Azure Active Directory"',
-      '"App registrations" → "New registration"',
-      "أدخل اسم التطبيق واختر نوع الحساب",
-      "من نظرة عامة انسخ Application (client) ID",
-      "أضفه في متغير EXPO_PUBLIC_MICROSOFT_CLIENT_ID",
-    ],
-  },
 ];
 
 function isConfigured(provider: SocialProvider): boolean {
   if (provider === "google") return !!OAUTH.google.clientId;
   if (provider === "facebook") return !!OAUTH.facebook.appId;
-  if (provider === "microsoft") return !!OAUTH.microsoft.clientId;
+  if (provider === "apple") return Platform.OS === "ios";
   return false;
 }
 
 export function SocialLoginButtons({ role, onSuccess }: Props) {
   const { loginWithSocial } = useAuth();
-  const { loading, loginWithGoogle, loginWithFacebook, loginWithMicrosoft } =
-    useSocialAuth();
-  const [guide, setGuide] = useState<(typeof PROVIDERS)[0] | null>(null);
+  const { loading, loginWithGoogle, loginWithFacebook, loginWithApple } = useSocialAuth();
+  const [guide, setGuide] = useState<ProviderConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handle(p: (typeof PROVIDERS)[0]) {
+  async function handle(p: ProviderConfig) {
     if (!isConfigured(p.id)) {
       setGuide(p);
       return;
     }
+    setError(null);
     try {
       let profile;
       if (p.id === "google") profile = await loginWithGoogle();
       else if (p.id === "facebook") profile = await loginWithFacebook();
-      else profile = await loginWithMicrosoft();
+      else profile = await loginWithApple();
       await loginWithSocial(profile, role);
       onSuccess?.();
     } catch (e: any) {
-      setGuide(null);
+      const msg: string = e?.message ?? "حدث خطأ أثناء تسجيل الدخول";
+      if (!msg.includes("إلغاء") && !msg.includes("cancel")) {
+        setError(msg);
+      }
     }
   }
+
+  async function handleAppleNative() {
+    setError(null);
+    try {
+      const profile = await loginWithApple();
+      await loginWithSocial(profile, role);
+      onSuccess?.();
+    } catch (e: any) {
+      const msg: string = e?.message ?? "حدث خطأ أثناء تسجيل الدخول بـ Apple";
+      if (!msg.includes("إلغاء") && !msg.includes("cancel") && !msg.includes("ERR_CANCELED")) {
+        setError(msg);
+      }
+    }
+  }
+
+  const isBusy = loading !== null;
 
   return (
     <View style={styles.container}>
@@ -126,6 +132,7 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
         <View style={styles.line} />
       </View>
 
+      {/* Google + Facebook row */}
       <View style={styles.btns}>
         {PROVIDERS.map((p) => {
           const busy = loading === p.id;
@@ -139,7 +146,7 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
                 !configured && styles.btnUnconfigured,
               ]}
               onPress={() => handle(p)}
-              disabled={loading !== null}
+              disabled={isBusy}
               activeOpacity={0.8}
             >
               {busy ? (
@@ -170,7 +177,36 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
         })}
       </View>
 
-      {/* Setup guide modal */}
+      {/* Apple Sign-In — iOS only, uses native button */}
+      {Platform.OS === "ios" ? (
+        <View style={styles.appleWrapper}>
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={10}
+            style={styles.appleBtn}
+            onPress={handleAppleNative}
+          />
+          {loading === "apple" && (
+            <View style={styles.appleOverlay}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={[styles.btn, styles.appleBtnFallback]}>
+          <MaterialCommunityIcons name="apple" size={16} color={C.mutedForeground} />
+          <Text style={[styles.btnLabel, { color: C.mutedForeground }]}>Apple</Text>
+          <Text style={styles.soonBadge}>iOS فقط</Text>
+        </View>
+      )}
+
+      {/* Inline error */}
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : null}
+
+      {/* Setup guide modal (Google / Facebook when not configured) */}
       <Modal
         visible={!!guide}
         transparent
@@ -250,7 +286,7 @@ const styles = StyleSheet.create({
     color: C.mutedForeground,
     fontFamily: "Inter_400Regular",
   },
-  btns: { flexDirection: "row", gap: 8 },
+  btns: { flexDirection: "row", gap: 8, marginBottom: 8 },
   btn: {
     flex: 1,
     flexDirection: "row",
@@ -278,6 +314,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 4,
+  },
+  // Apple button
+  appleWrapper: {
+    marginBottom: 4,
+    position: "relative",
+  },
+  appleBtn: {
+    width: "100%",
+    height: 48,
+  },
+  appleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  appleBtnFallback: {
+    flex: 0,
+    width: "100%",
+    backgroundColor: C.secondary,
+    borderColor: C.border,
+    opacity: 0.65,
+    marginBottom: 4,
+  },
+  // Error
+  errorText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#DC2626",
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 18,
   },
   // Modal
   overlay: {
