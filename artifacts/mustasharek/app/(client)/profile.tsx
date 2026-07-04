@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { WhatsAppSupportCard } from "@/components/WhatsAppSupportCard";
 
 const C = colors.light;
 
@@ -99,6 +100,8 @@ export default function ClientProfile() {
           </View>
         ))}
       </View>
+
+      <WhatsAppSupportCard role="client" title={t("supportTitle")} />
 
       <TouchableOpacity style={[styles.logoutBtn, { flexDirection: rowDir }]} onPress={handleLogout} activeOpacity={0.85}>
         <Text style={styles.logoutText}>{t("logout")}</Text>

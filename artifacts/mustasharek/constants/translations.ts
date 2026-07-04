@@ -238,6 +238,13 @@ export const translations: Record<Lang, Record<string, string>> = {
     cardHolder: "اسم حامل البطاقة",
     expiryDate: "تاريخ الانتهاء",
     paymentProcessing: "جارٍ تأكيد الدفع...",
+    // Support
+    supportTitle: "الدعم الفني والشكاوى",
+    supportSubtitle: "تواصل معنا لأي استفسار أو مشكلة",
+    whatsappSupport: "التواصل الفوري عبر الواتساب",
+    whatsappHint: "رد سريع خلال دقائق",
+    supportEmail: "إرسال تذكرة دعم",
+    supportEmailHint: "للمشكلات التقنية المعقدة",
   },
   en: {
     appName: "Mustasharek",
@@ -476,5 +483,12 @@ export const translations: Record<Lang, Record<string, string>> = {
     cardHolder: "Cardholder Name",
     expiryDate: "Expiry Date",
     paymentProcessing: "Confirming payment...",
+    // Support
+    supportTitle: "Technical Support & Complaints",
+    supportSubtitle: "Contact us for any inquiry or issue",
+    whatsappSupport: "Instant WhatsApp Support",
+    whatsappHint: "Quick reply within minutes",
+    supportEmail: "Submit a Support Ticket",
+    supportEmailHint: "For complex technical issues",
   },
 };

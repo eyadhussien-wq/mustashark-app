@@ -15,6 +15,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { WhatsAppSupportCard } from "@/components/WhatsAppSupportCard";
 import { formatPrice } from "@/utils/currency";
 
 const C = colors.light;
@@ -179,6 +180,8 @@ export default function LawyerProfile() {
           </View>
         ))}
       </View>
+
+      <WhatsAppSupportCard role="lawyer" title={t("supportTitle")} />
 
       <TouchableOpacity style={[styles.logoutBtn, { flexDirection: rowDir }]} onPress={handleLogout} activeOpacity={0.85}>
         <Text style={styles.logoutText}>{t("logout")}</Text>
