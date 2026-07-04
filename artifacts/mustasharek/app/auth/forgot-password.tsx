@@ -218,18 +218,6 @@ export default function ForgotPassword() {
               </Text>
             </View>
 
-            {/* Demo OTP display */}
-            <View style={styles.demoOtpBox}>
-              <Feather name="info" size={14} color={C.primary} />
-              <View style={styles.demoOtpContent}>
-                <Text style={styles.demoOtpTitle}>رمز التحقق التجريبي</Text>
-                <Text style={styles.demoOtpCode}>{otpCode}</Text>
-                <Text style={styles.demoOtpNote}>
-                  (في النسخة الحقيقية سيُرسَل عبر البريد الإلكتروني)
-                </Text>
-              </View>
-            </View>
-
             {!!error && <ErrorBox message={error} />}
 
             <View style={styles.otpSection}>
@@ -393,16 +381,6 @@ const styles = StyleSheet.create({
     textAlign: "center", lineHeight: 22,
   },
   emailHighlight: { color: C.navy, fontFamily: "Inter_600SemiBold" },
-
-  demoOtpBox: {
-    flexDirection: "row", gap: 10, alignItems: "flex-start",
-    backgroundColor: "#EEF2F8", borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: "#D6E0F0", marginBottom: 20,
-  },
-  demoOtpContent: { flex: 1, gap: 2 },
-  demoOtpTitle: { fontSize: 12, color: C.primary, fontFamily: "Inter_600SemiBold", textAlign: "right" },
-  demoOtpCode: { fontSize: 26, fontFamily: "Inter_700Bold", color: C.navy, letterSpacing: 6, textAlign: "right" },
-  demoOtpNote: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right" },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,

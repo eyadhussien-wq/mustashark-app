@@ -179,12 +179,6 @@ export default function Login() {
         </View>
 
         <SocialLoginButtons role={role} />
-
-        <Text style={styles.hint}>
-          {isLawyer
-            ? "للاختبار: lawyer@mustashark.com / test1234"
-            : "للاختبار: client@mustashark.com / test1234"}
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -302,12 +296,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.navy,
     fontFamily: "Inter_700Bold",
-  },
-  hint: {
-    textAlign: "center",
-    marginTop: 12,
-    fontSize: 11,
-    color: C.mutedForeground,
-    fontFamily: "Inter_400Regular",
   },
 });

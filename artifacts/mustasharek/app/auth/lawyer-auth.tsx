@@ -319,13 +319,6 @@ function LoginForm({
         }
       </TouchableOpacity>
 
-      <View style={styles.demoBox}>
-        <Feather name="info" size={12} color={C.mutedForeground} />
-        <Text style={styles.demoText}>
-          {"للاختبار: lawyer@mustashark.com / test1234\nأو: fatima@example.com / 123456"}
-        </Text>
-      </View>
-
       <View style={styles.dividerRow}>
         <View style={styles.divider} />
         <Text style={styles.dividerText}>لا تملك حساباً؟</Text>
@@ -875,13 +868,6 @@ const styles = StyleSheet.create({
   },
   outlineBtnText: { color: C.navy, fontSize: 14, fontFamily: "Inter_700Bold" },
 
-  // Misc
-  demoBox: {
-    flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center",
-    backgroundColor: C.muted, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14,
-  },
-  demoText: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-  hint: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   divider: { flex: 1, height: 1, backgroundColor: C.border },
   dividerText: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
