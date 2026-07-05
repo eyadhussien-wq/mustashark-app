@@ -21,7 +21,7 @@ export const SUPPORT_CONFIG = {
     process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP?.trim() || FALLBACK_WHATSAPP,
 
   /** Fallback support e-mail address for ticket submissions. */
-  email: process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() || "support@mustasharek.com",
+  email: process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() || "mustasharkapp@gmail.com",
 } as const;
 
 /**
