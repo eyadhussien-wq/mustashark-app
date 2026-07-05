@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminLawyerStatus } from './adminLawyerStatus';
 
 export interface AdminLawyer {
   id: string;
@@ -16,6 +17,9 @@ export interface AdminLawyer {
   country?: string | null;
   /** @nullable */
   officeName?: string | null;
+  status: AdminLawyerStatus;
+  /** @nullable */
+  statusReason?: string | null;
   consultationsCount: number;
   createdAt: string;
 }

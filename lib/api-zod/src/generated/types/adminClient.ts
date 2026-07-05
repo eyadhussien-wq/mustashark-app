@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminClientStatus } from './adminClientStatus';
 
 export interface AdminClient {
   id: string;
@@ -14,6 +15,9 @@ export interface AdminClient {
   phone?: string | null;
   /** @nullable */
   country?: string | null;
+  status: AdminClientStatus;
+  /** @nullable */
+  statusReason?: string | null;
   consultationsCount: number;
   createdAt: string;
 }

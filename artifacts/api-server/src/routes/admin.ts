@@ -12,6 +12,8 @@ import {
   listAdminClients,
   listAdminConsultations,
   listAdminOffices,
+  updateLawyerStatus,
+  updateClientStatus,
 } from "../controllers/adminData";
 import { requireAdmin } from "../middlewares/requireAdmin";
 
@@ -25,6 +27,16 @@ adminRouter.get("/admin/lawyers", requireAdmin, listAdminLawyers);
 adminRouter.get("/admin/clients", requireAdmin, listAdminClients);
 adminRouter.get("/admin/consultations", requireAdmin, listAdminConsultations);
 adminRouter.get("/admin/offices", requireAdmin, listAdminOffices);
+adminRouter.patch(
+  "/admin/lawyers/:id/status",
+  requireAdmin,
+  updateLawyerStatus,
+);
+adminRouter.patch(
+  "/admin/clients/:id/status",
+  requireAdmin,
+  updateClientStatus,
+);
 adminRouter.get("/admin/dues-report", requireAdmin, getDuesReport);
 adminRouter.post("/admin/collect", requireAdmin, recordManualCollection);
 adminRouter.post("/admin/kill-switch", requireAdmin, checkAndApplyKillSwitch);

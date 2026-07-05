@@ -29,6 +29,37 @@ export function translateStatus(status: string) {
   return map[status.toLowerCase()] || status;
 }
 
+export function translateAccountStatus(status: string) {
+  const map: Record<string, string> = {
+    pending: "بانتظار الموافقة",
+    active: "نشط",
+    suspended: "موقوف مؤقتاً",
+    terminated: "ملغى الاشتراك",
+    rejected: "مرفوض",
+    blocked: "محظور",
+  };
+  return map[status?.toLowerCase()] || status;
+}
+
+export function accountStatusVariant(
+  status: string,
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status?.toLowerCase()) {
+    case "active":
+      return "default";
+    case "pending":
+      return "secondary";
+    case "suspended":
+      return "outline";
+    case "terminated":
+    case "rejected":
+    case "blocked":
+      return "destructive";
+    default:
+      return "secondary";
+  }
+}
+
 export function translateConsultationType(type: string) {
   const map: Record<string, string> = {
     written: "كتابية",

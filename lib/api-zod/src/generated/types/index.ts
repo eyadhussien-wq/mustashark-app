@@ -8,9 +8,11 @@
 
 export * from './adminAuthResult';
 export * from './adminClient';
+export * from './adminClientStatus';
 export * from './adminConsultation';
 export * from './adminDueRow';
 export * from './adminLawyer';
+export * from './adminLawyerStatus';
 export * from './adminLoginInput';
 export * from './adminOffice';
 export * from './adminOverview';
@@ -21,3 +23,7 @@ export * from './collectDuesInput';
 export * from './collectDuesResult';
 export * from './healthStatus';
 export * from './killSwitchResult';
+export * from './updateClientStatusInput';
+export * from './updateClientStatusInputStatus';
+export * from './updateLawyerStatusInput';
+export * from './updateLawyerStatusInputStatus';

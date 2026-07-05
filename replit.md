@@ -45,6 +45,7 @@
 - **عميل (Client):** Browse lawyers, filter by country (Qatar/Jordan) and specialization, book consultations with date/time/type selection.
 - **محامٍ (Lawyer):** Register with license number verification, manage availability, view/accept/reject consultation requests, dashboard with stats.
 - **مدير (Admin):** Dedicated **web** dashboard (`artifacts/admin-dashboard/`, served at `/admin/`) — NOT a mobile tab. Server-side login against a DB admin user (JWT bearer + scrypt), KPIs (lawyers/clients/consultations), revenue split by country, consultation status breakdown, plus lawyers/clients/consultations/offices management and a dues report with manual collection and a debt kill-switch (auto-suspend offices over threshold).
+  - **Account status lifecycle:** users carry an `accountStatus` (`pending`/`active`/`suspended`/`terminated`/`rejected`/`blocked`) + `statusReason`. Lawyers page has a pending-registration approval section (approve → active / reject → rejected) plus suspend/reactivate/terminate actions; clients page has block/unblock. Transitions are validated server-side against a fixed matrix (terminated & rejected are terminal) — invalid transitions return 409. Endpoints: `PATCH /api/admin/lawyers/{id}/status`, `PATCH /api/admin/clients/{id}/status`.
 - Demo login (mobile): `ahmed@example.com` / `123456` (client), `fatima@example.com` / `123456` (lawyer). Admin web dashboard: `admin@mustashark.com` / `test1234`.
 
 ## User preferences

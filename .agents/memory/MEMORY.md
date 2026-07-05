@@ -1,1 +1,2 @@
 - [Orval react-query hooks](orval-react-query-hooks.md) — generated query hooks require `queryKey` in options; void mutations take no arg; always typecheck subagent frontends.
+- [Account status lifecycle](account-status-lifecycle.md) — user accountStatus transitions enforced server-side by a fixed matrix (409 on invalid); terminated/rejected are terminal.

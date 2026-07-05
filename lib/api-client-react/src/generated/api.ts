@@ -33,7 +33,9 @@ import type {
   CollectDuesInput,
   CollectDuesResult,
   HealthStatus,
-  KillSwitchResult
+  KillSwitchResult,
+  UpdateClientStatusInput,
+  UpdateLawyerStatusInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -878,5 +880,149 @@ export const useRunAdminKillSwitch = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRunAdminKillSwitchMutationOptions(options));
+    }
+
+export const getUpdateLawyerStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/lawyers/${id}/status`
+}
+
+/**
+ * @summary Approve, reject, suspend, reactivate, or terminate a lawyer account
+ */
+export const updateLawyerStatus = async (id: string,
+    updateLawyerStatusInput: UpdateLawyerStatusInput, options?: RequestInit): Promise<AdminLawyer> => {
+
+  return customFetch<AdminLawyer>(getUpdateLawyerStatusUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateLawyerStatusInput,)
+  }
+);}
+
+
+
+
+export const getUpdateLawyerStatusMutationOptions = <TError = ErrorType<ApiErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLawyerStatus>>, TError,{id: string;data: BodyType<UpdateLawyerStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLawyerStatus>>, TError,{id: string;data: BodyType<UpdateLawyerStatusInput>}, TContext> => {
+
+const mutationKey = ['updateLawyerStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLawyerStatus>>, {id: string;data: BodyType<UpdateLawyerStatusInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateLawyerStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLawyerStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateLawyerStatus>>>
+    export type UpdateLawyerStatusMutationBody = BodyType<UpdateLawyerStatusInput>
+    export type UpdateLawyerStatusMutationError = ErrorType<ApiErrorResponse>
+
+    /**
+ * @summary Approve, reject, suspend, reactivate, or terminate a lawyer account
+ */
+export const useUpdateLawyerStatus = <TError = ErrorType<ApiErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLawyerStatus>>, TError,{id: string;data: BodyType<UpdateLawyerStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLawyerStatus>>,
+        TError,
+        {id: string;data: BodyType<UpdateLawyerStatusInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateLawyerStatusMutationOptions(options));
+    }
+
+export const getUpdateClientStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/clients/${id}/status`
+}
+
+/**
+ * @summary Block, suspend, or reactivate a client account
+ */
+export const updateClientStatus = async (id: string,
+    updateClientStatusInput: UpdateClientStatusInput, options?: RequestInit): Promise<AdminClient> => {
+
+  return customFetch<AdminClient>(getUpdateClientStatusUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateClientStatusInput,)
+  }
+);}
+
+
+
+
+export const getUpdateClientStatusMutationOptions = <TError = ErrorType<ApiErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientStatus>>, TError,{id: string;data: BodyType<UpdateClientStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateClientStatus>>, TError,{id: string;data: BodyType<UpdateClientStatusInput>}, TContext> => {
+
+const mutationKey = ['updateClientStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateClientStatus>>, {id: string;data: BodyType<UpdateClientStatusInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateClientStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateClientStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateClientStatus>>>
+    export type UpdateClientStatusMutationBody = BodyType<UpdateClientStatusInput>
+    export type UpdateClientStatusMutationError = ErrorType<ApiErrorResponse>
+
+    /**
+ * @summary Block, suspend, or reactivate a client account
+ */
+export const useUpdateClientStatus = <TError = ErrorType<ApiErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientStatus>>, TError,{id: string;data: BodyType<UpdateClientStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateClientStatus>>,
+        TError,
+        {id: string;data: BodyType<UpdateClientStatusInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateClientStatusMutationOptions(options));
     }
 

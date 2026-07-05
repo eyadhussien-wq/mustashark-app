@@ -10,6 +10,14 @@ export const authProviderEnum = pgEnum("auth_provider", [
   "facebook",
   "apple",
 ]);
+export const accountStatusEnum = pgEnum("account_status", [
+  "pending",
+  "active",
+  "suspended",
+  "terminated",
+  "rejected",
+  "blocked",
+]);
 
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
@@ -21,6 +29,10 @@ export const usersTable = pgTable("users", {
   country: countryEnum("country"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
+  accountStatus: accountStatusEnum("account_status")
+    .notNull()
+    .default("active"),
+  statusReason: text("status_reason"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -100,6 +100,8 @@ export const ListAdminLawyersResponseItem = zod.object({
   "phone": zod.string().nullish(),
   "country": zod.string().nullish(),
   "officeName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'active', 'suspended', 'terminated', 'rejected', 'blocked']),
+  "statusReason": zod.string().nullish(),
   "consultationsCount": zod.number(),
   "createdAt": zod.string()
 })
@@ -115,6 +117,8 @@ export const ListAdminClientsResponseItem = zod.object({
   "email": zod.string(),
   "phone": zod.string().nullish(),
   "country": zod.string().nullish(),
+  "status": zod.enum(['pending', 'active', 'suspended', 'terminated', 'rejected', 'blocked']),
+  "statusReason": zod.string().nullish(),
   "consultationsCount": zod.number(),
   "createdAt": zod.string()
 })
@@ -200,6 +204,57 @@ export const RunAdminKillSwitchResponse = zod.object({
   "processed": zod.number(),
   "suspended": zod.array(zod.string()),
   "reinstated": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Approve, reject, suspend, reactivate, or terminate a lawyer account
+ */
+export const UpdateLawyerStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateLawyerStatusBody = zod.object({
+  "status": zod.enum(['active', 'suspended', 'terminated', 'rejected']),
+  "reason": zod.string().nullish()
+})
+
+export const UpdateLawyerStatusResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "officeName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'active', 'suspended', 'terminated', 'rejected', 'blocked']),
+  "statusReason": zod.string().nullish(),
+  "consultationsCount": zod.number(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Block, suspend, or reactivate a client account
+ */
+export const UpdateClientStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateClientStatusBody = zod.object({
+  "status": zod.enum(['active', 'blocked']),
+  "reason": zod.string().nullish()
+})
+
+export const UpdateClientStatusResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "status": zod.enum(['pending', 'active', 'suspended', 'terminated', 'rejected', 'blocked']),
+  "statusReason": zod.string().nullish(),
+  "consultationsCount": zod.number(),
+  "createdAt": zod.string()
 })
 
 

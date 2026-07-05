@@ -6,8 +6,9 @@ import {
   bookingsTable,
   platformDuesTable,
 } from "@workspace/db";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod/v4";
 
 const clientUser = alias(usersTable, "client_user");
 const lawyerUser = alias(usersTable, "lawyer_user");
@@ -149,6 +150,8 @@ export async function listAdminLawyers(req: Request, res: Response) {
         phone: usersTable.phone,
         country: usersTable.country,
         officeName: officesTable.name,
+        status: usersTable.accountStatus,
+        statusReason: usersTable.statusReason,
         consultationsCount: sql<number>`(SELECT COUNT(*) FROM ${bookingsTable} WHERE ${bookingsTable.lawyerId} = ${usersTable.id})`,
         createdAt: usersTable.createdAt,
       })
@@ -165,6 +168,8 @@ export async function listAdminLawyers(req: Request, res: Response) {
         phone: r.phone ?? null,
         country: r.country ?? null,
         officeName: r.officeName ?? null,
+        status: r.status,
+        statusReason: r.statusReason ?? null,
         consultationsCount: Number(r.consultationsCount ?? 0),
         createdAt: r.createdAt.toISOString(),
       })),
@@ -184,6 +189,8 @@ export async function listAdminClients(req: Request, res: Response) {
         email: usersTable.email,
         phone: usersTable.phone,
         country: usersTable.country,
+        status: usersTable.accountStatus,
+        statusReason: usersTable.statusReason,
         consultationsCount: sql<number>`(SELECT COUNT(*) FROM ${bookingsTable} WHERE ${bookingsTable.clientId} = ${usersTable.id})`,
         createdAt: usersTable.createdAt,
       })
@@ -198,6 +205,8 @@ export async function listAdminClients(req: Request, res: Response) {
         email: r.email,
         phone: r.phone ?? null,
         country: r.country ?? null,
+        status: r.status,
+        statusReason: r.statusReason ?? null,
         consultationsCount: Number(r.consultationsCount ?? 0),
         createdAt: r.createdAt.toISOString(),
       })),
@@ -267,6 +276,177 @@ export async function listAdminOffices(req: Request, res: Response) {
     );
   } catch (err) {
     req.log.error(err, "listAdminOffices failed");
+    return res.status(500).json({ error: "internal_error" });
+  }
+}
+
+const lawyerStatusSchema = z.object({
+  status: z.enum(["active", "suspended", "terminated", "rejected"]),
+  reason: z.string().nullish(),
+});
+
+const clientStatusSchema = z.object({
+  status: z.enum(["active", "blocked"]),
+  reason: z.string().nullish(),
+});
+
+const allowedTransitions: Record<string, string[]> = {
+  pending: ["active", "rejected"],
+  active: ["suspended", "terminated", "blocked"],
+  suspended: ["active", "terminated"],
+  blocked: ["active"],
+  terminated: [],
+  rejected: [],
+};
+
+async function applyUserStatus(
+  req: Request,
+  res: Response,
+  role: "lawyer" | "client",
+  status: string,
+  reason: string | null | undefined,
+) {
+  const id = String(req.params.id);
+
+  const [existing] = await db
+    .select({
+      id: usersTable.id,
+      role: usersTable.role,
+      accountStatus: usersTable.accountStatus,
+    })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, id), eq(usersTable.role, role)))
+    .limit(1);
+
+  if (!existing) {
+    return res
+      .status(404)
+      .json({ error: role === "lawyer" ? "lawyer_not_found" : "client_not_found" });
+  }
+
+  const current = existing.accountStatus ?? "active";
+  if (current !== status && !(allowedTransitions[current] ?? []).includes(status)) {
+    return res.status(409).json({
+      error: "invalid_status_transition",
+      from: current,
+      to: status,
+    });
+  }
+
+  await db
+    .update(usersTable)
+    .set({
+      accountStatus: status as never,
+      statusReason: reason ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(usersTable.id, id));
+
+  req.log.info(
+    { userId: id, role, status, adminId: req.admin?.userId },
+    "admin updated account status",
+  );
+
+  if (role === "lawyer") {
+    const [row] = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        email: usersTable.email,
+        phone: usersTable.phone,
+        country: usersTable.country,
+        officeName: officesTable.name,
+        status: usersTable.accountStatus,
+        statusReason: usersTable.statusReason,
+        consultationsCount: sql<number>`(SELECT COUNT(*) FROM ${bookingsTable} WHERE ${bookingsTable.lawyerId} = ${usersTable.id})`,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .leftJoin(officesTable, eq(officesTable.ownerId, usersTable.id))
+      .where(eq(usersTable.id, id))
+      .limit(1);
+
+    return res.json({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone ?? null,
+      country: row.country ?? null,
+      officeName: row.officeName ?? null,
+      status: row.status,
+      statusReason: row.statusReason ?? null,
+      consultationsCount: Number(row.consultationsCount ?? 0),
+      createdAt: row.createdAt.toISOString(),
+    });
+  }
+
+  const [row] = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      country: usersTable.country,
+      status: usersTable.accountStatus,
+      statusReason: usersTable.statusReason,
+      consultationsCount: sql<number>`(SELECT COUNT(*) FROM ${bookingsTable} WHERE ${bookingsTable.clientId} = ${usersTable.id})`,
+      createdAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
+  return res.json({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone ?? null,
+    country: row.country ?? null,
+    status: row.status,
+    statusReason: row.statusReason ?? null,
+    consultationsCount: Number(row.consultationsCount ?? 0),
+    createdAt: row.createdAt.toISOString(),
+  });
+}
+
+export async function updateLawyerStatus(req: Request, res: Response) {
+  const parsed = lawyerStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ error: "validation_error" });
+  }
+  try {
+    return await applyUserStatus(
+      req,
+      res,
+      "lawyer",
+      parsed.data.status,
+      parsed.data.reason,
+    );
+  } catch (err) {
+    req.log.error(err, "updateLawyerStatus failed");
+    return res.status(500).json({ error: "internal_error" });
+  }
+}
+
+export async function updateClientStatus(req: Request, res: Response) {
+  const parsed = clientStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ error: "validation_error" });
+  }
+  try {
+    return await applyUserStatus(
+      req,
+      res,
+      "client",
+      parsed.data.status,
+      parsed.data.reason,
+    );
+  } catch (err) {
+    req.log.error(err, "updateClientStatus failed");
     return res.status(500).json({ error: "internal_error" });
   }
 }

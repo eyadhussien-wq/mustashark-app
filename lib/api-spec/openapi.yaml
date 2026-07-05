@@ -183,6 +183,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KillSwitchResult"
+  /admin/lawyers/{id}/status:
+    patch:
+      operationId: updateLawyerStatus
+      tags: [admin]
+      summary: Approve, reject, suspend, reactivate, or terminate a lawyer account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLawyerStatusInput"
+      responses:
+        "200":
+          description: Updated lawyer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLawyer"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: Lawyer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /admin/clients/{id}/status:
+    patch:
+      operationId: updateClientStatus
+      tags: [admin]
+      summary: Block, suspend, or reactivate a client account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientStatusInput"
+      responses:
+        "200":
+          description: Updated client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminClient"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -287,7 +359,7 @@ components:
             $ref: "#/components/schemas/AdminConsultation"
     AdminLawyer:
       type: object
-      required: [id, name, email, consultationsCount, createdAt]
+      required: [id, name, email, status, consultationsCount, createdAt]
       properties:
         id:
           type: string
@@ -301,13 +373,18 @@ components:
           type: ["string", "null"]
         officeName:
           type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, active, suspended, terminated, rejected, blocked]
+        statusReason:
+          type: ["string", "null"]
         consultationsCount:
           type: integer
         createdAt:
           type: string
     AdminClient:
       type: object
-      required: [id, name, email, consultationsCount, createdAt]
+      required: [id, name, email, status, consultationsCount, createdAt]
       properties:
         id:
           type: string
@@ -319,10 +396,33 @@ components:
           type: ["string", "null"]
         country:
           type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, active, suspended, terminated, rejected, blocked]
+        statusReason:
+          type: ["string", "null"]
         consultationsCount:
           type: integer
         createdAt:
           type: string
+    UpdateLawyerStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, suspended, terminated, rejected]
+        reason:
+          type: ["string", "null"]
+    UpdateClientStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, blocked]
+        reason:
+          type: ["string", "null"]
     AdminConsultation:
       type: object
       required:

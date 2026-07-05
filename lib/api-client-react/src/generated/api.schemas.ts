@@ -69,6 +69,18 @@ export interface AdminOverview {
   recentConsultations: AdminConsultation[];
 }
 
+export type AdminLawyerStatus = typeof AdminLawyerStatus[keyof typeof AdminLawyerStatus];
+
+
+export const AdminLawyerStatus = {
+  pending: 'pending',
+  active: 'active',
+  suspended: 'suspended',
+  terminated: 'terminated',
+  rejected: 'rejected',
+  blocked: 'blocked',
+} as const;
+
 export interface AdminLawyer {
   id: string;
   name: string;
@@ -79,9 +91,24 @@ export interface AdminLawyer {
   country?: string | null;
   /** @nullable */
   officeName?: string | null;
+  status: AdminLawyerStatus;
+  /** @nullable */
+  statusReason?: string | null;
   consultationsCount: number;
   createdAt: string;
 }
+
+export type AdminClientStatus = typeof AdminClientStatus[keyof typeof AdminClientStatus];
+
+
+export const AdminClientStatus = {
+  pending: 'pending',
+  active: 'active',
+  suspended: 'suspended',
+  terminated: 'terminated',
+  rejected: 'rejected',
+  blocked: 'blocked',
+} as const;
 
 export interface AdminClient {
   id: string;
@@ -91,8 +118,41 @@ export interface AdminClient {
   phone?: string | null;
   /** @nullable */
   country?: string | null;
+  status: AdminClientStatus;
+  /** @nullable */
+  statusReason?: string | null;
   consultationsCount: number;
   createdAt: string;
+}
+
+export type UpdateLawyerStatusInputStatus = typeof UpdateLawyerStatusInputStatus[keyof typeof UpdateLawyerStatusInputStatus];
+
+
+export const UpdateLawyerStatusInputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  terminated: 'terminated',
+  rejected: 'rejected',
+} as const;
+
+export interface UpdateLawyerStatusInput {
+  status: UpdateLawyerStatusInputStatus;
+  /** @nullable */
+  reason?: string | null;
+}
+
+export type UpdateClientStatusInputStatus = typeof UpdateClientStatusInputStatus[keyof typeof UpdateClientStatusInputStatus];
+
+
+export const UpdateClientStatusInputStatus = {
+  active: 'active',
+  blocked: 'blocked',
+} as const;
+
+export interface UpdateClientStatusInput {
+  status: UpdateClientStatusInputStatus;
+  /** @nullable */
+  reason?: string | null;
 }
 
 export interface AdminOffice {
