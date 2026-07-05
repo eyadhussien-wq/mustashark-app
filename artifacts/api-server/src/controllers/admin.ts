@@ -71,7 +71,7 @@ export async function getDuesReport(req: Request, res: Response) {
         Number(row.debtThreshold ?? DEFAULT_DEBT_THRESHOLD),
     }));
 
-    return res.json({ ok: true, report });
+    return res.json(report);
   } catch (err) {
     req.log.error(err, "getDuesReport failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
@@ -82,7 +82,6 @@ const collectSchema = z.object({
   officeId: z.string().optional(),
   lawyerId: z.string().optional(),
   notes: z.string().optional(),
-  adminId: z.string(),
 });
 
 export async function recordManualCollection(req: Request, res: Response) {
@@ -93,7 +92,8 @@ export async function recordManualCollection(req: Request, res: Response) {
       .json({ ok: false, error: "validation_error", issues: parsed.error.issues });
   }
 
-  const { officeId, lawyerId, notes, adminId } = parsed.data;
+  const { officeId, lawyerId, notes } = parsed.data;
+  const adminId = req.admin!.userId;
 
   if (!officeId && !lawyerId) {
     return res

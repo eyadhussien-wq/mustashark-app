@@ -24,6 +24,8 @@
 ## Where things live
 
 - `artifacts/mustasharek/` — Expo mobile app
+- `artifacts/admin-dashboard/` — React + Vite web admin dashboard (served at `/admin/`)
+- `artifacts/api-server/` — Express API (admin auth + data endpoints under `/api/admin/*`)
 - `artifacts/mustasharek/app/` — All screens (Expo Router file-based)
 - `artifacts/mustasharek/contexts/AuthContext.tsx` — Auth state + user management
 - `artifacts/mustasharek/contexts/DataContext.tsx` — Lawyers list + consultations
@@ -42,8 +44,8 @@
 
 - **عميل (Client):** Browse lawyers, filter by country (Qatar/Jordan) and specialization, book consultations with date/time/type selection.
 - **محامٍ (Lawyer):** Register with license number verification, manage availability, view/accept/reject consultation requests, dashboard with stats.
-- **مدير (Admin):** Platform oversight dashboard — KPIs (lawyers/clients/consultations), revenue split by country, consultation status breakdown, plus lawyers and consultations management screens. Lives in the `(admin)` tab group, guarded by role.
-- Demo login: `ahmed@example.com` / `123456` (client), `fatima@example.com` / `123456` (lawyer), or `admin@mustashark.com` / `test1234` (admin).
+- **مدير (Admin):** Dedicated **web** dashboard (`artifacts/admin-dashboard/`, served at `/admin/`) — NOT a mobile tab. Server-side login against a DB admin user (JWT bearer + scrypt), KPIs (lawyers/clients/consultations), revenue split by country, consultation status breakdown, plus lawyers/clients/consultations/offices management and a dues report with manual collection and a debt kill-switch (auto-suspend offices over threshold).
+- Demo login (mobile): `ahmed@example.com` / `123456` (client), `fatima@example.com` / `123456` (lawyer). Admin web dashboard: `admin@mustashark.com` / `test1234`.
 
 ## User preferences
 

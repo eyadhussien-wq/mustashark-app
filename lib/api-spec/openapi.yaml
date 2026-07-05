@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: admin
+    description: Admin dashboard operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,163 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Admin login
+      description: Authenticate an admin with email + password, returns a bearer token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginInput"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthResult"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /admin/me:
+    get:
+      operationId: getAdminProfile
+      tags: [admin]
+      summary: Current admin profile
+      description: Returns the profile of the authenticated admin.
+      responses:
+        "200":
+          description: Admin profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Dashboard overview
+      description: Aggregated KPIs, revenue, and status breakdowns for the platform.
+      responses:
+        "200":
+          description: Overview stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+  /admin/lawyers:
+    get:
+      operationId: listAdminLawyers
+      tags: [admin]
+      summary: List lawyers
+      responses:
+        "200":
+          description: Lawyers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminLawyer"
+  /admin/clients:
+    get:
+      operationId: listAdminClients
+      tags: [admin]
+      summary: List clients
+      responses:
+        "200":
+          description: Clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminClient"
+  /admin/consultations:
+    get:
+      operationId: listAdminConsultations
+      tags: [admin]
+      summary: List consultations
+      responses:
+        "200":
+          description: Consultations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminConsultation"
+  /admin/offices:
+    get:
+      operationId: listAdminOffices
+      tags: [admin]
+      summary: List offices with financial status
+      responses:
+        "200":
+          description: Offices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminOffice"
+  /admin/dues-report:
+    get:
+      operationId: getAdminDuesReport
+      tags: [admin]
+      summary: Commission dues report
+      responses:
+        "200":
+          description: Dues report
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminDueRow"
+  /admin/collect:
+    post:
+      operationId: collectAdminDues
+      tags: [admin]
+      summary: Record manual collection of pending dues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectDuesInput"
+      responses:
+        "200":
+          description: Collection recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectDuesResult"
+  /admin/kill-switch/run-all:
+    post:
+      operationId: runAdminKillSwitch
+      tags: [admin]
+      summary: Evaluate the debt kill-switch across all offices
+      responses:
+        "200":
+          description: Kill-switch run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KillSwitchResult"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +192,267 @@ components:
           type: string
       required:
         - status
-
+    ApiErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    AdminLoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          minLength: 1
+    AdminUser:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        country:
+          type: ["string", "null"]
+    AdminAuthResult:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AdminUser"
+    AdminStatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+    AdminOverview:
+      type: object
+      required:
+        - totalUsers
+        - totalClients
+        - totalLawyers
+        - totalOffices
+        - totalConsultations
+        - suspendedOffices
+        - grossRevenue
+        - pendingCommission
+        - collectedCommission
+        - revenueQatar
+        - revenueJordan
+        - consultationsByStatus
+        - recentConsultations
+      properties:
+        totalUsers:
+          type: integer
+        totalClients:
+          type: integer
+        totalLawyers:
+          type: integer
+        totalOffices:
+          type: integer
+        totalConsultations:
+          type: integer
+        suspendedOffices:
+          type: integer
+        grossRevenue:
+          type: number
+        pendingCommission:
+          type: number
+        collectedCommission:
+          type: number
+        revenueQatar:
+          type: number
+        revenueJordan:
+          type: number
+        consultationsByStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminStatusCount"
+        recentConsultations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminConsultation"
+    AdminLawyer:
+      type: object
+      required: [id, name, email, consultationsCount, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        officeName:
+          type: ["string", "null"]
+        consultationsCount:
+          type: integer
+        createdAt:
+          type: string
+    AdminClient:
+      type: object
+      required: [id, name, email, consultationsCount, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        consultationsCount:
+          type: integer
+        createdAt:
+          type: string
+    AdminConsultation:
+      type: object
+      required:
+        - id
+        - clientName
+        - lawyerName
+        - subject
+        - scheduledDate
+        - scheduledTime
+        - status
+        - type
+        - price
+        - paymentStatus
+      properties:
+        id:
+          type: string
+        serialNumber:
+          type: ["string", "null"]
+        clientName:
+          type: string
+        lawyerName:
+          type: string
+        subject:
+          type: string
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        price:
+          type: number
+        paymentStatus:
+          type: string
+    AdminOffice:
+      type: object
+      required:
+        - id
+        - name
+        - isSuspended
+        - debtThreshold
+        - pendingCommission
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ownerName:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        isSuspended:
+          type: boolean
+        suspensionReason:
+          type: ["string", "null"]
+        debtThreshold:
+          type: number
+        pendingCommission:
+          type: number
+    AdminDueRow:
+      type: object
+      required:
+        - officeName
+        - lawyerName
+        - isSuspended
+        - debtThreshold
+        - totalPendingCommission
+        - totalCollectedCommission
+        - pendingCount
+        - totalGross
+        - exceedsThreshold
+      properties:
+        officeId:
+          type: ["string", "null"]
+        officeName:
+          type: string
+        lawyerId:
+          type: ["string", "null"]
+        lawyerName:
+          type: string
+        isSuspended:
+          type: boolean
+        debtThreshold:
+          type: number
+        totalPendingCommission:
+          type: number
+        totalCollectedCommission:
+          type: number
+        pendingCount:
+          type: integer
+        totalGross:
+          type: number
+        exceedsThreshold:
+          type: boolean
+    CollectDuesInput:
+      type: object
+      properties:
+        officeId:
+          type: string
+        lawyerId:
+          type: string
+        notes:
+          type: string
+    CollectDuesResult:
+      type: object
+      required: [ok, collectedCount, totalCollected, message]
+      properties:
+        ok:
+          type: boolean
+        collectedCount:
+          type: integer
+        totalCollected:
+          type: number
+        message:
+          type: string
+    KillSwitchResult:
+      type: object
+      required: [ok, processed, suspended, reinstated]
+      properties:
+        ok:
+          type: boolean
+        processed:
+          type: integer
+        suspended:
+          type: array
+          items:
+            type: string
+        reinstated:
+          type: array
+          items:
+            type: string
