@@ -42,7 +42,8 @@
 
 - **عميل (Client):** Browse lawyers, filter by country (Qatar/Jordan) and specialization, book consultations with date/time/type selection.
 - **محامٍ (Lawyer):** Register with license number verification, manage availability, view/accept/reject consultation requests, dashboard with stats.
-- Demo login: `ahmed@example.com` / `123456` (client) or `fatima@example.com` / `123456` (lawyer).
+- **مدير (Admin):** Platform oversight dashboard — KPIs (lawyers/clients/consultations), revenue split by country, consultation status breakdown, plus lawyers and consultations management screens. Lives in the `(admin)` tab group, guarded by role.
+- Demo login: `ahmed@example.com` / `123456` (client), `fatima@example.com` / `123456` (lawyer), or `admin@mustashark.com` / `test1234` (admin).
 
 ## User preferences
 

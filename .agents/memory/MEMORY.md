@@ -1,0 +1,1 @@
+- [Auth architecture (demo vs DB)](auth-architecture.md) — login is AsyncStorage-based, not DB-backed; seed roles in both places and guard role groups at their `_layout.tsx`.

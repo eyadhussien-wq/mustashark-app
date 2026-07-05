@@ -33,6 +33,7 @@ function RootLayoutNav() {
       <Stack.Screen name="auth/forgot-password" />
       <Stack.Screen name="(client)" />
       <Stack.Screen name="(lawyer)" />
+      <Stack.Screen name="(admin)" />
       <Stack.Screen
         name="lawyer/[id]"
         options={{ headerShown: false, presentation: "card" }}

@@ -21,6 +21,7 @@ export default function Root() {
     return <LanguageCheckRedirect />;
   }
 
+  if (user.role === "admin") return <Redirect href="/(admin)" />;
   if (user.role === "lawyer") return <Redirect href="/(lawyer)" />;
   return <Redirect href="/(client)" />;
 }

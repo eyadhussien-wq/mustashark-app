@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import type { SocialProfile } from "@/hooks/useSocialAuth";
 
-export type UserRole = "client" | "lawyer";
+export type UserRole = "client" | "lawyer" | "admin";
 
 export interface User {
   id: string;
@@ -131,6 +131,15 @@ const SAMPLE_USERS: StoredUser[] = [
     reviewsCount: 20,
     hourlyRate: 200,
     available: true,
+  },
+  {
+    id: "admin-test",
+    name: "مدير النظام",
+    email: "admin@mustashark.com",
+    password: "test1234",
+    phone: "+97450000000",
+    role: "admin",
+    country: "qatar",
   },
 ];
 
