@@ -1,16 +1,5 @@
 uploads = []
-
-[[generated]]
-id = "0VprOp2LwacUiVFTtn9f6"
-uri = "file://artifacts/mustasharek/assets/images/icon.png"
-type = "image"
-title = "generated_image"
-
-[[generated]]
-id = "dvR4--GBOgn_aAJWX2pDl"
-uri = "file://artifacts/mustasharek/assets/images/splash-icon.png"
-type = "image"
-title = "generated_image"
+generated = []
 
 [[outputs]]
 id = "EO9SWKXbWSkPvLvZczBoa"
