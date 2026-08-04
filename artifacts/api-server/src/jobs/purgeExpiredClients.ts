@@ -11,7 +11,7 @@
 
 import { db } from "@workspace/db";
 import { usersTable, bookingsTable } from "@workspace/db";
-import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNotNull, lt } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000; // every hour
