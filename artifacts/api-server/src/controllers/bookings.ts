@@ -275,3 +275,76 @@ async function checkOfficeKillSwitch(officeId: string) {
     // Non-critical — don't propagate
   }
 }
+// ── Cancel booking by lawyer ─────────────────────────────────────────────────
+
+const cancelByLawyerSchema = z.object({
+  bookingId: z.string(),
+  reason: z.string().optional(),
+});
+
+export async function cancelBookingByLawyer(req: Request, res: Response) {
+  const parsed = cancelByLawyerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
+  }
+
+  const { bookingId, reason } = parsed.data;
+
+  try {
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "booking_not_found" });
+    }
+
+    if (booking.status === "completed" || booking.status === "refunded_absent") {
+      return res.status(400).json({ ok: false, error: "invalid_booking_status" });
+    }
+
+    const now = new Date();
+
+    // 1. Update booking status and clear meet link
+    await db
+      .update(bookingsTable)
+      .set({
+        status: "cancelled_by_lawyer",
+        paymentStatus: "refunded",
+        googleMeetLink: null,
+        actualEndTime: now,
+        updatedAt: now,
+      })
+      .where(eq(bookingsTable.id, bookingId));
+
+    // 2. Cancel Google Calendar event if exists
+    if (booking.googleEventId) {
+      await cancelCalendarEvent(booking.googleEventId);
+    }
+
+    // 3. Waive platform dues
+    await db
+      .update(platformDuesTable)
+      .set({ status: "waived", updatedAt: now })
+      .where(
+        and(
+          eq(platformDuesTable.bookingId, bookingId),
+          eq(platformDuesTable.status, "pending"),
+        ),
+      );
+
+    req.log.info({ bookingId, reason }, "booking cancelled by lawyer");
+
+    return res.json({
+      ok: true,
+      action: "cancelled_by_lawyer",
+      bookingId,
+      message: "تم إلغاء الاستشارة من قبل المحامي وإرجاع المبلغ للعميل بنجاح",
+    });
+  } catch (err) {
+    req.log.error(err, "cancelBookingByLawyer failed");
+    return res.status(500).json({ ok: false, error: "internal_error" });
+  }
+}
