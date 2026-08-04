@@ -44,7 +44,7 @@ interface AuthContextValue {
   registerClient: (data: RegisterClientData) => Promise<void>;
   registerLawyer: (data: RegisterLawyerData) => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<User>) => Promise<void>;
+  updateUser: (updates: Partial<User>) => Promise<{ pendingFields: string[] }>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -712,8 +712,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Update user ────────────────────────────────────────────────────────────
 
   const updateUser = useCallback(
-    async (updates: Partial<User>) => {
-      if (!user) return;
+    async (updates: Partial<User>): Promise<{ pendingFields: string[] }> => {
+      if (!user) return { pendingFields: [] };
+
+      // Lawyer moderated fields — the server queues these for admin review.
+      // Do NOT apply them to local state until admin approves.
+      const MODERATED: (keyof User)[] = ["specialization", "bio", "hourlyRate"];
+
+      let pendingFields: string[] = [];
 
       // For JWT users, make server the authority for server-persisted fields.
       // Await the PATCH and throw on error so the caller sees the failure
@@ -724,7 +730,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (updates.name !== undefined) apiUpdates.name = updates.name;
         if (updates.phone !== undefined) apiUpdates.phone = updates.phone;
         if (updates.country !== undefined) apiUpdates.country = updates.country;
-        // Lawyer-specific fields
+        // Lawyer-specific fields (server will queue these, not apply directly)
         if (updates.specialization !== undefined) apiUpdates.specialization = updates.specialization;
         if (updates.bio !== undefined) apiUpdates.bio = updates.bio;
         if (updates.hourlyRate !== undefined) apiUpdates.hourlyRate = updates.hourlyRate;
@@ -746,18 +752,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               body.message ?? body.error ?? "فشل تحديث الملف الشخصي",
             );
           }
+          // Extract which fields were queued for admin review
+          const body = await res.json().catch(() => ({})) as { pendingFields?: string[] };
+          pendingFields = body.pendingFields ?? [];
         }
       }
 
-      // Commit to local state only after server confirms (or for non-API fields)
-      const updated: User = { ...user, ...updates };
+      // Commit to local state — skip moderated fields that are still pending
+      const localUpdates = { ...updates };
+      for (const field of MODERATED) {
+        if (pendingFields.includes(field as string)) {
+          delete localUpdates[field];
+        }
+      }
+      const updated: User = { ...user, ...localUpdates };
       await persist(updated);
       const users = await readUsers();
       const idx = users.findIndex((u) => u.id === user.id);
       if (idx !== -1) {
-        users[idx] = { ...users[idx], ...updates };
+        users[idx] = { ...users[idx], ...localUpdates };
         await writeUsers(users);
       }
+
+      return { pendingFields };
     },
     [user, persist, getAuthToken],
   );

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   updateProfile,
+  getPendingChanges,
   softDeleteClient,
   requestLawyerDeletion,
   getDeletionStatus,
@@ -11,6 +12,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 const profileRouter = Router();
 
 profileRouter.patch("/profile", requireAuth, updateProfile);
+profileRouter.get("/profile/pending-changes", requireAuth, getPendingChanges);
 profileRouter.delete("/profile", requireAuth, softDeleteClient);
 profileRouter.post(
   "/profile/deletion-request",

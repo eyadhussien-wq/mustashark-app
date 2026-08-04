@@ -22,6 +22,11 @@ import {
   approveDeletion,
   rejectDeletion,
 } from "../controllers/adminDeletionRequests";
+import {
+  listProfileChangeRequests,
+  approveProfileChange,
+  rejectProfileChange,
+} from "../controllers/adminProfileChangeRequests";
 
 const adminRouter = Router();
 
@@ -72,6 +77,23 @@ adminRouter.post(
   "/admin/deletion-requests/:id/reject",
   requireAdmin,
   rejectDeletion,
+);
+
+// ── Lawyer profile change requests ────────────────────────────────────────────
+adminRouter.get(
+  "/admin/profile-change-requests",
+  requireAdmin,
+  listProfileChangeRequests,
+);
+adminRouter.post(
+  "/admin/profile-change-requests/:id/approve",
+  requireAdmin,
+  approveProfileChange,
+);
+adminRouter.post(
+  "/admin/profile-change-requests/:id/reject",
+  requireAdmin,
+  rejectProfileChange,
 );
 
 export default adminRouter;

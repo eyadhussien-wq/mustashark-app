@@ -11,6 +11,7 @@ import {
   Building2, 
   Wallet,
   Trash2,
+  FilePenLine,
   LogOut,
   Menu
 } from "lucide-react";
@@ -24,7 +25,8 @@ const NAV_ITEMS = [
   { href: "/consultations", label: "الاستشارات", icon: FileText },
   { href: "/offices", label: "المكاتب", icon: Building2 },
   { href: "/dues", label: "المستحقات", icon: Wallet },
-  { href: "/deletion-requests", label: "طلبات الحذف", icon: Trash2, badge: true },
+  { href: "/deletion-requests", label: "طلبات الحذف", icon: Trash2, badge: "deletion" as const },
+  { href: "/profile-changes", label: "تعديلات الملف", icon: FilePenLine, badge: "profileChanges" as const },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -52,7 +54,29 @@ export function Layout({ children }: { children: ReactNode }) {
   });
   const deletionCount = deletionData?.count ?? 0;
 
+  // Live count badge for profile change requests
+  const { data: profileChangesData } = useQuery({
+    queryKey: ["admin-profile-changes-count"],
+    queryFn: async () => {
+      const t = localStorage.getItem("admin_token");
+      if (!t) return { count: 0 };
+      const res = await fetch("/api/admin/profile-change-requests", {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) return { count: 0 };
+      return res.json() as Promise<{ count: number }>;
+    },
+    enabled: !!token,
+    refetchInterval: 30_000,
+  });
+  const profileChangesCount = profileChangesData?.count ?? 0;
+
   if (!token) return null;
+
+  const badgeCounts: Record<string, number> = {
+    deletion: deletionCount,
+    profileChanges: profileChangesCount,
+  };
 
   const NavLinks = () => (
     <>
@@ -63,14 +87,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <nav className="flex-1 px-2 space-y-1">
         {NAV_ITEMS.map((item) => {
           const isActive = location === item.href;
-          const showBadge = item.badge && deletionCount > 0;
+          const badgeCount = item.badge ? (badgeCounts[item.badge] ?? 0) : 0;
+          const showBadge = badgeCount > 0;
           return (
             <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
               <item.icon className="h-5 w-5" />
               <span className="flex-1">{item.label}</span>
               {showBadge && (
                 <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold px-1.5">
-                  {deletionCount}
+                  {badgeCount}
                 </span>
               )}
             </Link>

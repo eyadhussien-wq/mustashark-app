@@ -1,8 +1,16 @@
 import { type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { usersTable, lawyerDeletionRequestsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import {
+  usersTable,
+  lawyerDeletionRequestsTable,
+  lawyerProfileChangeRequestsTable,
+} from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
+
+// Fields that require admin approval before going live on a lawyer's public profile
+const MODERATED_LAWYER_FIELDS = ["specialization", "bio", "hourlyRate"] as const;
+type ModeratedField = (typeof MODERATED_LAWYER_FIELDS)[number];
 
 // ── PATCH /api/profile ────────────────────────────────────────────────────────
 
@@ -10,7 +18,7 @@ const updateProfileSchema = z.object({
   name: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(100).optional(),
   phone: z.string().max(20).optional().nullable(),
   country: z.enum(["qatar", "jordan"]).optional().nullable(),
-  // Lawyer-specific fields
+  // Lawyer-specific fields — queued for admin review, not applied directly
   specialization: z.string().max(200).optional().nullable(),
   bio: z.string().max(2000).optional().nullable(),
   hourlyRate: z.number().positive("الأتعاب يجب أن تكون قيمة موجبة").optional().nullable(),
@@ -30,22 +38,32 @@ export async function updateProfile(req: Request, res: Response) {
   }
 
   const { name, phone, country, specialization, bio, hourlyRate } = parsed.data;
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (name !== undefined) updates.name = name;
-  if (phone !== undefined) updates.phone = phone;
-  if (country !== undefined) updates.country = country;
-  // Lawyer-specific fields — only persist if the caller is a lawyer
-  if (authUser.role === "lawyer") {
-    if (specialization !== undefined) updates.specialization = specialization;
-    if (bio !== undefined) updates.bio = bio;
-    if (hourlyRate !== undefined)
-      updates.hourlyRate = hourlyRate !== null ? String(hourlyRate) : null;
-  }
+
+  // Immediate updates (name/phone/country for all; nothing lawyer-specific here)
+  const immediateUpdates: Record<string, unknown> = { updatedAt: new Date() };
+  if (name !== undefined) immediateUpdates.name = name;
+  if (phone !== undefined) immediateUpdates.phone = phone;
+  if (country !== undefined) immediateUpdates.country = country;
+
+  // Lawyer moderated fields — create pending change requests instead of writing directly
+  const pendingFields: ModeratedField[] = [];
 
   try {
+    // Fetch current lawyer profile for old values
+    let currentUser: typeof usersTable.$inferSelect | null = null;
+    if (authUser.role === "lawyer") {
+      const [row] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, authUser.userId))
+        .limit(1);
+      currentUser = row ?? null;
+    }
+
+    // Apply immediate updates
     const [updated] = await db
       .update(usersTable)
-      .set(updates as Parameters<typeof db.update>[0] extends any ? any : never)
+      .set(immediateUpdates as any)
       .where(eq(usersTable.id, authUser.userId))
       .returning();
 
@@ -53,10 +71,94 @@ export async function updateProfile(req: Request, res: Response) {
       return res.status(404).json({ ok: false, error: "user_not_found" });
     }
 
-    req.log.info({ userId: authUser.userId }, "profile updated");
+    // Queue moderated lawyer fields as pending change requests
+    if (authUser.role === "lawyer" && currentUser) {
+      const requestsToInsert: {
+        id: string;
+        lawyerId: string;
+        field: ModeratedField;
+        oldValue: string | null;
+        newValue: string | null;
+      }[] = [];
+
+      // Helper: atomically cancel existing pending request for a field (DELETE,
+      // not UPDATE-to-rejected) so superseded/reverted requests never appear in
+      // the lawyer-facing or admin-facing query results.
+      const cancelPending = (field: ModeratedField) =>
+        db
+          .delete(lawyerProfileChangeRequestsTable)
+          .where(
+            and(
+              eq(lawyerProfileChangeRequestsTable.lawyerId, authUser.userId),
+              eq(lawyerProfileChangeRequestsTable.field, field),
+              eq(lawyerProfileChangeRequestsTable.status, "pending"),
+            ),
+          );
+
+      if (specialization !== undefined) {
+        const oldVal = currentUser.specialization ?? null;
+        const newVal = specialization ?? null;
+        // Always cancel any outstanding pending request first (supersede/revert)
+        await cancelPending("specialization");
+        if (oldVal !== newVal) {
+          // Lawyer changed to a new value — queue a new request
+          requestsToInsert.push({
+            id: `pcr-${authUser.userId.slice(0, 8)}-spec-${Date.now()}`,
+            lawyerId: authUser.userId,
+            field: "specialization",
+            oldValue: oldVal,
+            newValue: newVal,
+          });
+          pendingFields.push("specialization");
+        }
+        // If newVal === oldVal (revert to live), the cancel above is all we need
+      }
+
+      if (bio !== undefined) {
+        const oldVal = currentUser.bio ?? null;
+        const newVal = bio ?? null;
+        await cancelPending("bio");
+        if (oldVal !== newVal) {
+          requestsToInsert.push({
+            id: `pcr-${authUser.userId.slice(0, 8)}-bio-${Date.now()}`,
+            lawyerId: authUser.userId,
+            field: "bio",
+            oldValue: oldVal,
+            newValue: newVal,
+          });
+          pendingFields.push("bio");
+        }
+      }
+
+      if (hourlyRate !== undefined) {
+        const oldVal = currentUser.hourlyRate ? String(parseFloat(currentUser.hourlyRate)) : null;
+        const newVal = hourlyRate !== null ? String(hourlyRate) : null;
+        await cancelPending("hourlyRate");
+        if (oldVal !== newVal) {
+          requestsToInsert.push({
+            id: `pcr-${authUser.userId.slice(0, 8)}-rate-${Date.now()}`,
+            lawyerId: authUser.userId,
+            field: "hourlyRate",
+            oldValue: oldVal,
+            newValue: newVal,
+          });
+          pendingFields.push("hourlyRate");
+        }
+      }
+
+      if (requestsToInsert.length > 0) {
+        await db.insert(lawyerProfileChangeRequestsTable).values(requestsToInsert);
+      }
+    }
+
+    req.log.info(
+      { userId: authUser.userId, pendingFields },
+      "profile updated (moderated fields queued)",
+    );
 
     return res.json({
       ok: true,
+      pendingFields,
       user: {
         id: updated.id,
         name: updated.name,
@@ -64,6 +166,7 @@ export async function updateProfile(req: Request, res: Response) {
         phone: updated.phone,
         country: updated.country,
         role: updated.role,
+        // Return current live values (not the pending ones)
         specialization: updated.specialization,
         bio: updated.bio,
         hourlyRate: updated.hourlyRate ? parseFloat(updated.hourlyRate) : null,
@@ -72,6 +175,75 @@ export async function updateProfile(req: Request, res: Response) {
     });
   } catch (err) {
     req.log.error(err, "updateProfile failed");
+    return res.status(500).json({ ok: false, error: "internal_error" });
+  }
+}
+
+// ── GET /api/profile/pending-changes ─────────────────────────────────────────
+// Returns the lawyer's own pending and recently-rejected change requests.
+
+export async function getPendingChanges(req: Request, res: Response) {
+  const { authUser } = req;
+  if (!authUser) {
+    return res.status(401).json({ ok: false, error: "غير مصرح" });
+  }
+  if (authUser.role !== "lawyer") {
+    return res.json({ ok: true, requests: [] });
+  }
+
+  try {
+    // Fetch all non-approved requests for this lawyer.
+    // - `pending` rows: the lawyer has a queued change awaiting admin review.
+    // - `rejected` rows WHERE reviewedBy IS NOT NULL: an admin explicitly rejected
+    //   the change. Rows without reviewedBy are system-cancelled (superseded/reverted)
+    //   and must not be shown.
+    // We then deduplicate to at most one entry per field: the pending one (if any)
+    // takes precedence, otherwise the latest admin rejection.
+    const rows = await db
+      .select({
+        id: lawyerProfileChangeRequestsTable.id,
+        field: lawyerProfileChangeRequestsTable.field,
+        newValue: lawyerProfileChangeRequestsTable.newValue,
+        status: lawyerProfileChangeRequestsTable.status,
+        rejectionNote: lawyerProfileChangeRequestsTable.rejectionNote,
+        reviewedBy: lawyerProfileChangeRequestsTable.reviewedBy,
+        createdAt: lawyerProfileChangeRequestsTable.createdAt,
+      })
+      .from(lawyerProfileChangeRequestsTable)
+      .where(
+        and(
+          eq(lawyerProfileChangeRequestsTable.lawyerId, authUser.userId),
+          inArray(lawyerProfileChangeRequestsTable.status, ["pending", "rejected"]),
+        ),
+      )
+      .orderBy(lawyerProfileChangeRequestsTable.createdAt);
+
+    // Keep only relevant rows: pending (any reviewedBy) or admin-rejected
+    const filtered = rows.filter(
+      (r) => r.status === "pending" || (r.status === "rejected" && r.reviewedBy !== null),
+    );
+
+    // Deduplicate: one entry per field — pending wins over rejection; within same
+    // status, keep the latest (rows are ordered ASC so last wins)
+    const byField = new Map<string, typeof filtered[0]>();
+    for (const row of filtered) {
+      const existing = byField.get(row.field);
+      if (!existing) {
+        byField.set(row.field, row);
+      } else if (row.status === "pending") {
+        // Pending always beats a rejection
+        byField.set(row.field, row);
+      } else if (existing.status === "rejected") {
+        // Both rejected — keep the latest
+        byField.set(row.field, row);
+      }
+    }
+
+    const requests = Array.from(byField.values()).map(({ reviewedBy: _rb, ...rest }) => rest);
+
+    return res.json({ ok: true, requests });
+  } catch (err) {
+    req.log.error(err, "getPendingChanges failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
 }

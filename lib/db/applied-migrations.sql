@@ -43,3 +43,31 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS specialization TEXT,
   ADD COLUMN IF NOT EXISTS bio TEXT,
   ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10, 2);
+
+-- 8. Profile change field enum
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'profile_change_field') THEN
+    CREATE TYPE profile_change_field AS ENUM ('specialization', 'bio', 'hourlyRate');
+  END IF;
+END $$;
+
+-- 9. Profile change status enum
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'profile_change_status') THEN
+    CREATE TYPE profile_change_status AS ENUM ('pending', 'approved', 'rejected');
+  END IF;
+END $$;
+
+-- 10. Lawyer profile change requests table
+CREATE TABLE IF NOT EXISTS lawyer_profile_change_requests (
+  id TEXT PRIMARY KEY,
+  lawyer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  field profile_change_field NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  status profile_change_status NOT NULL DEFAULT 'pending',
+  reviewed_by TEXT REFERENCES users(id),
+  reviewed_at TIMESTAMP,
+  rejection_note TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

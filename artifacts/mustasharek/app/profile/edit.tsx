@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -17,10 +17,18 @@ import { type User, useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
 
+type PendingRequest = {
+  id: string;
+  field: "specialization" | "bio" | "hourlyRate";
+  newValue: string | null;
+  status: "pending" | "rejected";
+  rejectionNote: string | null;
+};
+
 export default function EditProfile() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, getAuthToken } = useAuth();
 
   const isLawyer = user?.role === "lawyer";
 
@@ -38,6 +46,47 @@ export default function EditProfile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [savedPendingFields, setSavedPendingFields] = useState<string[]>([]);
+
+  // Pending change requests fetched from server
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+
+  const fetchPendingChanges = useCallback(async () => {
+    if (!isLawyer) return;
+    const token = await getAuthToken();
+    if (!token) return;
+    const apiBase = process.env.EXPO_PUBLIC_DOMAIN
+      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+      : "";
+    if (!apiBase) return;
+    setPendingLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/profile/pending-changes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { requests: PendingRequest[] };
+        setPendingRequests(body.requests ?? []);
+      }
+    } catch {
+      // Non-critical — silently ignore
+    } finally {
+      setPendingLoading(false);
+    }
+  }, [isLawyer, getAuthToken]);
+
+  useEffect(() => {
+    fetchPendingChanges();
+  }, [fetchPendingChanges]);
+
+  function getPendingForField(field: PendingRequest["field"]) {
+    return pendingRequests.find((r) => r.field === field && r.status === "pending");
+  }
+
+  function getRejectionForField(field: PendingRequest["field"]) {
+    return pendingRequests.find((r) => r.field === field && r.status === "rejected");
+  }
 
   async function handleSave() {
     if (!name.trim()) {
@@ -46,6 +95,7 @@ export default function EditProfile() {
     }
     setLoading(true);
     setError(null);
+    setSavedPendingFields([]);
 
     try {
       const updates: Partial<User> = {
@@ -61,7 +111,6 @@ export default function EditProfile() {
 
         const rateStr = hourlyRate.trim();
         if (rateStr === "") {
-          // Explicitly clear stored rate
           updates.hourlyRate = null;
         } else {
           const rate = parseFloat(rateStr.replace(/[^0-9.]/g, ""));
@@ -74,15 +123,30 @@ export default function EditProfile() {
         }
       }
 
-      await updateUser(updates);
+      const { pendingFields } = await updateUser(updates);
+      setSavedPendingFields(pendingFields);
       setSuccess(true);
-      setTimeout(() => router.back(), 1000);
+
+      // Refresh pending requests to reflect newly queued items
+      await fetchPendingChanges();
+
+      if (pendingFields.length === 0) {
+        // All changes applied immediately — navigate back
+        setTimeout(() => router.back(), 1000);
+      }
+      // If there are pending fields, stay on screen so user sees the chips
     } catch (e: any) {
       setError(e?.message ?? "حدث خطأ أثناء حفظ البيانات");
     } finally {
       setLoading(false);
     }
   }
+
+  const FIELD_LABELS: Record<string, string> = {
+    specialization: "التخصص القانوني",
+    bio: "النبذة التعريفية",
+    hourlyRate: "الأتعاب بالساعة",
+  };
 
   return (
     <ScrollView
@@ -109,7 +173,24 @@ export default function EditProfile() {
       {success && (
         <View style={styles.successBanner}>
           <Feather name="check-circle" size={16} color={C.success} />
-          <Text style={styles.successText}>تم حفظ التعديلات بنجاح ✓</Text>
+          <Text style={styles.successText}>
+            {savedPendingFields.length > 0
+              ? `تم إرسال التغييرات للمراجعة ✓`
+              : "تم حفظ التعديلات بنجاح ✓"}
+          </Text>
+        </View>
+      )}
+
+      {/* Pending fields summary (after save) */}
+      {savedPendingFields.length > 0 && (
+        <View style={styles.pendingBanner}>
+          <Feather name="clock" size={15} color="#92400E" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingBannerTitle}>في انتظار موافقة الإدارة</Text>
+            <Text style={styles.pendingBannerBody}>
+              {savedPendingFields.map((f) => FIELD_LABELS[f] ?? f).join("، ")}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -193,7 +274,6 @@ export default function EditProfile() {
         </View>
       </View>
 
-
       {/* ── Lawyer-specific fields ── */}
       {isLawyer && (
         <>
@@ -203,8 +283,19 @@ export default function EditProfile() {
             <View style={styles.dividerLine} />
           </View>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>التخصص القانوني</Text>
+          <View style={styles.sectionNote}>
+            <Feather name="info" size={13} color={C.primary} />
+            <Text style={styles.sectionNoteText}>
+              التخصص والأتعاب والنبذة تحتاج موافقة الإدارة قبل الظهور للعملاء
+            </Text>
+          </View>
+
+          {/* ── Specialization ── */}
+          <FieldWithStatus
+            label="التخصص القانوني"
+            pending={getPendingForField("specialization")}
+            rejection={getRejectionForField("specialization")}
+          >
             <TextInput
               style={styles.input}
               value={specialization}
@@ -214,10 +305,14 @@ export default function EditProfile() {
               textAlign="right"
               editable={!loading}
             />
-          </View>
+          </FieldWithStatus>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>الأتعاب بالساعة</Text>
+          {/* ── Hourly Rate ── */}
+          <FieldWithStatus
+            label="الأتعاب بالساعة"
+            pending={getPendingForField("hourlyRate")}
+            rejection={getRejectionForField("hourlyRate")}
+          >
             <TextInput
               style={styles.input}
               value={hourlyRate}
@@ -228,10 +323,14 @@ export default function EditProfile() {
               textAlign="right"
               editable={!loading}
             />
-          </View>
+          </FieldWithStatus>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>نبذة تعريفية</Text>
+          {/* ── Bio ── */}
+          <FieldWithStatus
+            label="نبذة تعريفية"
+            pending={getPendingForField("bio")}
+            rejection={getRejectionForField("bio")}
+          >
             <TextInput
               style={[styles.input, styles.textArea]}
               value={bio}
@@ -244,7 +343,7 @@ export default function EditProfile() {
               textAlign="right"
               editable={!loading}
             />
-          </View>
+          </FieldWithStatus>
         </>
       )}
 
@@ -267,6 +366,118 @@ export default function EditProfile() {
     </ScrollView>
   );
 }
+
+// ── FieldWithStatus helper ────────────────────────────────────────────────────
+
+interface FieldWithStatusProps {
+  label: string;
+  pending?: PendingRequest;
+  rejection?: PendingRequest;
+  children: React.ReactNode;
+}
+
+function FieldWithStatus({ label, pending, rejection, children }: FieldWithStatusProps) {
+  const C = colors.light;
+  return (
+    <View style={fieldStyles.group}>
+      <View style={fieldStyles.labelRow}>
+        <Text style={fieldStyles.label}>{label}</Text>
+        {pending && (
+          <View style={fieldStyles.pendingChip}>
+            <Feather name="clock" size={11} color="#92400E" />
+            <Text style={fieldStyles.pendingChipText}>قيد المراجعة</Text>
+          </View>
+        )}
+      </View>
+      {rejection?.rejectionNote && (
+        <View style={fieldStyles.rejectionNote}>
+          <Feather name="x-circle" size={13} color={C.destructive} />
+          <Text style={fieldStyles.rejectionNoteText}>
+            رُفض: {rejection.rejectionNote}
+          </Text>
+        </View>
+      )}
+      {pending && (
+        <View style={fieldStyles.pendingValue}>
+          <Text style={fieldStyles.pendingValueLabel}>القيمة المعلقة: </Text>
+          <Text style={fieldStyles.pendingValueText} numberOfLines={1}>
+            {pending.newValue ?? "—"}
+          </Text>
+        </View>
+      )}
+      {children}
+    </View>
+  );
+}
+
+const fieldStyles = StyleSheet.create({
+  group: { marginBottom: 18 },
+  labelRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  label: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: colors.light.primary,
+    textAlign: "right",
+  },
+  pendingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  pendingChipText: {
+    fontSize: 10,
+    color: "#92400E",
+    fontFamily: "Inter_600SemiBold",
+  },
+  rejectionNote: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+  },
+  rejectionNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.light.destructive,
+    fontFamily: "Inter_400Regular",
+    textAlign: "right",
+    lineHeight: 18,
+  },
+  pendingValue: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 6,
+  },
+  pendingValueLabel: {
+    fontSize: 11,
+    color: colors.light.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
+  pendingValueText: {
+    fontSize: 11,
+    color: "#92400E",
+    fontFamily: "Inter_500Medium",
+    flex: 1,
+    textAlign: "right",
+  },
+});
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 20 },
@@ -298,12 +509,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1FAE5",
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   successText: {
     color: C.success,
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
+  },
+  pendingBanner: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    padding: 12,
+    marginBottom: 12,
+  },
+  pendingBannerTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    color: "#92400E",
+    textAlign: "right",
+    marginBottom: 2,
+  },
+  pendingBannerBody: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#78350F",
+    textAlign: "right",
   },
   errorBanner: {
     flexDirection: "row-reverse",
@@ -380,6 +615,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.mutedForeground,
     fontFamily: "Inter_600SemiBold",
+  },
+  sectionNote: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(26,42,74,0.05)",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 18,
+  },
+  sectionNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: C.primary,
+    fontFamily: "Inter_400Regular",
+    textAlign: "right",
+    lineHeight: 18,
   },
   textArea: {
     minHeight: 100,
