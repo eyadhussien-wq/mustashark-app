@@ -253,7 +253,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const updated = { ...existing, socialProvider: profile.provider };
         const { password: _, ...safe } = updated;
         await persist(safe);
-        // Sync server-side deletion state (rejection notes, pending requests)
+        // Sync server-side deletion state (rejection notes, pending requests).
+        // Always apply the server's authoritative values so that a rejection
+        // clears a previously-stored deletionPendingRequest: true from local storage.
         if (profile.jwt && API_BASE) {
           try {
             const statusRes = await fetch(`${API_BASE}/profile/deletion-status`, {
@@ -264,20 +266,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 deletionPendingRequest?: boolean;
                 deletionRejectionNote?: string | null;
               };
-              if (status.deletionRejectionNote || status.deletionPendingRequest) {
-                const withStatus: User = {
-                  ...safe,
-                  ...(status.deletionRejectionNote
-                    ? { deletionRejectionNote: status.deletionRejectionNote }
-                    : {}),
-                  ...(status.deletionPendingRequest
-                    ? { deletionPendingRequest: true }
-                    : {}),
-                };
-                await persist(withStatus);
-              }
+              const withStatus: User = {
+                ...safe,
+                // Explicitly set both fields from server — never let local
+                // state shadow a server-side change (e.g. rejection clears pending)
+                deletionPendingRequest: status.deletionPendingRequest ?? false,
+                deletionRejectionNote: status.deletionRejectionNote ?? undefined,
+              };
+              await persist(withStatus);
             }
-          } catch {} // graceful — local state is source of truth
+          } catch {} // graceful — local state is source of truth on network error
         }
         return;
       }
