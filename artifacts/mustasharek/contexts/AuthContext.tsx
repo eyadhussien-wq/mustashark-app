@@ -83,6 +83,19 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
 
 const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
+/** Decode the payload of a JWT without verifying the signature.
+ *  Safe here because we only call it on tokens we just received from our own server. */
+function decodeJwtUserId(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    // atob is available in React Native's JSC / Hermes
+    const decoded = JSON.parse(atob(payload)) as { userId?: string };
+    return decoded.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const SAMPLE_USERS: StoredUser[] = [
   {
     id: "client-demo",
@@ -203,6 +216,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u);
   }, []);
 
+  // ── Shared: sync deletion state from server ────────────────────────────────
+  // Applies the server's authoritative deletionPendingRequest / deletionRejectionNote
+  // to a base User object and persists it. Silently no-ops on network error.
+
+  const syncDeletionStatus = useCallback(
+    async (jwt: string, base: User): Promise<void> => {
+      if (!API_BASE) return;
+      try {
+        const res = await fetch(`${API_BASE}/profile/deletion-status`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) return;
+        const status = await res.json() as {
+          deletionPendingRequest?: boolean;
+          deletionRejectionNote?: string | null;
+        };
+        const withStatus: User = {
+          ...base,
+          deletionPendingRequest: status.deletionPendingRequest ?? false,
+          deletionRejectionNote: status.deletionRejectionNote ?? undefined,
+        };
+        await persist(withStatus);
+      } catch {} // graceful — local state is source of truth on network error
+    },
+    [persist],
+  );
+
   // ── Login ──────────────────────────────────────────────────────────────────
 
   const login = useCallback(
@@ -214,25 +254,155 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const email = normalizeEmail(emailRaw);
       const password = passwordRaw.trim();
+
+      // Always clear stale JWTs before authenticating — prevents a prior social
+      // session's token from being applied to a different account.
+      await AsyncStorage.removeItem(JWT_KEY).catch(() => {});
+
+      // Read local store only to gather metadata (role, name, rich profile fields)
+      // for legacy account migration. It is NOT used to gate authentication.
       const users = await readUsers();
+      const localRecord = users.find((u) => normalizeEmail(u.email) === email);
 
-      const match = users.find(
-        (u) => normalizeEmail(u.email) === email && u.password === password
-      );
-
-      if (!match) {
-        // Helpful: tell user if the email exists but password is wrong
-        const emailExists = users.some((u) => normalizeEmail(u.email) === email);
-        if (emailExists) {
-          throw new Error("كلمة المرور غير صحيحة");
+      // ── Server-first authentication ─────────────────────────────────────────
+      // The server is the primary identity authority. Local storage is the
+      // fallback ONLY for transport failures (device offline / DNS failure).
+      if (API_BASE) {
+        let serverRes: Response | null = null;
+        try {
+          serverRes = await fetch(`${API_BASE}/auth/local-auth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              password,
+              // Provide local metadata so the server can create the right record
+              // for legacy local-only accounts that don't yet have a DB entry.
+              ...(localRecord
+                ? { name: localRecord.name, role: localRecord.role }
+                : {}),
+            }),
+          });
+        } catch {
+          // Transport failure — fall through to local-only path below
         }
-        throw new Error("البريد الإلكتروني غير مسجّل. يرجى إنشاء حساب جديد");
+
+        if (serverRes !== null) {
+          // Got a response — honour it regardless of status
+
+          if (serverRes.ok) {
+            type LocalAuthOkResponse = {
+              ok: boolean;
+              jwt?: string;
+              userId?: string;
+              user?: {
+                id: string; name: string; email: string;
+                role: string; phone?: string | null; country?: string | null;
+                specialization?: string | null; bio?: string | null;
+                hourlyRate?: number | null;
+              };
+            };
+            const data = await serverRes.json() as LocalAuthOkResponse;
+            if (data.ok && data.jwt) {
+              await AsyncStorage.setItem(JWT_KEY, data.jwt);
+
+              // Adopt the server's canonical userId — it may differ from the
+              // locally-stored ID (e.g. social-login user who also has local creds).
+              const serverId = decodeJwtUserId(data.jwt) ?? data.userId ?? data.user?.id;
+
+              // Merge: prefer local record for rich fields (licenseNumber, experience
+              // etc.) that the server doesn't store, but use server ID and server
+              // profile for core identity fields.
+              const serverProfile = data.user;
+              const base: User = localRecord
+                ? {
+                    // Local record wins for fields not tracked server-side
+                    ...localRecord,
+                    // Server wins for identity and core profile
+                    id: serverId ?? localRecord.id,
+                    name: serverProfile?.name ?? localRecord.name,
+                    role: (serverProfile?.role ?? localRecord.role) as UserRole,
+                    phone: serverProfile?.phone ?? localRecord.phone,
+                    country: (serverProfile?.country ?? localRecord.country) as User["country"],
+                  }
+                : {
+                    // New device — build from server data; no local record available
+                    id: serverId ?? email,
+                    name: serverProfile?.name ?? email.split("@")[0],
+                    email,
+                    role: (serverProfile?.role ?? "client") as UserRole,
+                    phone: serverProfile?.phone ?? "",
+                    country: (serverProfile?.country ?? "qatar") as User["country"],
+                    specialization: serverProfile?.specialization ?? null,
+                    bio: serverProfile?.bio ?? null,
+                    hourlyRate: serverProfile?.hourlyRate ?? null,
+                  };
+
+              // Update local store so future offline lookups and profile writes
+              // use the canonical server ID.
+              if (serverId) {
+                const idx = users.findIndex((u) => normalizeEmail(u.email) === email);
+                if (idx !== -1) {
+                  users[idx] = { ...users[idx], id: serverId };
+                  await writeUsers(users);
+                } else if (!localRecord) {
+                  // First login on this device — seed local store from server data
+                  const seeded: StoredUser = {
+                    ...(base as User),
+                    password: "__server_auth__",
+                  };
+                  await writeUsers([...users, seeded]);
+                }
+              }
+
+              await persist(base);
+              if (base.role === "lawyer") {
+                await syncDeletionStatus(data.jwt, base);
+              }
+              return;
+            }
+          }
+
+          // The server responded — treat every 4xx as a terminal denial.
+          // Never fall back to a local session on any received server response
+          // below 500: the server has expressed an authoritative access decision.
+          if (serverRes.status < 500) {
+            const errBody = await serverRes.json().catch(() => ({}) as Record<string, unknown>);
+            const errCode = (errBody as { error?: string }).error ?? "";
+            const errMsg = (errBody as { message?: string }).message ?? "";
+
+            if (errCode === "social_account_only") {
+              throw new Error("هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام Google أو Apple للدخول.");
+            }
+            if (errCode === "account_terminated") {
+              throw new Error("تم إيقاف هذا الحساب. يرجى التواصل مع الدعم.");
+            }
+            if (errCode === "account_permanently_deleted") {
+              throw new Error("تم حذف هذا الحساب نهائياً ولا يمكن استعادته.");
+            }
+            if (serverRes.status === 401) {
+              const emailKnownLocally = users.some((u) => normalizeEmail(u.email) === email);
+              throw new Error(emailKnownLocally ? "كلمة المرور غير صحيحة" : "البريد الإلكتروني غير مسجّل. يرجى إنشاء حساب جديد");
+            }
+            // Any other 4xx (400, 409, etc.)
+            throw new Error(errMsg || "فشل تسجيل الدخول. يرجى المحاولة مجدداً.");
+          }
+
+          // 5xx — server error, fall through to local storage
+        }
+        // Transport failure path falls through here
       }
 
-      const { password: _, ...safe } = match;
-      await persist(safe);
+      // ── Local-only fallback (offline / no API_BASE / server 5xx) ───────────
+      if (!localRecord || localRecord.password !== password) {
+        const emailExists = users.some((u) => normalizeEmail(u.email) === email);
+        if (emailExists) throw new Error("كلمة المرور غير صحيحة");
+        throw new Error("البريد الإلكتروني غير مسجّل. يرجى إنشاء حساب جديد");
+      }
+      const { password: _, ...offlineSafe } = localRecord;
+      await persist(offlineSafe);
     },
-    [persist]
+    [persist, syncDeletionStatus],
   );
 
   // ── Social login ───────────────────────────────────────────────────────────
@@ -253,29 +423,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const updated = { ...existing, socialProvider: profile.provider };
         const { password: _, ...safe } = updated;
         await persist(safe);
-        // Sync server-side deletion state (rejection notes, pending requests).
-        // Always apply the server's authoritative values so that a rejection
-        // clears a previously-stored deletionPendingRequest: true from local storage.
-        if (profile.jwt && API_BASE) {
-          try {
-            const statusRes = await fetch(`${API_BASE}/profile/deletion-status`, {
-              headers: { Authorization: `Bearer ${profile.jwt}` },
-            });
-            if (statusRes.ok) {
-              const status = await statusRes.json() as {
-                deletionPendingRequest?: boolean;
-                deletionRejectionNote?: string | null;
-              };
-              const withStatus: User = {
-                ...safe,
-                // Explicitly set both fields from server — never let local
-                // state shadow a server-side change (e.g. rejection clears pending)
-                deletionPendingRequest: status.deletionPendingRequest ?? false,
-                deletionRejectionNote: status.deletionRejectionNote ?? undefined,
-              };
-              await persist(withStatus);
-            }
-          } catch {} // graceful — local state is source of truth on network error
+        // Sync server-side deletion state so rejection notes and pending flags
+        // always reflect server reality, even after a rejection while offline.
+        if (profile.jwt) {
+          await syncDeletionStatus(profile.jwt, safe);
         }
         return;
       }
@@ -306,7 +457,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { password: _, ...safe } = newUser;
       await persist(safe);
     },
-    [persist]
+    [persist, syncDeletionStatus],
   );
 
   // ── Register Client ────────────────────────────────────────────────────────
@@ -330,8 +481,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
+      // Register with backend first so the server is the identity authority.
+      // Use the server-returned ID as the canonical local ID so that
+      // subsequent authenticated API calls target the correct record.
+      let canonicalId = `client-${Date.now()}`;
+      let storedJwt: string | null = null;
+
+      if (API_BASE) {
+        let serverRes: Response | null = null;
+        try {
+          serverRes = await fetch(`${API_BASE}/auth/local-auth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: data.name.trim(),
+              email: data.email.trim(),
+              password: data.password.trim(),
+              phone: data.phone.trim(),
+              country: data.country,
+              role: "client",
+            }),
+          });
+        } catch {
+          // Transport failure — proceed with local-only registration
+        }
+
+        if (serverRes !== null) {
+          if (serverRes.ok) {
+            const body = await serverRes.json() as { ok: boolean; jwt?: string; userId?: string };
+            if (body.ok && body.jwt) {
+              const serverId = decodeJwtUserId(body.jwt) ?? body.userId;
+              if (serverId) canonicalId = serverId;
+              storedJwt = body.jwt;
+            }
+          } else if (serverRes.status >= 400 && serverRes.status < 500) {
+            // 4xx — server explicitly denied registration (e.g. email taken on
+            // server, account terminated). Surface the error; do NOT create a
+            // local account after a server denial.
+            const errBody = await serverRes.json().catch(() => ({})) as { message?: string; error?: string };
+            throw new Error(errBody.message ?? errBody.error ?? "فشل في إنشاء الحساب. يرجى المحاولة مجدداً.");
+          }
+          // 5xx — server error, proceed with local-only registration
+        }
+      }
+
+      if (storedJwt) await AsyncStorage.setItem(JWT_KEY, storedJwt);
+
       const newUser: StoredUser = {
-        id: `client-${Date.now()}`,
+        id: canonicalId,
         name: data.name.trim(),
         email: data.email.trim(),
         phone: data.phone.trim(),
@@ -368,8 +565,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
+      // Register with backend first so the server is the identity authority.
+      // Use the server-returned ID as the canonical local ID.
+      let canonicalId = `lawyer-${Date.now()}`;
+      let storedJwt: string | null = null;
+
+      if (API_BASE) {
+        let serverRes: Response | null = null;
+        try {
+          serverRes = await fetch(`${API_BASE}/auth/local-auth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: data.name.trim(),
+              email: data.email.trim(),
+              password: data.password.trim(),
+              phone: data.phone.trim(),
+              country: data.country,
+              role: "lawyer",
+              specialization: data.specialization,
+              bio: data.bio,
+              hourlyRate: data.hourlyRate,
+            }),
+          });
+        } catch {
+          // Transport failure — proceed with local-only registration
+        }
+
+        if (serverRes !== null) {
+          if (serverRes.ok) {
+            const body = await serverRes.json() as { ok: boolean; jwt?: string; userId?: string };
+            if (body.ok && body.jwt) {
+              const serverId = decodeJwtUserId(body.jwt) ?? body.userId;
+              if (serverId) canonicalId = serverId;
+              storedJwt = body.jwt;
+            }
+          } else if (serverRes.status >= 400 && serverRes.status < 500) {
+            // 4xx — server explicitly denied registration. Surface the error;
+            // do NOT create a local account after a server denial.
+            const errBody = await serverRes.json().catch(() => ({})) as { message?: string; error?: string };
+            throw new Error(errBody.message ?? errBody.error ?? "فشل في إنشاء الحساب. يرجى المحاولة مجدداً.");
+          }
+          // 5xx — server error, proceed with local-only registration
+        }
+      }
+
+      if (storedJwt) await AsyncStorage.setItem(JWT_KEY, storedJwt);
+
       const newUser: StoredUser = {
-        id: `lawyer-${Date.now()}`,
+        id: canonicalId,
         name: data.name.trim(),
         email: data.email.trim(),
         phone: data.phone.trim(),

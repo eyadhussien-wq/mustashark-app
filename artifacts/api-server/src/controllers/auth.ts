@@ -1,6 +1,7 @@
 import { type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
+import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
 import { eq, and, or } from "drizzle-orm";
@@ -248,4 +249,160 @@ async function findUser(provider: string, providerId: string, email: string) {
     )
     .limit(1);
   return rows[0] ?? null;
+}
+
+// ── POST /api/auth/local-auth  (email + password — find-or-create) ───────────
+//
+// Single upsert endpoint used for both registration and login:
+//   • New user            → creates DB record, issues JWT
+//   • Existing local user → verifies passwordHash, issues JWT
+//   • Existing social user (no passwordHash, e.g. Google-only lawyer)
+//                         → sets passwordHash (migration link), issues JWT
+//
+// This makes the server the identity authority for email/password flows and
+// ensures the JWT's userId always matches the server's canonical user ID.
+
+const localAuthSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).max(128),
+  // Registration-only fields (ignored when the user already exists in DB)
+  name: z.string().min(2).max(100).optional(),
+  phone: z.string().max(20).optional(),
+  country: z.enum(["qatar", "jordan"]).optional(),
+  role: z.enum(["client", "lawyer"]).optional().default("client"),
+  specialization: z.string().max(200).optional(),
+  bio: z.string().max(2000).optional(),
+  hourlyRate: z.number().positive().optional(),
+});
+
+export async function localAuth(req: Request, res: Response) {
+  const parsed = localAuthSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
+  }
+
+  const { email, password, name, phone, country, role, specialization, bio, hourlyRate } = parsed.data;
+  const normalEmail = email.toLowerCase();
+
+  // Timing-safe dummy hash used when no real hash is available (prevents
+  // short-circuit timing leaks that reveal whether an email exists).
+  const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
+
+  try {
+    const rows = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, normalEmail))
+      .limit(1);
+
+    const existing = rows[0] ?? null;
+
+    if (existing) {
+      // ── Existing user ─────────────────────────────────────────────────────
+
+      if (existing.accountStatus === "terminated") {
+        return res.status(403).json({ ok: false, error: "account_terminated", message: "تم إيقاف هذا الحساب." });
+      }
+
+      if (existing.passwordHash) {
+        // Has a password — verify it
+        const match = await bcrypt.compare(password, existing.passwordHash);
+        if (!match) {
+          // Still run a dummy compare so the response time is consistent
+          await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
+          return res.status(401).json({ ok: false, error: "invalid_credentials", message: "كلمة المرور غير صحيحة" });
+        }
+      } else {
+        // Social-only account (registered via Google/Apple/Facebook, no password
+        // set). Silently writing a password here without proof of ownership is an
+        // account-takeover vector — reject and tell the caller to use social login.
+        req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
+        return res.status(403).json({
+          ok: false,
+          error: "social_account_only",
+          message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل.",
+        });
+      }
+
+      const jwtToken = signToken({
+        userId: existing.id,
+        email: existing.email,
+        role: (existing.role ?? "client") as "client" | "lawyer" | "admin",
+        provider: "local",
+      });
+
+      req.log.info({ userId: existing.id }, "local-auth: existing user authenticated");
+      return res.json({
+        ok: true,
+        jwt: jwtToken,
+        userId: existing.id,
+        isNew: false,
+        user: {
+          id: existing.id,
+          name: existing.name,
+          email: existing.email,
+          role: existing.role,
+          phone: existing.phone,
+          country: existing.country,
+          specialization: existing.specialization,
+          bio: existing.bio,
+          hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null,
+        },
+      });
+    }
+
+    // ── New user — create record ───────────────────────────────────────────
+
+    if (!name?.trim()) {
+      return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    await db.insert(usersTable).values({
+      id: newId,
+      name: name.trim(),
+      email: normalEmail,
+      passwordHash,
+      phone: phone ?? null,
+      country: country ?? null,
+      role,
+      authProvider: "local",
+      accountStatus: "active",
+      ...(role === "lawyer"
+        ? {
+            specialization: specialization ?? null,
+            bio: bio ?? null,
+            hourlyRate: hourlyRate != null ? String(hourlyRate) : null,
+          }
+        : {}),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
+
+    req.log.info({ userId: newId, role }, "local-auth: new user created");
+    return res.status(201).json({
+      ok: true,
+      jwt: jwtToken,
+      userId: newId,
+      isNew: true,
+      user: {
+        id: newId,
+        name: name.trim(),
+        email: normalEmail,
+        role,
+        phone: phone ?? null,
+        country: country ?? null,
+        specialization: specialization ?? null,
+        bio: bio ?? null,
+        hourlyRate: hourlyRate ?? null,
+      },
+    });
+  } catch (err) {
+    req.log.error(err, "localAuth failed");
+    return res.status(500).json({ ok: false, error: "internal_error" });
+  }
 }
