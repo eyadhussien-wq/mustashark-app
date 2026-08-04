@@ -202,6 +202,12 @@ export default function LawyerDetail() {
             <Text style={styles.price}>{lawyer.hourlyRate} {rateLabel(lawyer.country)}</Text>
             <Text style={styles.priceSub}>{t("hourlyRate")}</Text>
           </View>
+
+          {!!lawyer.bio && (
+            <View style={styles.bioBox}>
+              <Text style={styles.bioText}>{lawyer.bio}</Text>
+            </View>
+          )}
         </View>
 
         {/* Date selection */}
@@ -405,6 +411,18 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   price: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.navy },
   priceSub: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+  bioBox: {
+    backgroundColor: C.secondary,
+    borderRadius: 10,
+    padding: 12,
+  },
+  bioText: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 21,
+    textAlign: "right",
+  },
 
   section: { marginBottom: 22 },
   sectionTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground, marginBottom: 12 },
