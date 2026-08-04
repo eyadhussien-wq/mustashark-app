@@ -20,14 +20,14 @@ export interface User {
   avatar?: string;
   socialProvider?: string;
   // Lawyer-specific
-  specialization?: string;
+  specialization?: string | null;
   licenseNumber?: string;
   licenseVerified?: boolean;
-  bio?: string;
+  bio?: string | null;
   experience?: number;
   rating?: number;
   reviewsCount?: number;
-  hourlyRate?: number;
+  hourlyRate?: number | null;
   available?: boolean;
   // Deletion state
   deletionPendingRequest?: boolean;
@@ -482,6 +482,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (updates.name !== undefined) apiUpdates.name = updates.name;
         if (updates.phone !== undefined) apiUpdates.phone = updates.phone;
         if (updates.country !== undefined) apiUpdates.country = updates.country;
+        // Lawyer-specific fields
+        if (updates.specialization !== undefined) apiUpdates.specialization = updates.specialization;
+        if (updates.bio !== undefined) apiUpdates.bio = updates.bio;
+        if (updates.hourlyRate !== undefined) apiUpdates.hourlyRate = updates.hourlyRate;
         if (Object.keys(apiUpdates).length > 0) {
           const res = await fetch(`${API_BASE}/profile`, {
             method: "PATCH",

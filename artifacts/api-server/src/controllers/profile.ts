@@ -10,6 +10,10 @@ const updateProfileSchema = z.object({
   name: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(100).optional(),
   phone: z.string().max(20).optional().nullable(),
   country: z.enum(["qatar", "jordan"]).optional().nullable(),
+  // Lawyer-specific fields
+  specialization: z.string().max(200).optional().nullable(),
+  bio: z.string().max(2000).optional().nullable(),
+  hourlyRate: z.number().positive("الأتعاب يجب أن تكون قيمة موجبة").optional().nullable(),
 });
 
 export async function updateProfile(req: Request, res: Response) {
@@ -25,11 +29,18 @@ export async function updateProfile(req: Request, res: Response) {
       .json({ ok: false, error: "validation_error", issues: parsed.error.issues });
   }
 
-  const { name, phone, country } = parsed.data;
+  const { name, phone, country, specialization, bio, hourlyRate } = parsed.data;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name;
   if (phone !== undefined) updates.phone = phone;
   if (country !== undefined) updates.country = country;
+  // Lawyer-specific fields — only persist if the caller is a lawyer
+  if (authUser.role === "lawyer") {
+    if (specialization !== undefined) updates.specialization = specialization;
+    if (bio !== undefined) updates.bio = bio;
+    if (hourlyRate !== undefined)
+      updates.hourlyRate = hourlyRate !== null ? String(hourlyRate) : null;
+  }
 
   try {
     const [updated] = await db
@@ -53,6 +64,9 @@ export async function updateProfile(req: Request, res: Response) {
         phone: updated.phone,
         country: updated.country,
         role: updated.role,
+        specialization: updated.specialization,
+        bio: updated.bio,
+        hourlyRate: updated.hourlyRate ? parseFloat(updated.hourlyRate) : null,
         deletionRejectionNote: updated.deletionRejectionNote,
       },
     });

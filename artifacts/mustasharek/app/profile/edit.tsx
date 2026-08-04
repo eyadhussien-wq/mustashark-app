@@ -22,10 +22,17 @@ export default function EditProfile() {
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
 
+  const isLawyer = user?.role === "lawyer";
+
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [country, setCountry] = useState<"qatar" | "jordan">(
     user?.country ?? "qatar",
+  );
+  const [specialization, setSpecialization] = useState(user?.specialization ?? "");
+  const [bio, setBio] = useState(user?.bio ?? "");
+  const [hourlyRate, setHourlyRate] = useState(
+    user?.hourlyRate ? String(user.hourlyRate) : "",
   );
 
   const [loading, setLoading] = useState(false);
@@ -46,6 +53,26 @@ export default function EditProfile() {
         phone: phone.trim() || undefined,
         country,
       };
+
+      if (isLawyer) {
+        // Send null for cleared fields so the server removes the stored value
+        updates.specialization = specialization.trim() || null;
+        updates.bio = bio.trim() || null;
+
+        const rateStr = hourlyRate.trim();
+        if (rateStr === "") {
+          // Explicitly clear stored rate
+          updates.hourlyRate = null;
+        } else {
+          const rate = parseFloat(rateStr.replace(/[^0-9.]/g, ""));
+          if (isNaN(rate) || rate <= 0) {
+            setError("الأتعاب بالساعة يجب أن تكون قيمة رقمية موجبة");
+            setLoading(false);
+            return;
+          }
+          updates.hourlyRate = rate;
+        }
+      }
 
       await updateUser(updates);
       setSuccess(true);
@@ -166,6 +193,60 @@ export default function EditProfile() {
         </View>
       </View>
 
+
+      {/* ── Lawyer-specific fields ── */}
+      {isLawyer && (
+        <>
+          <View style={styles.sectionDivider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.sectionLabel}>بيانات المحامي</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>التخصص القانوني</Text>
+            <TextInput
+              style={styles.input}
+              value={specialization}
+              onChangeText={setSpecialization}
+              placeholder="مثل: قانون تجاري، قانون عمالي..."
+              placeholderTextColor={C.mutedForeground}
+              textAlign="right"
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>الأتعاب بالساعة</Text>
+            <TextInput
+              style={styles.input}
+              value={hourlyRate}
+              onChangeText={setHourlyRate}
+              placeholder="أدخل المبلغ بالعملة المحلية"
+              placeholderTextColor={C.mutedForeground}
+              keyboardType="numeric"
+              textAlign="right"
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>نبذة تعريفية</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={bio}
+              onChangeText={setBio}
+              placeholder="اكتب نبذة مختصرة عن خبرتك وتخصصك..."
+              placeholderTextColor={C.mutedForeground}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              textAlign="right"
+              editable={!loading}
+            />
+          </View>
+        </>
+      )}
 
       {/* Save button */}
       <TouchableOpacity
@@ -288,6 +369,22 @@ const styles = StyleSheet.create({
     color: C.mutedForeground,
   },
   countryLabelActive: { color: C.navy },
+  sectionDivider: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 20,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+  sectionLabel: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_600SemiBold",
+  },
+  textArea: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
   saveBtn: {
     flexDirection: "row-reverse",
     alignItems: "center",

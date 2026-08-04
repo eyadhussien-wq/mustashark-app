@@ -37,3 +37,9 @@ ALTER TABLE bookings ALTER COLUMN client_id DROP NOT NULL;
 ALTER TABLE platform_dues ALTER COLUMN lawyer_id DROP NOT NULL;
 -- Note: platform_dues.collected_by was already nullable; no ALTER needed.
 -- Note: lawyer_deletion_requests.reviewed_by was already nullable; no ALTER needed.
+
+-- 7. Lawyer profile fields
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS specialization TEXT,
+  ADD COLUMN IF NOT EXISTS bio TEXT,
+  ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10, 2);
