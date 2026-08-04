@@ -50,7 +50,10 @@ function parseFragment(url: string): Record<string, string> {
   );
 }
 
-// ── Backend auth call (graceful fallback if unreachable) ─────────────────────
+// ── Backend auth call ─────────────────────────────────────────────────────────
+// Returns null  → server not configured / network unreachable → graceful local fallback
+// Throws        → server returned intentional 4xx/5xx (e.g. role mismatch, terminated account)
+//                 → MUST propagate; do NOT fall back to local login
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
   : "";
@@ -60,9 +63,13 @@ async function callBackendAuth(
   token: string,
   opts?: { role?: string; displayName?: string; storedEmail?: string },
 ): Promise<{ jwt: string; user: Record<string, unknown> } | null> {
-  if (!API_BASE) return null;
+  if (!API_BASE) return null; // No server configured — demo/offline mode
+
+  // Separate fetch from response handling so network errors return null
+  // while intentional server rejections always throw.
+  let res: Response;
   try {
-    const res = await fetch(`${API_BASE}/auth/social`, {
+    res = await fetch(`${API_BASE}/auth/social`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -73,13 +80,30 @@ async function callBackendAuth(
         storedEmail: opts?.storedEmail,
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json() as { ok: boolean; jwt?: string; user?: Record<string, unknown> };
-    if (!data.ok || !data.jwt) return null;
-    return { jwt: data.jwt, user: data.user ?? {} };
   } catch {
+    // Network error — server unreachable; fall back to local
     return null;
   }
+
+  if (!res.ok) {
+    // Intentional rejection (role mismatch, soft-deleted/expired account, etc.)
+    // Must throw so the caller never proceeds with local login.
+    const body = await res.json().catch(() => ({})) as {
+      message?: string;
+      error?: string;
+    };
+    throw new Error(
+      body.message ?? body.error ?? "فشل التحقق من الخادم. يرجى المحاولة مجدداً.",
+    );
+  }
+
+  const data = await res.json() as {
+    ok: boolean;
+    jwt?: string;
+    user?: Record<string, unknown>;
+  };
+  if (!data.ok || !data.jwt) return null;
+  return { jwt: data.jwt, user: data.user ?? {} };
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

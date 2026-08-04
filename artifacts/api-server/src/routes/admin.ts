@@ -16,6 +16,12 @@ import {
   updateClientStatus,
 } from "../controllers/adminData";
 import { requireAdmin } from "../middlewares/requireAdmin";
+import {
+  listDeletionRequests,
+  checkDeletionObligations,
+  approveDeletion,
+  rejectDeletion,
+} from "../controllers/adminDeletionRequests";
 
 const adminRouter = Router();
 
@@ -44,6 +50,28 @@ adminRouter.post(
   "/admin/kill-switch/run-all",
   requireAdmin,
   runKillSwitchForAllOffices,
+);
+
+// ── Lawyer deletion requests ──────────────────────────────────────────────────
+adminRouter.get(
+  "/admin/deletion-requests",
+  requireAdmin,
+  listDeletionRequests,
+);
+adminRouter.get(
+  "/admin/deletion-requests/:id/check",
+  requireAdmin,
+  checkDeletionObligations,
+);
+adminRouter.post(
+  "/admin/deletion-requests/:id/approve",
+  requireAdmin,
+  approveDeletion,
+);
+adminRouter.post(
+  "/admin/deletion-requests/:id/reject",
+  requireAdmin,
+  rejectDeletion,
 );
 
 export default adminRouter;

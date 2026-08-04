@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   I18nManager,
   Platform,
@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { WhatsAppSupportCard } from "@/components/WhatsAppSupportCard";
+import { DeleteAccountModal } from "@/components/DeleteAccountModal";
 import { formatPrice } from "@/utils/currency";
 
 const C = colors.light;
@@ -23,9 +24,10 @@ const C = colors.light;
 export default function LawyerProfile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount, updateUser, getAuthToken } = useAuth();
   const { getLawyerById, consultations } = useData();
   const { lang, setLang, t } = useLanguage();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Get live rating data from DataContext (updated by client reviews)
   const liveProfile = user?.id ? getLawyerById(user.id) : undefined;
@@ -34,15 +36,42 @@ export default function LawyerProfile() {
 
   // Count completed consultations
   const completedCount = consultations.filter(
-    (c) => c.lawyerId === user?.id && c.status === "completed"
+    (c) => c.lawyerId === user?.id && c.status === "completed",
   ).length;
   const ratedCount = consultations.filter(
-    (c) => c.lawyerId === user?.id && c.status === "completed" && c.rating
+    (c) => c.lawyerId === user?.id && c.status === "completed" && c.rating,
   ).length;
+
+  const hasPendingDeletion = Boolean(user?.deletionPendingRequest);
+  const rejectionNote = user?.deletionRejectionNote;
 
   async function handleLogout() {
     await logout();
     router.replace("/onboarding");
+  }
+
+  async function handleRequestDeletion() {
+    await deleteAccount();
+    // Lawyer deletion just marks as pending; stay on profile to see updated state
+    setShowDeleteModal(false);
+  }
+
+  async function dismissRejectionNote() {
+    // Persist dismissal to server so it doesn't re-appear after next social login
+    const token = await getAuthToken();
+    if (token) {
+      const apiBase = process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+        : "";
+      if (apiBase) {
+        fetch(`${apiBase}/profile/dismiss-rejection`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    }
+    // Clear local state immediately (no await — optimistic update)
+    updateUser({ deletionRejectionNote: undefined, deletionPendingRequest: false }).catch(() => {});
   }
 
   function toggleLanguage() {
@@ -64,9 +93,27 @@ export default function LawyerProfile() {
     { icon: "phone", label: t("phone"), value: user?.phone },
     { icon: "briefcase", label: t("specialization"), value: user?.specialization },
     { icon: "file-text", label: t("licenseNumber"), value: user?.licenseNumber },
-    { icon: "map-pin", label: t("country"), value: user?.country === "qatar" ? "🇶🇦 " + t("qatar") : "🇯🇴 " + t("jordan") },
-    { icon: "clock", label: t("experience"), value: user?.experience ? `${user.experience} سنوات` : "—" },
-    { icon: "dollar-sign", label: t("hourlyRate"), value: user?.hourlyRate && user?.country ? formatPrice(user.hourlyRate, user.country) : "—" },
+    {
+      icon: "map-pin",
+      label: t("country"),
+      value:
+        user?.country === "qatar"
+          ? "🇶🇦 " + t("qatar")
+          : "🇯🇴 " + t("jordan"),
+    },
+    {
+      icon: "clock",
+      label: t("experience"),
+      value: user?.experience ? `${user.experience} سنوات` : "—",
+    },
+    {
+      icon: "dollar-sign",
+      label: t("hourlyRate"),
+      value:
+        user?.hourlyRate && user?.country
+          ? formatPrice(user.hourlyRate, user.country)
+          : "—",
+    },
   ];
 
   return (
@@ -80,6 +127,19 @@ export default function LawyerProfile() {
         },
       ]}
     >
+      {/* ── Rejection note banner ── */}
+      {rejectionNote && (
+        <View style={styles.rejectionBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rejectionTitle}>تم رفض طلب حذف حسابك</Text>
+            <Text style={styles.rejectionNote}>{rejectionNote}</Text>
+          </View>
+          <TouchableOpacity onPress={dismissRejectionNote} style={styles.rejectionClose}>
+            <Feather name="x" size={16} color="#92400E" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.avatarSection}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{user?.name?.charAt(0) ?? "؟"}</Text>
@@ -96,7 +156,6 @@ export default function LawyerProfile() {
         {/* ── Live Star Rating display ── */}
         {displayRating !== undefined && displayRating > 0 && (
           <View style={styles.ratingCard}>
-            {/* Stars row */}
             <View style={styles.ratingStarsRow}>
               {[1, 2, 3, 4, 5].map((s) => (
                 <Feather
@@ -107,7 +166,6 @@ export default function LawyerProfile() {
                 />
               ))}
             </View>
-            {/* Number + reviews */}
             <View style={styles.ratingNumRow}>
               <Text style={styles.ratingNum}>{displayRating.toFixed(1)}</Text>
               <View style={styles.ratingDivider} />
@@ -136,6 +194,30 @@ export default function LawyerProfile() {
         </View>
       )}
 
+      {/* Edit profile button */}
+      <TouchableOpacity
+        style={[styles.editBtn, { flexDirection: rowDir }]}
+        onPress={() => router.push("/profile/edit")}
+        activeOpacity={0.8}
+      >
+        <View style={styles.editIcon}>
+          <Feather name="edit-2" size={17} color={C.gold} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.editLabel, { textAlign: align }]}>
+            تعديل الملف الشخصي
+          </Text>
+          <Text style={[styles.editHint, { textAlign: align }]}>
+            الاسم، الهاتف، التخصص، الأتعاب
+          </Text>
+        </View>
+        <Feather
+          name={lang === "ar" ? "chevron-left" : "chevron-right"}
+          size={18}
+          color={C.mutedForeground}
+        />
+      </TouchableOpacity>
+
       {/* Availability & language */}
       <TouchableOpacity
         style={[styles.settingsCard, { flexDirection: rowDir }]}
@@ -146,10 +228,18 @@ export default function LawyerProfile() {
           <Feather name="calendar" size={18} color={C.navy} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.settingsName, { textAlign: align }]}>{t("availability")}</Text>
-          <Text style={[styles.settingsHint, { textAlign: align }]}>{t("tapToEditSchedule")}</Text>
+          <Text style={[styles.settingsName, { textAlign: align }]}>
+            {t("availability")}
+          </Text>
+          <Text style={[styles.settingsHint, { textAlign: align }]}>
+            {t("tapToEditSchedule")}
+          </Text>
         </View>
-        <Feather name={lang === "ar" ? "chevron-left" : "chevron-right"} size={18} color={C.mutedForeground} />
+        <Feather
+          name={lang === "ar" ? "chevron-left" : "chevron-right"}
+          size={18}
+          color={C.mutedForeground}
+        />
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -157,13 +247,21 @@ export default function LawyerProfile() {
         onPress={toggleLanguage}
         activeOpacity={0.8}
       >
-        <View style={[styles.settingsIcon, { backgroundColor: lang === "ar" ? "#006B3F20" : "#1a2a4a15" }]}>
+        <View
+          style={[
+            styles.settingsIcon,
+            { backgroundColor: lang === "ar" ? "#006B3F20" : "#1a2a4a15" },
+          ]}
+        >
           <Text style={{ fontSize: 20 }}>{lang === "ar" ? "🇸🇦" : "🇺🇸"}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.settingsName, { textAlign: align }]}>{t("language")}</Text>
+          <Text style={[styles.settingsName, { textAlign: align }]}>
+            {t("language")}
+          </Text>
           <Text style={[styles.settingsHint, { textAlign: align }]}>
-            {lang === "ar" ? t("arabic") : t("english")} • {t("tapToSwitch")}
+            {lang === "ar" ? t("arabic") : t("english")} •{" "}
+            {t("tapToSwitch")}
           </Text>
         </View>
         <Feather name="globe" size={18} color={C.gold} />
@@ -171,8 +269,13 @@ export default function LawyerProfile() {
 
       <View style={styles.infoCard}>
         {items.map((item, i) => (
-          <View key={item.label} style={[styles.item, i < items.length - 1 && styles.itemBorder]}>
-            <Text style={[styles.itemValue, { textAlign: align }]}>{item.value ?? "—"}</Text>
+          <View
+            key={item.label}
+            style={[styles.item, i < items.length - 1 && styles.itemBorder]}
+          >
+            <Text style={[styles.itemValue, { textAlign: align }]}>
+              {item.value ?? "—"}
+            </Text>
             <View style={[styles.itemLeft, { flexDirection: rowDir }]}>
               <Text style={styles.itemLabel}>{item.label}</Text>
               <Feather name={item.icon as any} size={15} color={C.primary} />
@@ -183,33 +286,107 @@ export default function LawyerProfile() {
 
       <WhatsAppSupportCard role="lawyer" title={t("supportTitle")} />
 
-      <TouchableOpacity style={[styles.logoutBtn, { flexDirection: rowDir }]} onPress={handleLogout} activeOpacity={0.85}>
+      {/* Delete account request button */}
+      {hasPendingDeletion ? (
+        <View style={styles.pendingDeletionBanner}>
+          <Feather name="clock" size={16} color="#92400E" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingDeletionTitle}>طلب الحذف قيد المراجعة</Text>
+            <Text style={styles.pendingDeletionHint}>
+              سيتم إشعارك بقرار الإدارة قريباً
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[styles.deleteBtn, { flexDirection: rowDir }]}
+          onPress={() => setShowDeleteModal(true)}
+          activeOpacity={0.8}
+        >
+          <Feather name="trash-2" size={17} color={C.destructive} />
+          <Text style={styles.deleteBtnText}>طلب حذف الحساب</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={[styles.logoutBtn, { flexDirection: rowDir }]}
+        onPress={handleLogout}
+        activeOpacity={0.85}
+      >
         <Text style={styles.logoutText}>{t("logout")}</Text>
         <Feather name="log-out" size={18} color={C.destructive} />
       </TouchableOpacity>
+
+      <DeleteAccountModal
+        visible={showDeleteModal}
+        role="lawyer"
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleRequestDeletion}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 24 },
+  rejectionBanner: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FDE68A",
+    padding: 14,
+    marginBottom: 16,
+  },
+  rejectionTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    color: "#92400E",
+    textAlign: "right",
+    marginBottom: 4,
+  },
+  rejectionNote: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: "#78350F",
+    textAlign: "right",
+    lineHeight: 20,
+  },
+  rejectionClose: {
+    padding: 4,
+  },
   avatarSection: { alignItems: "center", gap: 8, marginBottom: 20 },
   avatar: {
-    width: 90, height: 90, borderRadius: 45,
-    backgroundColor: C.navy, alignItems: "center", justifyContent: "center",
-    borderWidth: 3, borderColor: C.gold,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: C.navy,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: C.gold,
   },
   avatarText: { fontSize: 36, color: "#fff", fontFamily: "Inter_700Bold" },
   name: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground },
   spec: { fontSize: 14, color: C.primary, fontFamily: "Inter_500Medium" },
   verifiedBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
-    borderWidth: 1, borderColor: "#D1FAE5",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
   },
-  verifiedText: { fontSize: 12, color: C.success, fontFamily: "Inter_600SemiBold" },
-
-  // ── Live rating card ──────────────────────────────────────────────────────
+  verifiedText: {
+    fontSize: 12,
+    color: C.success,
+    fontFamily: "Inter_600SemiBold",
+  },
   ratingCard: {
     backgroundColor: C.navy,
     borderRadius: 18,
@@ -230,20 +407,9 @@ const styles = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
-  ratingStarsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  ratingNumRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  ratingNum: {
-    fontSize: 32,
-    fontFamily: "Inter_700Bold",
-    color: C.gold,
-  },
+  ratingStarsRow: { flexDirection: "row", gap: 6 },
+  ratingNumRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  ratingNum: { fontSize: 32, fontFamily: "Inter_700Bold", color: C.gold },
   ratingDivider: {
     width: 1,
     height: 28,
@@ -251,41 +417,176 @@ const styles = StyleSheet.create({
   },
   reviewsBox: { alignItems: "center", gap: 2 },
   reviewsCount: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
-  reviewsLabel: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
-
-  bioCard: {
-    backgroundColor: C.card, borderRadius: colors.radius, padding: 16,
-    borderWidth: 1, borderColor: C.border, marginBottom: 14, gap: 6,
+  reviewsLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.5)",
+    fontFamily: "Inter_400Regular",
   },
-  bioTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.primary, textAlign: "right" },
-  bioText: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", lineHeight: 21, textAlign: "right" },
+  bioCard: {
+    backgroundColor: C.card,
+    borderRadius: colors.radius,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 14,
+    gap: 6,
+  },
+  bioTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.primary,
+    textAlign: "right",
+  },
+  bioText: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 21,
+    textAlign: "right",
+  },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(201,160,53,0.3)",
+    padding: 14,
+    marginBottom: 14,
+  },
+  editIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(201,160,53,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editLabel: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: C.foreground,
+  },
+  editHint: {
+    fontSize: 12,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
   infoCard: {
-    backgroundColor: C.card, borderRadius: colors.radius,
-    borderWidth: 1, borderColor: C.border, marginBottom: 20, overflow: "hidden",
+    backgroundColor: C.card,
+    borderRadius: colors.radius,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
+    overflow: "hidden",
   },
   item: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 16, paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
   itemLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  itemLabel: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-  itemValue: { fontSize: 14, color: C.foreground, fontFamily: "Inter_500Medium", textAlign: "right", flex: 1, marginLeft: 8 },
+  itemLabel: {
+    fontSize: 13,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
+  itemValue: {
+    fontSize: 14,
+    color: C.foreground,
+    fontFamily: "Inter_500Medium",
+    textAlign: "right",
+    flex: 1,
+    marginLeft: 8,
+  },
   settingsCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border,
-    padding: 14, marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: C.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    marginBottom: 14,
   },
   settingsIcon: {
-    width: 44, height: 44, borderRadius: 12,
-    alignItems: "center", justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  settingsName: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground },
-  settingsHint: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+  settingsName: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: C.foreground,
+  },
+  settingsHint: {
+    fontSize: 12,
+    color: C.mutedForeground,
+    fontFamily: "Inter_400Regular",
+  },
+  pendingDeletionBanner: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FDE68A",
+    padding: 14,
+    marginBottom: 12,
+  },
+  pendingDeletionTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: "#92400E",
+    textAlign: "right",
+  },
+  pendingDeletionHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#78350F",
+    textAlign: "right",
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FFF8F8",
+    borderRadius: colors.radius,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  deleteBtnText: {
+    fontSize: 14,
+    color: C.destructive,
+    fontFamily: "Inter_600SemiBold",
+  },
   logoutBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10,
-    borderWidth: 1.5, borderColor: "#FEE2E2", backgroundColor: "#FFF5F5",
-    borderRadius: colors.radius, paddingVertical: 14, paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FFF5F5",
+    borderRadius: colors.radius,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
   },
-  logoutText: { fontSize: 15, color: C.destructive, fontFamily: "Inter_600SemiBold" },
+  logoutText: {
+    fontSize: 15,
+    color: C.destructive,
+    fontFamily: "Inter_600SemiBold",
+  },
 });

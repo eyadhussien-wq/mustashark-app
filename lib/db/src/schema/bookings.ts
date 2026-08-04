@@ -41,10 +41,8 @@ export const bookingsTable = pgTable("bookings", {
   id: text("id").primaryKey(),
   serialNumber: text("serial_number").notNull().unique(),
   clientId: text("client_id")
-    .notNull()
     .references(() => usersTable.id),
   lawyerId: text("lawyer_id")
-    .notNull()
     .references(() => usersTable.id),
   officeId: text("office_id").references(() => officesTable.id),
   subject: text("subject").notNull(),

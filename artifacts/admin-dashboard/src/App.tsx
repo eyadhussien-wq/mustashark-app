@@ -11,6 +11,7 @@ import Clients from "./pages/clients";
 import Consultations from "./pages/consultations";
 import Offices from "./pages/offices";
 import Dues from "./pages/dues";
+import DeletionRequests from "./pages/deletion-requests";
 
 // Set token getter for API client
 setAuthTokenGetter(() => localStorage.getItem("admin_token"));
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/consultations" component={Consultations} />
       <Route path="/offices" component={Offices} />
       <Route path="/dues" component={Dues} />
+      <Route path="/deletion-requests" component={DeletionRequests} />
       <Route component={NotFound} />
     </Switch>
   );

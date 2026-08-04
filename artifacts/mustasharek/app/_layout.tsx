@@ -50,6 +50,10 @@ function RootLayoutNav() {
         name="language-splash"
         options={{ headerShown: false, presentation: "fullScreenModal" }}
       />
+      <Stack.Screen
+        name="profile/edit"
+        options={{ headerShown: false, presentation: "card" }}
+      />
     </Stack>
   );
 }

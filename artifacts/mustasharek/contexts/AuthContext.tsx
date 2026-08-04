@@ -29,6 +29,9 @@ export interface User {
   reviewsCount?: number;
   hourlyRate?: number;
   available?: boolean;
+  // Deletion state
+  deletionPendingRequest?: boolean;
+  deletionRejectionNote?: string;
 }
 
 type StoredUser = User & { password: string };
@@ -73,6 +76,10 @@ const STORAGE_KEY = "mustasharek_users_v2";
 const SESSION_KEY = "mustasharek_session_v2";
 const JWT_KEY = "mustasharek_jwt_v1";
 const OTP_KEY = "mustasharek_reset_otp";
+
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+  : "";
 
 const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
@@ -246,6 +253,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const updated = { ...existing, socialProvider: profile.provider };
         const { password: _, ...safe } = updated;
         await persist(safe);
+        // Sync server-side deletion state (rejection notes, pending requests)
+        if (profile.jwt && API_BASE) {
+          try {
+            const statusRes = await fetch(`${API_BASE}/profile/deletion-status`, {
+              headers: { Authorization: `Bearer ${profile.jwt}` },
+            });
+            if (statusRes.ok) {
+              const status = await statusRes.json() as {
+                deletionPendingRequest?: boolean;
+                deletionRejectionNote?: string | null;
+              };
+              if (status.deletionRejectionNote || status.deletionPendingRequest) {
+                const withStatus: User = {
+                  ...safe,
+                  ...(status.deletionRejectionNote
+                    ? { deletionRejectionNote: status.deletionRejectionNote }
+                    : {}),
+                  ...(status.deletionPendingRequest
+                    ? { deletionPendingRequest: true }
+                    : {}),
+                };
+                await persist(withStatus);
+              }
+            }
+          } catch {} // graceful — local state is source of truth
+        }
         return;
       }
 
@@ -380,22 +413,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── Delete account ──────────────────────────────────────────────────────────
+  // ── Delete account (role-aware) ────────────────────────────────────────────
 
   const deleteAccount = useCallback(async () => {
     if (!user) return;
-    const users = await readUsers();
-    const filtered = users.filter((u) => u.id !== user.id);
-    await writeUsers(filtered);
-    await AsyncStorage.removeItem(SESSION_KEY);
-    setUser(null);
-  }, [user]);
+
+    if (user.role === "client") {
+      // Client: 30-day soft delete
+      const token = await getAuthToken();
+      if (token && API_BASE) {
+        const res = await fetch(`${API_BASE}/profile`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}) as Record<string, string>);
+          throw new Error((data as any).message || "فشل في حذف الحساب");
+        }
+      }
+      // Remove from local store and clear session
+      const users = await readUsers();
+      await writeUsers(users.filter((u) => u.id !== user.id));
+      await AsyncStorage.multiRemove([SESSION_KEY, JWT_KEY]);
+      setUser(null);
+    } else if (user.role === "lawyer") {
+      // Lawyer: submit deletion request to admin queue
+      const token = await getAuthToken();
+      if (token && API_BASE) {
+        const res = await fetch(`${API_BASE}/profile/deletion-request`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}) as Record<string, string>);
+          const errMsg = ((data as any).error as string) ?? "";
+          if (!errMsg.includes("قيد المراجعة")) {
+            throw new Error(errMsg || "فشل في تقديم طلب الحذف");
+          }
+        }
+      }
+      // Mark pending locally — do NOT log out
+      const updatedUser: User = { ...user, deletionPendingRequest: true };
+      await persist(updatedUser);
+      const users = await readUsers();
+      const idx = users.findIndex((u) => u.id === user.id);
+      if (idx !== -1) {
+        (users[idx] as any).deletionPendingRequest = true;
+        await writeUsers(users);
+      }
+    }
+  }, [user, getAuthToken, persist]);
 
   // ── Update user ────────────────────────────────────────────────────────────
 
   const updateUser = useCallback(
     async (updates: Partial<User>) => {
       if (!user) return;
+
+      // For JWT users, make server the authority for server-persisted fields.
+      // Await the PATCH and throw on error so the caller sees the failure
+      // before any local state is committed.
+      const token = await getAuthToken();
+      if (token && API_BASE) {
+        const apiUpdates: Record<string, unknown> = {};
+        if (updates.name !== undefined) apiUpdates.name = updates.name;
+        if (updates.phone !== undefined) apiUpdates.phone = updates.phone;
+        if (updates.country !== undefined) apiUpdates.country = updates.country;
+        if (Object.keys(apiUpdates).length > 0) {
+          const res = await fetch(`${API_BASE}/profile`, {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(apiUpdates),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as {
+              message?: string;
+              error?: string;
+            };
+            throw new Error(
+              body.message ?? body.error ?? "فشل تحديث الملف الشخصي",
+            );
+          }
+        }
+      }
+
+      // Commit to local state only after server confirms (or for non-API fields)
       const updated: User = { ...user, ...updates };
       await persist(updated);
       const users = await readUsers();
@@ -405,7 +513,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await writeUsers(users);
       }
     },
-    [user, persist]
+    [user, persist, getAuthToken],
   );
 
   // ── Password reset ─────────────────────────────────────────────────────────

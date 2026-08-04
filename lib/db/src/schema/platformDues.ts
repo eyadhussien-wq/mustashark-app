@@ -28,7 +28,6 @@ export const platformDuesTable = pgTable("platform_dues", {
     .unique(),
   officeId: text("office_id").references(() => officesTable.id),
   lawyerId: text("lawyer_id")
-    .notNull()
     .references(() => usersTable.id),
   grossAmount: numeric("gross_amount", { precision: 10, scale: 2 }).notNull(),
   commissionRate: numeric("commission_rate", { precision: 5, scale: 4 })

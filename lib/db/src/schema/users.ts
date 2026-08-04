@@ -33,6 +33,11 @@ export const usersTable = pgTable("users", {
     .notNull()
     .default("active"),
   statusReason: text("status_reason"),
+  // Soft-delete for clients (30-day window)
+  deletedAt: timestamp("deleted_at"),
+  deletionScheduledAt: timestamp("deletion_scheduled_at"),
+  // Lawyer deletion request rejection note from admin
+  deletionRejectionNote: text("deletion_rejection_note"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -140,8 +140,43 @@ export async function socialAuth(req: Request, res: Response) {
       });
       dbUser = await findUser(provider, providerUser.id, providerUser.email);
     } else {
+      // Soft-delete reactivation: client logged back in within 30-day window
+      if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
+        const now = new Date();
+        if (dbUser.deletionScheduledAt > now) {
+          // Reactivate — clear soft-delete fields
+          await db
+            .update(usersTable)
+            .set({
+              deletedAt: null,
+              deletionScheduledAt: null,
+              accountStatus: "active",
+              updatedAt: now,
+            })
+            .where(eq(usersTable.id, dbUser.id));
+          dbUser = await findUser(provider, providerUser.id, providerUser.email);
+          req.log.info({ userId: dbUser?.id }, "soft-deleted account reactivated on login");
+        } else {
+          // 30-day window has passed — account permanently deleted
+          return res.status(403).json({
+            ok: false,
+            error: "account_permanently_deleted",
+            message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً.",
+          });
+        }
+      }
+
+      // Block login if account is hard-terminated (non-soft-delete termination)
+      if (dbUser && dbUser.accountStatus === "terminated" && !dbUser.deletedAt) {
+        return res.status(403).json({
+          ok: false,
+          error: "account_terminated",
+          message: "عذراً، تم إيقاف هذا الحساب. يرجى التواصل مع الدعم.",
+        });
+      }
+
       // Update provider info if this is a new social link to an existing email account
-      if (dbUser.authProvider === "local" || !dbUser.providerId) {
+      if (dbUser && (dbUser.authProvider === "local" || !dbUser.providerId)) {
         await db
           .update(usersTable)
           .set({ authProvider: provider, providerId: providerUser.id, updatedAt: new Date() })
@@ -151,6 +186,24 @@ export async function socialAuth(req: Request, res: Response) {
 
     if (!dbUser) {
       return res.status(500).json({ ok: false, error: "user_creation_failed" });
+    }
+
+    // ── RBAC: block cross-portal login ────────────────────────────────────────
+    if (dbUser.role !== "admin" && dbUser.role !== role) {
+      if (dbUser.role === "lawyer" && role === "client") {
+        return res.status(403).json({
+          ok: false,
+          error: "role_mismatch",
+          message: "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين.",
+        });
+      }
+      if (dbUser.role === "client" && role === "lawyer") {
+        return res.status(403).json({
+          ok: false,
+          error: "role_mismatch",
+          message: "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء.",
+        });
+      }
     }
 
     // 3. Issue JWT
@@ -173,6 +226,7 @@ export async function socialAuth(req: Request, res: Response) {
         role: dbUser.role,
         country: dbUser.country,
         authProvider: dbUser.authProvider,
+        deletionRejectionNote: dbUser.deletionRejectionNote ?? null,
         createdAt: dbUser.createdAt,
       },
     });
