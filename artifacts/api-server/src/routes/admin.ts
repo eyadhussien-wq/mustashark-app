@@ -27,6 +27,11 @@ import {
   approveProfileChange,
   rejectProfileChange,
 } from "../controllers/adminProfileChangeRequests";
+import {
+  listPendingReviews,
+  approveReview,
+  rejectReview,
+} from "../controllers/adminReviews";
 
 const adminRouter = Router();
 
@@ -95,5 +100,10 @@ adminRouter.post(
   requireAdmin,
   rejectProfileChange,
 );
+
+// ── Text review moderation ────────────────────────────────────────────────────
+adminRouter.get("/admin/reviews", requireAdmin, listPendingReviews);
+adminRouter.post("/admin/reviews/:id/approve", requireAdmin, approveReview);
+adminRouter.post("/admin/reviews/:id/reject", requireAdmin, rejectReview);
 
 export default adminRouter;

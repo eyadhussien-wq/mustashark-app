@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -20,8 +20,27 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getCurrency, rateLabel } from "@/utils/currency";
+import { WhatsAppSupportCard } from "@/components/WhatsAppSupportCard";
 
 const C = colors.light;
+
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+  : "";
+
+interface ReviewItem {
+  id: string;
+  stars: number;
+  comment: string | null;
+  createdAt: string;
+  clientName: string;
+}
+
+interface LiveReviewsData {
+  rating: string | null;
+  reviewsCount: number;
+  reviews: ReviewItem[];
+}
 
 const TYPES = [
   { id: "video" as const, labelAR: "مكالمة فيديو", labelEN: "Video Call", icon: "video" },
@@ -76,6 +95,27 @@ export default function LawyerDetail() {
   const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
   const availableTypes = TYPES.filter((t) => channels[t.id]);
   const defaultType = availableTypes[0]?.id ?? "chat";
+
+  const [liveReviews, setLiveReviews] = useState<LiveReviewsData | null>(null);
+
+  // Fetch live aggregate + approved text reviews from server
+  useEffect(() => {
+    if (!id || !API_BASE) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/lawyers/${id}/reviews`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.ok) {
+          setLiveReviews({
+            rating: data.rating,
+            reviewsCount: data.reviewsCount,
+            reviews: data.reviews ?? [],
+          });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id]);
 
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -189,7 +229,14 @@ export default function LawyerDetail() {
               <View style={[styles.lawyerMeta, { flexDirection: rowDir }]}>
                 <View style={styles.ratingBadge}>
                   <Feather name="star" size={12} color={C.gold} />
-                  <Text style={styles.ratingText}>{lawyer.rating}</Text>
+                  <Text style={styles.ratingText}>
+                    {liveReviews?.rating ?? lawyer.rating ?? "—"}
+                  </Text>
+                  {(liveReviews?.reviewsCount ?? 0) > 0 && (
+                    <Text style={styles.reviewCountText}>
+                      ({liveReviews!.reviewsCount})
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.lawyerCountry}>
                   {lawyer.country === "qatar" ? "🇶🇦 " + t("qatar") : "🇯🇴 " + t("jordan")}
@@ -209,6 +256,50 @@ export default function LawyerDetail() {
             </View>
           )}
         </View>
+
+        {/* ── Reviews & support section ─────────────────────────────── */}
+        {(liveReviews?.reviewsCount ?? 0) > 0 && (
+          <View style={styles.reviewsSection}>
+            <View style={styles.reviewsHeader}>
+              <Feather name="star" size={15} color={C.gold} />
+              <Text style={styles.reviewsTitle}>
+                تقييمات العملاء ({liveReviews!.reviewsCount})
+              </Text>
+              <View style={styles.ratingPill}>
+                <Text style={styles.ratingPillText}>{liveReviews!.rating}</Text>
+                <Text style={styles.ratingPillSub}>/5</Text>
+              </View>
+            </View>
+
+            {liveReviews!.reviews.length > 0 &&
+              liveReviews!.reviews.map((r) => (
+                <View key={r.id} style={styles.reviewCard}>
+                  <View style={styles.reviewStars}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Feather key={s} name="star" size={11}
+                        color={s <= r.stars ? C.gold : C.border} />
+                    ))}
+                  </View>
+                  {!!r.comment && (
+                    <Text style={styles.reviewComment}>{r.comment}</Text>
+                  )}
+                  <Text style={styles.reviewMeta}>
+                    {r.clientName} •{" "}
+                    {new Date(r.createdAt).toLocaleDateString("ar-EG", {
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Text>
+                </View>
+              ))}
+          </View>
+        )}
+
+        {/* ── Formal complaints (WhatsApp + email) ────────────────────── */}
+        <WhatsAppSupportCard
+          role="client"
+          title="الشكاوى الرسمية ضد المحامي"
+        />
 
         {/* Date selection */}
         <View style={styles.section}>
@@ -407,6 +498,7 @@ const styles = StyleSheet.create({
   lawyerMeta: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   ratingBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEF9EC", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   ratingText: { fontSize: 12, color: C.gold, fontFamily: "Inter_700Bold" },
+  reviewCountText: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   lawyerCountry: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   price: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.navy },
@@ -422,6 +514,38 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
     textAlign: "right",
+  },
+
+  // ── Reviews section ──────────────────────────────────────────────
+  reviewsSection: {
+    backgroundColor: C.card, borderRadius: colors.radius,
+    borderWidth: 1, borderColor: C.border,
+    padding: 16, marginBottom: 16, gap: 12,
+  },
+  reviewsHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+  },
+  reviewsTitle: {
+    flex: 1, fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground,
+  },
+  ratingPill: {
+    flexDirection: "row", alignItems: "baseline", gap: 2,
+    backgroundColor: "#FEF9EC", paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, borderWidth: 1, borderColor: "rgba(201,160,53,0.25)",
+  },
+  ratingPillText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.gold },
+  ratingPillSub: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
+  reviewCard: {
+    backgroundColor: C.background, borderRadius: 10,
+    borderWidth: 1, borderColor: C.border, padding: 12, gap: 6,
+  },
+  reviewStars: { flexDirection: "row", gap: 3 },
+  reviewComment: {
+    fontSize: 13, color: C.foreground, fontFamily: "Inter_400Regular",
+    lineHeight: 20, textAlign: "right",
+  },
+  reviewMeta: {
+    fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right",
   },
 
   section: { marginBottom: 22 },

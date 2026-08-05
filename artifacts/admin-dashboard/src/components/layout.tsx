@@ -12,6 +12,7 @@ import {
   Wallet,
   Trash2,
   FilePenLine,
+  Star,
   LogOut,
   Menu
 } from "lucide-react";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { href: "/dues", label: "المستحقات", icon: Wallet },
   { href: "/deletion-requests", label: "طلبات الحذف", icon: Trash2, badge: "deletion" as const },
   { href: "/profile-changes", label: "تعديلات الملف", icon: FilePenLine, badge: "profileChanges" as const },
+  { href: "/reviews", label: "التعليقات", icon: Star, badge: "reviews" as const },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -71,11 +73,29 @@ export function Layout({ children }: { children: ReactNode }) {
   });
   const profileChangesCount = profileChangesData?.count ?? 0;
 
+  // Live count badge for pending text reviews
+  const { data: reviewsData } = useQuery({
+    queryKey: ["admin-reviews-count"],
+    queryFn: async () => {
+      const t = localStorage.getItem("admin_token");
+      if (!t) return { count: 0 };
+      const res = await fetch("/api/admin/reviews", {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) return { count: 0 };
+      return res.json() as Promise<{ count: number }>;
+    },
+    enabled: !!token,
+    refetchInterval: 30_000,
+  });
+  const reviewsCount = reviewsData?.count ?? 0;
+
   if (!token) return null;
 
   const badgeCounts: Record<string, number> = {
     deletion: deletionCount,
     profileChanges: profileChangesCount,
+    reviews: reviewsCount,
   };
 
   const NavLinks = () => (

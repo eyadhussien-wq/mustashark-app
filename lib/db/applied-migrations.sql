@@ -58,6 +58,33 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- 11. Lawyer aggregate review columns on users
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS rating NUMERIC(3, 1),
+  ADD COLUMN IF NOT EXISTS reviews_count INTEGER NOT NULL DEFAULT 0;
+
+-- 12. Comment status enum
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'comment_status') THEN
+    CREATE TYPE comment_status AS ENUM ('none', 'pending', 'approved', 'rejected');
+  END IF;
+END $$;
+
+-- 13. Lawyer reviews table
+CREATE TABLE IF NOT EXISTS lawyer_reviews (
+  id TEXT PRIMARY KEY,
+  consultation_id TEXT NOT NULL,
+  client_id TEXT NOT NULL REFERENCES users(id),
+  lawyer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stars INTEGER NOT NULL CHECK (stars >= 1 AND stars <= 5),
+  comment TEXT,
+  comment_status comment_status NOT NULL DEFAULT 'none',
+  reviewed_by TEXT REFERENCES users(id),
+  reviewed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  CONSTRAINT lawyer_reviews_client_consultation_unique UNIQUE (client_id, consultation_id)
+);
+
 -- 10. Lawyer profile change requests table
 CREATE TABLE IF NOT EXISTS lawyer_profile_change_requests (
   id TEXT PRIMARY KEY,

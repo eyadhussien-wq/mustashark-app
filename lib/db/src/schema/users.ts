@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, pgEnum, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, pgEnum, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -37,6 +37,9 @@ export const usersTable = pgTable("users", {
   specialization: text("specialization"),
   bio: text("bio"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
+  // Lawyer aggregate review stats (updated on every new review)
+  rating: numeric("rating", { precision: 3, scale: 1 }),
+  reviewsCount: integer("reviews_count").notNull().default(0),
   // Soft-delete for clients (30-day window)
   deletedAt: timestamp("deleted_at"),
   deletionScheduledAt: timestamp("deletion_scheduled_at"),

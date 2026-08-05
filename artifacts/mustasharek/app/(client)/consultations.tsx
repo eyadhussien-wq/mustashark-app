@@ -6,12 +6,10 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -23,6 +21,10 @@ import { useData, type Consultation } from "@/contexts/DataContext";
 
 const C = colors.light;
 type Tab = "active" | "archive";
+
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+  : "";
 
 // ── Star Rating ──────────────────────────────────────────────────────────────
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -76,12 +78,12 @@ const starStyles = StyleSheet.create({
 const STAR_LABELS: Record<number, string> = { 1: "ضعيف", 2: "مقبول", 3: "جيد", 4: "جيد جداً", 5: "ممتاز" };
 
 // ── Rating Modal ─────────────────────────────────────────────────────────────
+// Text comments are off by default — stars only
 function RatingModal({ consultation, onSubmit, onSkip }: {
-  consultation: Consultation; onSubmit: (s: number, c: string) => void; onSkip: () => void;
+  consultation: Consultation; onSubmit: (s: number) => void; onSkip: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [stars, setStars] = useState(0);
-  const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const slideAnim = useRef(new Animated.Value(80)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -97,60 +99,48 @@ function RatingModal({ consultation, onSubmit, onSkip }: {
     if (stars === 0) return;
     setSubmitting(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onSubmit(stars, comment);
+    onSubmit(stars);
   }
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onSkip}>
       <Animated.View style={[styles.ratingOverlay, { opacity: fadeAnim }]}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ width: "100%" }}>
-          <Animated.View style={[styles.ratingSheet, { paddingBottom: insets.bottom + 20, transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.ratingHeader}>
-              <View style={styles.ratingStarBg}><Feather name="award" size={28} color={C.gold} /></View>
-              <Text style={styles.ratingTitle}>قيّم تجربتك مع المحامي</Text>
-              <Text style={styles.ratingSubtitle}>{consultation.lawyerName}</Text>
-              <Text style={styles.ratingConsultMeta}>{consultation.subject} • {consultation.lawyerSpecialization}</Text>
-            </View>
-            <View style={styles.starsSection}>
-              <StarRating value={stars} onChange={setStars} />
-              {stars > 0 && <Text style={styles.starLabel}>{STAR_LABELS[stars]}</Text>}
-            </View>
-            <View style={styles.commentSection}>
-              <Text style={styles.commentLabel}>أضف تعليقك (اختياري)</Text>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="شارك تجربتك مع هذا المحامي..."
-                placeholderTextColor={C.mutedForeground}
-                value={comment} onChangeText={setComment}
-                multiline numberOfLines={3} textAlignVertical="top" textAlign="right"
-              />
-            </View>
-            <View style={styles.ratingActions}>
-              <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
-                <Text style={styles.skipBtnText}>تخطّى</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  stars === 0 && styles.submitBtnDisabled,
-                  submitting && { opacity: 0.7 },
-                ]}
-                onPress={handleSubmit}
-                disabled={stars === 0 || submitting}
-                activeOpacity={0.85}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Feather name="send" size={15} color="#fff" />
-                    <Text style={styles.submitBtnText}>إرسال التقييم</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
+        <Animated.View style={[styles.ratingSheet, { paddingBottom: insets.bottom + 20, transform: [{ translateY: slideAnim }] }]}>
+          <View style={styles.ratingHeader}>
+            <View style={styles.ratingStarBg}><Feather name="award" size={28} color={C.gold} /></View>
+            <Text style={styles.ratingTitle}>قيّم تجربتك مع المحامي</Text>
+            <Text style={styles.ratingSubtitle}>{consultation.lawyerName}</Text>
+            <Text style={styles.ratingConsultMeta}>{consultation.subject} • {consultation.lawyerSpecialization}</Text>
+          </View>
+          <View style={styles.starsSection}>
+            <StarRating value={stars} onChange={setStars} />
+            {stars > 0 && <Text style={styles.starLabel}>{STAR_LABELS[stars]}</Text>}
+          </View>
+          <View style={styles.ratingActions}>
+            <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+              <Text style={styles.skipBtnText}>تخطّى</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.submitBtn,
+                stars === 0 && styles.submitBtnDisabled,
+                submitting && { opacity: 0.7 },
+              ]}
+              onPress={handleSubmit}
+              disabled={stars === 0 || submitting}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Feather name="send" size={15} color="#fff" />
+                  <Text style={styles.submitBtnText}>إرسال التقييم</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </Animated.View>
     </Modal>
   );
@@ -160,7 +150,7 @@ function RatingModal({ consultation, onSubmit, onSkip }: {
 export default function ClientConsultations() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const { consultations, rateLawyer, refreshData } = useData();
   const [tab, setTab] = useState<Tab>("active");
   const [pendingRating, setPendingRating] = useState<Consultation | null>(null);
@@ -201,9 +191,29 @@ export default function ClientConsultations() {
     if (toRate) setPendingRating(toRate);
   }, [myConsultations, ratingDone]);
 
-  async function handleRatingSubmit(stars: number, comment: string) {
+  async function handleRatingSubmit(stars: number) {
     if (!pendingRating) return;
-    await rateLawyer(pendingRating.id, stars, comment);
+    // Persist to real API (best-effort; local state updates regardless)
+    if (API_BASE) {
+      try {
+        const token = await getAuthToken();
+        await fetch(`${API_BASE}/reviews`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token ?? ""}`,
+          },
+          body: JSON.stringify({
+            consultationId: pendingRating.id,
+            lawyerId: pendingRating.lawyerId,
+            stars,
+          }),
+        });
+      } catch {
+        // Silent — local state still gets updated below
+      }
+    }
+    await rateLawyer(pendingRating.id, stars, "");
     setRatingDone((prev) => new Set(prev).add(pendingRating.id));
     setPendingRating(null);
     await refreshData();
