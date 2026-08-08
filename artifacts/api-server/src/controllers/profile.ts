@@ -8,6 +8,19 @@ import {
 import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+// تعريف واجهة الطلب الموسعة لدعم مصادقة المستخدم وسجل الأخطاء (Pino logger)
+interface AuthenticatedRequest extends Request {
+  authUser?: {
+    userId: string;
+    role: "client" | "lawyer" | "admin";
+    [key: string]: any;
+  };
+  log: {
+    info: (obj: object, msg: string) => void;
+    error: (err: unknown, msg: string) => void;
+  };
+}
+
 // Fields that require admin approval before going live on a lawyer's public profile
 const MODERATED_LAWYER_FIELDS = [
   "specialization",
@@ -36,7 +49,7 @@ const updateProfileSchema = z.object({
     .nullable(),
 });
 
-export async function updateProfile(req: Request, res: Response) {
+export async function updateProfile(req: AuthenticatedRequest, res: Response) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -45,19 +58,19 @@ export async function updateProfile(req: Request, res: Response) {
 
   const parsed = updateProfileSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({
-        ok: false,
-        error: "validation_error",
-        issues: parsed.error.issues,
-      });
+    return res.status(400).json({
+      ok: false,
+      error: "validation_error",
+      issues: parsed.error.issues,
+    });
   }
 
   const { name, phone, country, specialization, bio, hourlyRate } = parsed.data;
 
   // Immediate updates (name/phone/country for all; nothing lawyer-specific here)
-  const immediateUpdates: Record<string, unknown> = { updatedAt: new Date() };
+  const immediateUpdates: Partial<typeof usersTable.$inferInsert> = {
+    updatedAt: new Date(),
+  };
   if (name !== undefined) immediateUpdates.name = name;
   if (phone !== undefined) immediateUpdates.phone = phone;
   if (country !== undefined) immediateUpdates.country = country;
@@ -80,7 +93,7 @@ export async function updateProfile(req: Request, res: Response) {
     // Apply immediate updates
     const [updated] = await db
       .update(usersTable)
-      .set(immediateUpdates as any)
+      .set(immediateUpdates)
       .where(eq(usersTable.id, userId))
       .returning();
 
@@ -203,7 +216,10 @@ export async function updateProfile(req: Request, res: Response) {
 // ── GET /api/profile/pending-changes ─────────────────────────────────────────
 // Returns the lawyer's own pending and recently-rejected change requests.
 
-export async function getPendingChanges(req: Request, res: Response) {
+export async function getPendingChanges(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -271,7 +287,10 @@ export async function getPendingChanges(req: Request, res: Response) {
 
 // ── DELETE /api/profile  (client only — 30-day soft delete) ──────────────────
 
-export async function softDeleteClient(req: Request, res: Response) {
+export async function softDeleteClient(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -315,7 +334,10 @@ export async function softDeleteClient(req: Request, res: Response) {
 
 // ── POST /api/profile/deletion-request  (lawyer only) ────────────────────────
 
-export async function requestLawyerDeletion(req: Request, res: Response) {
+export async function requestLawyerDeletion(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -376,7 +398,10 @@ export async function requestLawyerDeletion(req: Request, res: Response) {
 
 // ── GET /api/profile/deletion-status  (lawyer only) ──────────────────────────
 
-export async function getDeletionStatus(req: Request, res: Response) {
+export async function getDeletionStatus(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -421,7 +446,10 @@ export async function getDeletionStatus(req: Request, res: Response) {
 
 // ── POST /api/profile/dismiss-rejection  (lawyer — clears rejection note) ────
 
-export async function dismissRejectionNote(req: Request, res: Response) {
+export async function dismissRejectionNote(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });

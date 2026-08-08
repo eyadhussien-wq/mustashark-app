@@ -225,88 +225,50 @@ export const recordJoin = async (req: Request, res: Response) => {
     const { bookingId } = req.body;
 
     if (!bookingId) {
-      return res.status(400).json({
-        ok: false,
-        error: "bookingId_is_required",
-      });
+      return res
+        .status(400)
+        .json({ ok: false, error: "bookingId_is_required" });
     }
 
     const authUser = req.authUser!;
-
-    const [booking] = await db
-      .select()
-      .from(bookingsTable)
-      .where(eq(bookingsTable.id, bookingId))
-      .limit(1);
-
-    if (!booking) {
-      return res.status(404).json({
-        ok: false,
-        error: "booking_not_found",
-      });
-    }
-
-    if (booking.status !== "accepted") {
-      return res.status(400).json({
-        ok: false,
-        error: "booking_not_in_accepted_state",
-      });
-    }
-
     const now = new Date();
 
-    const updateData: {
-      updatedAt: Date;
-      lawyerJoinedAt?: Date;
-      clientJoinedAt?: Date;
-    } = {
-      updatedAt: now,
-    };
+    const result = await db
+      .update(bookingsTable)
+      .set({
+        updatedAt: now,
+        ...(authUser.role === "lawyer"
+          ? { lawyerJoinedAt: now }
+          : { clientJoinedAt: now }),
+      })
+      .where(
+        and(
+          eq(bookingsTable.id, bookingId),
+          eq(bookingsTable.status, "accepted"),
+          authUser.role === "lawyer"
+            ? isNull(bookingsTable.lawyerJoinedAt)
+            : isNull(bookingsTable.clientJoinedAt),
+          authUser.role === "lawyer"
+            ? eq(bookingsTable.lawyerId, authUser.id)
+            : eq(bookingsTable.clientId, authUser.id),
+        ),
+      )
+      .returning();
 
-    if (booking.lawyerId === authUser.id) {
-      if (booking.lawyerJoinedAt) {
-        return res.json({
-          ok: true,
-          booking,
-          message: "already_recorded",
-        });
-      }
-
-      updateData.lawyerJoinedAt = now;
-    } else if (booking.clientId === authUser.id) {
-      if (booking.clientJoinedAt) {
-        return res.json({
-          ok: true,
-          booking,
-          message: "already_recorded",
-        });
-      }
-
-      updateData.clientJoinedAt = now;
-    } else {
-      return res.status(403).json({
+    if (result.length === 0) {
+      return res.status(400).json({
         ok: false,
-        error: "unauthorized_action",
+        error: "cannot_record_join_invalid_state_or_already_recorded",
       });
     }
-
-    const [updated] = await db
-      .update(bookingsTable)
-      .set(updateData)
-      .where(eq(bookingsTable.id, bookingId))
-      .returning();
 
     return res.json({
       ok: true,
-      booking: updated,
+      booking: result[0],
     });
   } catch (error) {
     console.error("Record Join Error:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: "internal_server_error",
-    });
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
 
