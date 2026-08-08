@@ -33,18 +33,13 @@ export default function ClientHome() {
   const [spec, setSpec] = useState("الكل");
   const [refreshing, setRefreshing] = useState(false);
 
-  const myConsultations = useMemo(
-    () => consultations.filter((c) => c.clientId === user?.id),
-    [consultations, user?.id]
-  );
-
+  const myConsultations = useMemo(() => consultations.filter((c) => c.clientId === user?.id), [consultations, user?.id]);
   const upcoming = useMemo(
     () => myConsultations
       .filter((c) => c.status === "accepted" || c.status === "pending")
       .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)),
     [myConsultations]
   );
-
   const nextConsultation = upcoming[0];
 
   const filtered = useMemo(() => lawyers.filter((l) => {
@@ -70,16 +65,15 @@ export default function ClientHome() {
       <FlatList
         data={filtered}
         keyExtractor={(l) => l.id}
-        renderItem={({ item }) => (
-          <LawyerCard lawyer={item} onPress={() => router.push(`/lawyer/${item.id}`)} />
-        )}
+        renderItem={({ item }) => <LawyerCard lawyer={item} onPress={() => router.push(`/lawyer/${item.id}`)} />}
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + (Platform.OS === "web" ? 100 : 80) }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.gold} colors={[C.navy, C.gold]} />}
         ListHeaderComponent={
           <>
-            <View style={styles.headerBar}>
-              <View style={styles.headerCopy}>
+            <View style={styles.brandHeader}>
+              <View style={styles.brandCopy}>
+                <Text style={styles.brandEyebrow}>مستشارك</Text>
                 <Text style={styles.greeting}>أهلاً، {user?.name?.split(" ")[0] || "بك"}</Text>
                 <Text style={styles.greetingSub}>كل ما تحتاجه لاستشارتك القانونية</Text>
               </View>
@@ -89,19 +83,10 @@ export default function ClientHome() {
             </View>
 
             {nextConsultation ? (
-              <TouchableOpacity
-                style={styles.nextCard}
-                activeOpacity={0.9}
-                onPress={() => router.push(`/consultation/${nextConsultation.id}`)}
-              >
+              <TouchableOpacity style={styles.nextCard} activeOpacity={0.9} onPress={() => router.push(`/consultation/${nextConsultation.id}`)}>
                 <View style={styles.nextTop}>
-                  <View style={styles.nextLabelRow}>
-                    <View style={styles.liveDot} />
-                    <Text style={styles.nextLabel}>الاستشارة القادمة</Text>
-                  </View>
-                  <Text style={styles.nextStatus}>
-                    {nextConsultation.status === "accepted" ? "مؤكدة" : "بانتظار القبول"}
-                  </Text>
+                  <View style={styles.nextLabelRow}><View style={styles.liveDot} /><Text style={styles.nextLabel}>الاستشارة القادمة</Text></View>
+                  <Text style={styles.nextStatus}>{nextConsultation.status === "accepted" ? "مؤكدة" : "بانتظار القبول"}</Text>
                 </View>
                 <Text style={styles.nextLawyer}>{nextConsultation.lawyerName}</Text>
                 <Text style={styles.nextSpecialization}>{nextConsultation.lawyerSpecialization}</Text>
@@ -110,69 +95,33 @@ export default function ClientHome() {
                   <Meta icon="clock" text={nextConsultation.time} />
                   <Meta icon={nextConsultation.type === "video" ? "video" : nextConsultation.type === "phone" ? "phone" : "message-square"} text={nextConsultation.type === "video" ? "فيديو" : nextConsultation.type === "phone" ? "هاتف" : "محادثة"} />
                 </View>
-                <View style={styles.nextAction}>
-                  <Text style={styles.nextActionText}>عرض تفاصيل الاستشارة</Text>
-                  <Feather name="arrow-left" size={16} color="#fff" />
-                </View>
+                <View style={styles.nextAction}><Text style={styles.nextActionText}>عرض تفاصيل الاستشارة</Text><Feather name="arrow-left" size={16} color="#fff" /></View>
               </TouchableOpacity>
             ) : (
               <View style={styles.noBookingCard}>
                 <View style={styles.noBookingIcon}><Feather name="calendar" size={20} color={C.primary} /></View>
-                <View style={styles.noBookingCopy}>
-                  <Text style={styles.noBookingTitle}>لا توجد استشارة قادمة</Text>
-                  <Text style={styles.noBookingText}>اختر محاميًا مناسبًا وابدأ حجز استشارتك.</Text>
-                </View>
+                <View style={styles.noBookingCopy}><Text style={styles.noBookingTitle}>لا توجد استشارة قادمة</Text><Text style={styles.noBookingText}>اختر محاميًا مناسبًا وابدأ حجز استشارتك.</Text></View>
               </View>
             )}
 
             <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>ابحث عن محامٍ</Text>
-                <Text style={styles.sectionSubtitle}>اختر المختص المناسب لاحتياجك</Text>
-              </View>
+              <View><Text style={styles.sectionTitle}>ابحث عن محامٍ</Text><Text style={styles.sectionSubtitle}>اختر المختص المناسب لاحتياجك</Text></View>
               <View style={styles.resultCount}><Text style={styles.resultCountText}>{filtered.length}</Text></View>
             </View>
 
             <View style={styles.searchBar}>
               <Feather name="search" size={17} color={C.mutedForeground} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="اسم المحامي أو التخصص"
-                value={search}
-                onChangeText={setSearch}
-                placeholderTextColor={C.mutedForeground}
-                returnKeyType="search"
-              />
+              <TextInput style={styles.searchInput} placeholder="اسم المحامي أو التخصص" value={search} onChangeText={setSearch} placeholderTextColor={C.mutedForeground} returnKeyType="search" />
               {!!search && <TouchableOpacity onPress={() => setSearch("")}><Feather name="x-circle" size={17} color={C.mutedForeground} /></TouchableOpacity>}
             </View>
 
             <View style={styles.filtersBlock}>
-              <FlatList
-                horizontal
-                inverted
-                showsHorizontalScrollIndicator={false}
-                data={COUNTRIES}
-                keyExtractor={(i) => i}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={[styles.chip, country === item && styles.chipActive]} onPress={() => setCountry(item)}>
-                    <Text style={[styles.chipText, country === item && styles.chipTextActive]}>{item}</Text>
-                  </TouchableOpacity>
-                )}
-                contentContainerStyle={styles.chipRow}
-              />
-              <FlatList
-                horizontal
-                inverted
-                showsHorizontalScrollIndicator={false}
-                data={SPECS}
-                keyExtractor={(i) => i}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={[styles.specChip, spec === item && styles.specChipActive]} onPress={() => setSpec(item)}>
-                    <Text style={[styles.specText, spec === item && styles.specTextActive]}>{item}</Text>
-                  </TouchableOpacity>
-                )}
-                contentContainerStyle={styles.chipRow}
-              />
+              <FlatList horizontal inverted showsHorizontalScrollIndicator={false} data={COUNTRIES} keyExtractor={(i) => i} renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.chip, country === item && styles.chipActive]} onPress={() => setCountry(item)}><Text style={[styles.chipText, country === item && styles.chipTextActive]}>{item}</Text></TouchableOpacity>
+              )} contentContainerStyle={styles.chipRow} />
+              <FlatList horizontal inverted showsHorizontalScrollIndicator={false} data={SPECS} keyExtractor={(i) => i} renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.specChip, spec === item && styles.specChipActive]} onPress={() => setSpec(item)}><Text style={[styles.specText, spec === item && styles.specTextActive]}>{item}</Text></TouchableOpacity>
+              )} contentContainerStyle={styles.chipRow} />
             </View>
           </>
         }
@@ -181,11 +130,7 @@ export default function ClientHome() {
             <View style={styles.emptyIcon}><Feather name="search" size={24} color={C.primary} /></View>
             <Text style={styles.emptyTitle}>لم نجد محاميًا مطابقًا</Text>
             <Text style={styles.emptyText}>جرّب تغيير التخصص أو الدولة أو عبارة البحث.</Text>
-            {(search || country !== "الكل" || spec !== "الكل") && (
-              <TouchableOpacity style={styles.resetButton} onPress={() => { setSearch(""); setCountry("الكل"); setSpec("الكل"); }}>
-                <Text style={styles.resetButtonText}>مسح الفلاتر</Text>
-              </TouchableOpacity>
-            )}
+            {(search || country !== "الكل" || spec !== "الكل") && <TouchableOpacity style={styles.resetButton} onPress={() => { setSearch(""); setCountry("الكل"); setSpec("الكل"); }}><Text style={styles.resetButtonText}>مسح الفلاتر</Text></TouchableOpacity>}
           </View>
         }
       />
@@ -200,13 +145,14 @@ function Meta({ icon, text }: { icon: string; text: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
   list: { paddingHorizontal: 20 },
-  headerBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 16 },
-  headerCopy: { flex: 1, alignItems: "flex-end" },
-  greeting: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
-  greetingSub: { fontSize: 13, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 3, textAlign: "right" },
-  logoBadge: { width: 50, height: 50, borderRadius: 25, backgroundColor: C.navy, borderWidth: 1.5, borderColor: C.gold, alignItems: "center", justifyContent: "center", marginLeft: 12 },
-  logoMini: { width: 34, height: 34, borderRadius: 17 },
-  nextCard: { backgroundColor: C.navy, borderRadius: 18, padding: 18, marginBottom: 24 },
+  brandHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.navy, borderRadius: 20, padding: 18, marginTop: 8, marginBottom: 16, borderWidth: 1, borderColor: "rgba(201,160,53,0.28)" },
+  brandCopy: { flex: 1, alignItems: "flex-end" },
+  brandEyebrow: { fontSize: 11, color: C.gold, fontFamily: "Inter_600SemiBold", textAlign: "right", marginBottom: 3 },
+  greeting: { fontSize: 21, fontFamily: "Inter_700Bold", color: "#fff", textAlign: "right" },
+  greetingSub: { fontSize: 12, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", marginTop: 4, textAlign: "right" },
+  logoBadge: { width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1.5, borderColor: C.gold, alignItems: "center", justifyContent: "center", marginLeft: 12 },
+  logoMini: { width: 43, height: 43, borderRadius: 22 },
+  nextCard: { backgroundColor: C.navy, borderRadius: 18, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: "rgba(201,160,53,0.42)" },
   nextTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   nextLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.gold },
@@ -227,8 +173,8 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   sectionTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
   sectionSubtitle: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 2 },
-  resultCount: { minWidth: 28, height: 28, borderRadius: 14, backgroundColor: "#EEF2F8", alignItems: "center", justifyContent: "center" },
-  resultCountText: { color: C.primary, fontSize: 12, fontFamily: "Inter_700Bold" },
+  resultCount: { minWidth: 30, height: 30, borderRadius: 15, backgroundColor: C.navy, alignItems: "center", justifyContent: "center" },
+  resultCountText: { color: C.gold, fontSize: 12, fontFamily: "Inter_700Bold" },
   searchBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 13, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12 },
   searchInput: { flex: 1, fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular", textAlign: "right", minHeight: 20 },
   filtersBlock: { marginBottom: 14, gap: 8 },
@@ -238,9 +184,9 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.mutedForeground },
   chipTextActive: { color: "#fff" },
   specChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: C.border, backgroundColor: C.card },
-  specChipActive: { backgroundColor: "#EEF2F8", borderColor: C.primary },
+  specChipActive: { backgroundColor: "#F8F1D9", borderColor: C.gold },
   specText: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.mutedForeground },
-  specTextActive: { color: C.primary },
+  specTextActive: { color: C.navy },
   empty: { alignItems: "center", paddingTop: 34, paddingBottom: 30 },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: "#EEF2F8", alignItems: "center", justifyContent: "center", marginBottom: 10 },
   emptyTitle: { fontSize: 14, color: C.foreground, fontFamily: "Inter_600SemiBold" },
