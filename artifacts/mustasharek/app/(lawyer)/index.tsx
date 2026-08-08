@@ -30,92 +30,60 @@ export default function LawyerDashboard() {
     setRefreshing(false);
   }, [refreshData]);
 
-  async function toggleAvailability() {
-    await updateUser({ available: !user?.available });
-  }
-
-  function goFiltered(status: string) {
-    router.push({ pathname: "/(lawyer)/requests", params: { initialFilter: status } });
-  }
+  async function toggleAvailability() { await updateUser({ available: !user?.available }); }
+  function goFiltered(status: string) { router.push({ pathname: "/(lawyer)/requests", params: { initialFilter: status } }); }
 
   return (
-    <ScrollView
-      style={styles.page}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: insets.bottom + (Platform.OS === "web" ? 100 : 80) }]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.gold} colors={[C.navy, C.gold]} />}
-    >
-      <View style={styles.header}>
+    <ScrollView style={styles.page} contentContainerStyle={[styles.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: insets.bottom + (Platform.OS === "web" ? 100 : 80) }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.gold} colors={[C.navy, C.gold]} />}>
+      <View style={styles.brandHeader}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>لوحة المحامي</Text>
+          <Text style={styles.brandEyebrow}>مستشارك</Text>
           <Text style={styles.greeting}>أهلاً، {user?.name?.split(" ").slice(0, 2).join(" ") || "بك"}</Text>
           <Text style={styles.spec}>{user?.specialization || "المحاماة"}</Text>
         </View>
-        <TouchableOpacity style={[styles.availBtn, !user?.available && styles.availBtnOff]} onPress={toggleAvailability} activeOpacity={0.85}>
-          <View style={[styles.availDot, !user?.available && styles.availDotOff]} />
-          <Text style={[styles.availText, !user?.available && styles.availTextOff]}>{user?.available ? "متاح للحجز" : "غير متاح"}</Text>
+        <TouchableOpacity style={styles.logoMark} onPress={() => router.push("/(lawyer)/profile")} activeOpacity={0.85}>
+          <Feather name="briefcase" size={22} color={C.gold} />
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={[styles.availabilityCard, !user?.available && styles.availabilityCardOff]} onPress={toggleAvailability} activeOpacity={0.88}>
+        <View style={[styles.availabilityIcon, !user?.available && styles.availabilityIconOff]}><View style={[styles.availDot, !user?.available && styles.availDotOff]} /></View>
+        <View style={styles.availabilityCopy}>
+          <Text style={[styles.availabilityTitle, !user?.available && styles.availabilityTitleOff]}>{user?.available ? "متاح لاستقبال الاستشارات" : "غير متاح لاستقبال الاستشارات"}</Text>
+          <Text style={styles.availabilityText}>اضغط لتغيير حالة الظهور للعملاء</Text>
+        </View>
+        <Feather name="chevron-left" size={18} color={user?.available ? C.success : C.warning} />
+      </TouchableOpacity>
+
       {user?.licenseVerified && (
         <View style={styles.licenseBadge}>
-          <View style={styles.licenseIcon}><Feather name="shield" size={14} color={C.success} /></View>
-          <View style={styles.licenseCopy}>
-            <Text style={styles.licenseTitle}>حساب موثّق</Text>
-            <Text style={styles.licenseText}>رخصة {user.licenseNumber}</Text>
-          </View>
+          <View style={styles.licenseIcon}><Feather name="shield" size={15} color={C.success} /></View>
+          <View style={styles.licenseCopy}><Text style={styles.licenseTitle}>محامٍ موثّق</Text><Text style={styles.licenseText}>رخصة {user.licenseNumber}</Text></View>
           <Feather name="check-circle" size={18} color={C.success} />
         </View>
       )}
 
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.sectionTitle}>ملخص العمل</Text>
-          <Text style={styles.sectionSubtitle}>نظرة سريعة على نشاطك الحالي</Text>
-        </View>
-      </View>
-
+      <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>لوحة العمل</Text><Text style={styles.sectionSubtitle}>أهم ما تحتاجه لإدارة يومك</Text></View></View>
       <View style={styles.statsGrid}>
         <StatCard icon="clock" label="طلبات جديدة" value={pending.toString()} tone="warning" onPress={() => goFiltered("pending")} />
-        <StatCard icon="calendar" label="استشارات قادمة" value={accepted.toString()} tone="success" onPress={() => goFiltered("accepted")} />
-        <StatCard icon="check-circle" label="مكتملة" value={completed.toString()} tone="primary" onPress={() => goFiltered("completed")} />
-        <StatCard icon="trending-up" label={`إيرادات (${user?.country ? rateLabel(user.country) : "ر.ق"})`} value={totalEarnings.toString()} tone="gold" onPress={() => goFiltered("completed")} />
+        <StatCard icon="calendar" label="استشارات قادمة" value={accepted.toString()} tone="primary" onPress={() => goFiltered("accepted")} />
+        <StatCard icon="check-circle" label="استشارات مكتملة" value={completed.toString()} tone="success" onPress={() => goFiltered("completed")} />
+        <StatCard icon="trending-up" label={`الإيرادات (${user?.country ? rateLabel(user.country) : "ر.ق"})`} value={totalEarnings.toString()} tone="gold" onPress={() => goFiltered("completed")} />
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <TouchableOpacity style={styles.linkButton} onPress={() => goFiltered("accepted")}>
-            <Text style={styles.sectionLink}>عرض الكل</Text>
-            <Feather name="arrow-left" size={13} color={C.primary} />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.sectionTitle}>الاستشارات القادمة</Text>
-            <Text style={styles.sectionSubtitle}>المواعيد التي تحتاج متابعتها</Text>
-          </View>
+          <TouchableOpacity style={styles.linkButton} onPress={() => goFiltered("accepted")}><Text style={styles.sectionLink}>عرض الكل</Text><Feather name="arrow-left" size={13} color={C.primary} /></TouchableOpacity>
+          <View><Text style={styles.sectionTitle}>الاستشارات القادمة</Text><Text style={styles.sectionSubtitle}>المواعيد التي تحتاج متابعتها</Text></View>
         </View>
-
         {upcoming.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}><Feather name="calendar" size={23} color={C.primary} /></View>
-            <Text style={styles.emptyTitle}>لا توجد استشارات قادمة</Text>
-            <Text style={styles.emptyText}>ستظهر مواعيدك المقبولة هنا تلقائيًا.</Text>
-          </View>
+          <View style={styles.emptyCard}><View style={styles.emptyIcon}><Feather name="calendar" size={23} color={C.primary} /></View><Text style={styles.emptyTitle}>لا توجد استشارات قادمة</Text><Text style={styles.emptyText}>ستظهر مواعيدك المقبولة هنا تلقائيًا.</Text></View>
         ) : upcoming.map((c) => (
           <TouchableOpacity key={c.id} style={styles.upcomingCard} onPress={() => router.push(`/consultation/${c.id}`)} activeOpacity={0.82}>
             <View style={styles.cardMain}>
-              <View style={styles.cardTitleRow}>
-                <Text style={styles.clientName}>{c.clientName}</Text>
-                <View style={styles.paymentBadge}>
-                  <View style={[styles.paymentDot, c.paymentStatus !== "paid" && styles.paymentDotPending]} />
-                  <Text style={[styles.paymentText, c.paymentStatus !== "paid" && styles.paymentTextPending]}>{c.paymentStatus === "paid" ? "مدفوع" : "غير مدفوع"}</Text>
-                </View>
-              </View>
+              <View style={styles.cardTitleRow}><Text style={styles.clientName}>{c.clientName}</Text><View style={styles.paymentBadge}><View style={[styles.paymentDot, c.paymentStatus !== "paid" && styles.paymentDotPending]} /><Text style={[styles.paymentText, c.paymentStatus !== "paid" && styles.paymentTextPending]}>{c.paymentStatus === "paid" ? "مدفوع" : "غير مدفوع"}</Text></View></View>
               <Text style={styles.subject} numberOfLines={1}>{c.subject}</Text>
-              <View style={styles.metaRow}>
-                <Meta icon="calendar" text={c.date} />
-                <Meta icon="clock" text={c.time} />
-                <Meta icon={c.type === "video" ? "video" : c.type === "phone" ? "phone" : "message-square"} text={c.type === "video" ? "فيديو" : c.type === "phone" ? "هاتف" : "محادثة"} />
-              </View>
+              <View style={styles.metaRow}><Meta icon="calendar" text={c.date} /><Meta icon="clock" text={c.time} /><Meta icon={c.type === "video" ? "video" : c.type === "phone" ? "phone" : "message-square"} text={c.type === "video" ? "فيديو" : c.type === "phone" ? "هاتف" : "محادثة"} /></View>
             </View>
             <View style={styles.typeIcon}><Feather name={c.type === "video" ? "video" : c.type === "phone" ? "phone" : "message-square"} size={16} color={C.primary} /></View>
             <Feather name="chevron-left" size={15} color={C.mutedForeground} />
@@ -126,40 +94,32 @@ export default function LawyerDashboard() {
   );
 }
 
-function Meta({ icon, text }: { icon: string; text: string }) {
-  return <View style={styles.meta}><Feather name={icon as any} size={12} color={C.mutedForeground} /><Text style={styles.metaText}>{text}</Text></View>;
-}
+function Meta({ icon, text }: { icon: string; text: string }) { return <View style={styles.meta}><Feather name={icon as any} size={12} color={C.mutedForeground} /><Text style={styles.metaText}>{text}</Text></View>; }
 
 function StatCard({ icon, label, value, tone, onPress }: { icon: string; label: string; value: string; tone: "warning" | "success" | "primary" | "gold"; onPress: () => void }) {
-  const palette = {
-    warning: { color: C.warning, bg: "#FEF7E7" },
-    success: { color: C.success, bg: "#ECFDF5" },
-    primary: { color: C.primary, bg: "#EEF2F8" },
-    gold: { color: C.gold, bg: "#FEF9EC" },
-  }[tone];
-  return (
-    <TouchableOpacity style={[styles.statCard, { backgroundColor: palette.bg }]} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.statTop}><Feather name={icon as any} size={19} color={palette.color} /><Feather name="chevron-left" size={13} color={palette.color} style={{ opacity: 0.45 }} /></View>
-      <Text style={[styles.statValue, { color: palette.color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
+  const palette = { warning: { color: C.warning, bg: "#FEF7E7" }, success: { color: C.success, bg: "#ECFDF5" }, primary: { color: C.primary, bg: "#EEF2F8" }, gold: { color: C.gold, bg: "#F8F1D9" } }[tone];
+  return <TouchableOpacity style={[styles.statCard, { backgroundColor: palette.bg }]} onPress={onPress} activeOpacity={0.8}><View style={styles.statTop}><Feather name={icon as any} size={19} color={palette.color} /><Feather name="chevron-left" size={13} color={palette.color} style={{ opacity: 0.45 }} /></View><Text style={[styles.statValue, { color: palette.color }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></TouchableOpacity>;
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: C.background },
   container: { paddingHorizontal: 20 },
-  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingVertical: 18 },
+  brandHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.navy, borderRadius: 20, padding: 18, marginTop: 8, marginBottom: 14, borderWidth: 1, borderColor: "rgba(201,160,53,0.32)" },
   headerCopy: { flex: 1, alignItems: "flex-end" },
-  eyebrow: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_500Medium", textAlign: "right", marginBottom: 2 },
-  greeting: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
-  spec: { fontSize: 13, color: C.primary, fontFamily: "Inter_500Medium", textAlign: "right", marginTop: 2 },
-  availBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: C.success, marginTop: 2 },
-  availBtnOff: { backgroundColor: "#FEF7E7", borderColor: C.warning },
-  availDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.success },
+  brandEyebrow: { fontSize: 11, color: C.gold, fontFamily: "Inter_600SemiBold", textAlign: "right", marginBottom: 3 },
+  greeting: { fontSize: 21, fontFamily: "Inter_700Bold", color: "#fff", textAlign: "right" },
+  spec: { fontSize: 12, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 4 },
+  logoMark: { width: 54, height: 54, borderRadius: 27, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1.5, borderColor: C.gold, alignItems: "center", justifyContent: "center", marginLeft: 12 },
+  availabilityCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#ECFDF5", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.success, marginBottom: 14, gap: 11 },
+  availabilityCardOff: { backgroundColor: "#FEF7E7", borderColor: C.warning },
+  availabilityIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" },
+  availabilityIconOff: { backgroundColor: "#FEF3C7" },
+  availDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.success },
   availDotOff: { backgroundColor: C.warning },
-  availText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.success },
-  availTextOff: { color: C.warning },
+  availabilityCopy: { flex: 1, alignItems: "flex-end" },
+  availabilityTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.success, textAlign: "right" },
+  availabilityTitleOff: { color: C.warning },
+  availabilityText: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 2 },
   licenseBadge: { flexDirection: "row", alignItems: "center", backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 12, marginBottom: 22, gap: 10 },
   licenseIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center" },
   licenseCopy: { flex: 1, alignItems: "flex-end" },
