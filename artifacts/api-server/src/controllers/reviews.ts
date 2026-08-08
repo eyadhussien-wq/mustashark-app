@@ -1,6 +1,6 @@
 import { type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { usersTable, lawyerReviewsTable } from "@workspace/db";
+import { usersTable, lawyerReviewsTable, bookingsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 
@@ -21,13 +21,49 @@ export async function submitReview(req: Request, res: Response) {
 
   const parsed = submitReviewSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
+    return res
+      .status(400)
+      .json({
+        ok: false,
+        error: "validation_error",
+        issues: parsed.error.issues,
+      });
   }
 
   const { consultationId, lawyerId, stars } = parsed.data;
 
   try {
-    // Verify lawyer exists and is a lawyer
+    // 1. Verify that the consultation/booking actually exists, belongs to this client,
+    // involves this lawyer, and is strictly in "completed" status.
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, consultationId))
+      .limit(1);
+
+    if (!booking) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "consultation_not_found" });
+    }
+
+    if (booking.clientId !== authUser.userId) {
+      return res
+        .status(403)
+        .json({ ok: false, error: "forbidden_not_booking_client" });
+    }
+
+    if (booking.lawyerId !== lawyerId) {
+      return res.status(400).json({ ok: false, error: "lawyer_mismatch" });
+    }
+
+    if (booking.status !== "completed") {
+      return res
+        .status(400)
+        .json({ ok: false, error: "consultation_not_completed" });
+    }
+
+    // 2. Verify lawyer exists and is a lawyer
     const [lawyer] = await db
       .select({ id: usersTable.id })
       .from(usersTable)
@@ -38,7 +74,7 @@ export async function submitReview(req: Request, res: Response) {
       return res.status(404).json({ ok: false, error: "lawyer_not_found" });
     }
 
-    // Check for duplicate review (one per consultation per client)
+    // 3. Check for duplicate review (one per consultation per client)
     const [existing] = await db
       .select({ id: lawyerReviewsTable.id })
       .from(lawyerReviewsTable)
@@ -84,7 +120,10 @@ export async function submitReview(req: Request, res: Response) {
         .where(eq(usersTable.id, lawyerId));
     });
 
-    req.log.info({ lawyerId, stars, clientId: authUser.userId }, "review submitted");
+    req.log.info(
+      { lawyerId, stars, clientId: authUser.userId, consultationId },
+      "review submitted securely",
+    );
     return res.status(201).json({ ok: true });
   } catch (err) {
     req.log.error(err, "submitReview failed");
@@ -99,7 +138,10 @@ export async function getLawyerReviews(req: Request, res: Response) {
 
   try {
     const [lawyer] = await db
-      .select({ rating: usersTable.rating, reviewsCount: usersTable.reviewsCount })
+      .select({
+        rating: usersTable.rating,
+        reviewsCount: usersTable.reviewsCount,
+      })
       .from(usersTable)
       .where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer")))
       .limit(1);
