@@ -1,0 +1,96 @@
+name: Apply email consultation channel
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'feat(lawyer): add email consultation channel'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch email consultation flow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def patch(path, replacements):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              for old, new in replacements:
+                  if old not in s:
+                      raise SystemExit(f'Patch target not found in {path}: {old[:120]}')
+                  s = s.replace(old, new, 1)
+              p.write_text(s, encoding='utf-8')
+
+          patch('artifacts/mustasharek/app/lawyer/[id].tsx', [
+              (
+                  '  { id: "chat" as const, labelAR: "محادثة نصية", labelEN: "Chat", icon: "message-square" },\n];',
+                  '  { id: "chat" as const, labelAR: "محادثة نصية", labelEN: "Chat", icon: "message-square" },\n  { id: "email" as const, labelAR: "رسالة عبر البريد الإلكتروني", labelEN: "Email message", icon: "mail" },\n];'
+              ),
+              (
+                  '  const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };',
+                  '  const channels = (lawyer?.channels ?? { chat: true, phone: true, video: true, email: true }) as { chat: boolean; phone: boolean; video: boolean; email?: boolean };'
+              ),
+              (
+                  '  const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">(defaultType);',
+                  '  const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat" | "email">(defaultType);'
+              ),
+              (
+                  '        attachments: JSON.stringify(attachments.map((a) => ({ name: a.name, uri: a.uri }))),',
+                  '        attachments: JSON.stringify(attachments.map((a) => ({ name: a.name, uri: a.uri }))),\n        clientEmail: user.email ?? "",\n        lawyerEmail: lawyer!.email ?? "",'
+              ),
+              (
+                  '  typesRow: { flexDirection: "row", gap: 10 },',
+                  '  typesRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },'
+              ),
+              (
+                  '    flex: 1, alignItems: "center", gap: 8,\n    paddingVertical: 16, borderRadius: 14,',
+                  '    width: "48%", flexGrow: 1, minWidth: 140, alignItems: "center", gap: 8,\n    paddingVertical: 16, borderRadius: 14,'
+              ),
+          ])
+
+          patch('artifacts/mustasharek/app/payment.tsx', [
+              (
+                  '    attachments: string;\n  }>();',
+                  '    attachments: string;\n    clientEmail: string;\n    lawyerEmail: string;\n  }>();'
+              ),
+              (
+                  '        attachments: parsedAttachments,\n      });',
+                  '        attachments: parsedAttachments,\n        clientEmail: params.clientEmail ?? "",\n        lawyerEmail: params.lawyerEmail ?? "",\n      } as any);'
+              ),
+              (
+                  '                : "محادثة نصية"\n              }',
+                  '                : params.type === "email" ? "رسالة عبر البريد الإلكتروني"\n                : "محادثة نصية"\n              }'
+              ),
+          ])
+
+          patch('artifacts/mustasharek/app/consultation/[id].tsx', [
+              (
+                  '  chat:  { label: "محادثة نصية",    icon: "message-square", color: "#059669" },\n};',
+                  '  chat:  { label: "محادثة نصية",    icon: "message-square", color: "#059669" },\n  email: { label: "رسالة عبر البريد الإلكتروني", icon: "mail", color: "#C9A035" },\n};'
+              ),
+              (
+                  '  const typeLabels: Record<string, string> = { video: "مكالمة فيديو", phone: "مكالمة هاتفية", chat: "محادثة نصية" };',
+                  '  const typeLabels: Record<string, string> = { video: "مكالمة فيديو", phone: "مكالمة هاتفية", chat: "محادثة نصية", email: "رسالة عبر البريد الإلكتروني" };'
+              ),
+              (
+                  '  async function handleJoinMeeting() {',
+                  '  async function handleEmailMessage() {\n    const emailData = consult as typeof consult & { clientEmail?: string; lawyerEmail?: string };\n    const recipient = isLawyer ? emailData.clientEmail : emailData.lawyerEmail;\n    if (!recipient) {\n      Alert.alert("البريد الإلكتروني غير متوفر", "لا يوجد بريد إلكتروني مسجل للطرف الآخر في هذه الاستشارة.");\n      return;\n    }\n    const subject = encodeURIComponent(`استشارة مستشارك ${consult.serialNumber ?? consult.id} — ${consult.subject}`);\n    const body = encodeURIComponent(`مرحباً،\\n\\nبخصوص الاستشارة رقم ${consult.serialNumber ?? consult.id}.\\nالموضوع: ${consult.subject}\\nالتاريخ: ${consult.date} — ${consult.time}\\n\\nمع التحية،\\nمنصة مستشارك`);\n    const mailto = `mailto:${recipient}?subject=${subject}&body=${body}`;\n    try {\n      const supported = await Linking.canOpenURL(mailto);\n      if (supported) await Linking.openURL(mailto);\n      else Alert.alert("تعذر فتح البريد", `يمكنك مراسلة: ${recipient}`);\n    } catch {\n      Alert.alert("تعذر فتح البريد", `يمكنك مراسلة: ${recipient}`);\n    }\n  }\n\n  // ── Join Meeting ──\n  async function handleJoinMeeting() {'
+              ),
+              (
+                  '        {/* Section 1 */}',
+                  '        {consult.type === "email" && (\n          <View style={styles.emailCard}>\n            <View style={styles.emailHeader}>\n              <View style={styles.emailIcon}>\n                <Feather name="mail" size={20} color={C.gold} />\n              </View>\n              <View style={{ flex: 1 }}>\n                <Text style={styles.emailTitle}>التواصل عبر البريد الإلكتروني</Text>\n                <Text style={styles.emailSubtitle}>يمكنك مراسلة الطرف الآخر مباشرةً بخصوص هذه الاستشارة.</Text>\n              </View>\n            </View>\n            <View style={styles.emailAddressRow}>\n              <Feather name="at-sign" size={14} color={C.mutedForeground} />\n              <Text style={styles.emailAddress} numberOfLines={1}>{isLawyer ? ((consult as any).clientEmail ?? "غير متوفر") : ((consult as any).lawyerEmail ?? "غير متوفر")}</Text>\n            </View>\n            <TouchableOpacity style={styles.emailBtn} onPress={handleEmailMessage} activeOpacity={0.85}>\n              <Feather name="send" size={16} color="#fff" />\n              <Text style={styles.emailBtnText}>إرسال رسالة عبر البريد الإلكتروني</Text>\n            </TouchableOpacity>\n          </View>\n        )}\n\n        {/* Section 1 */}'
+              ),
+              (
+                  '  // ── Meeting card ──\n  meetCard:',
+                  '  // ── Email communication card ──\n  emailCard: {\n    backgroundColor: C.card, borderRadius: colors.radius, borderWidth: 1, borderColor: "rgba(201,160,53,0.35)",\n    padding: 18, gap: 12, marginBottom: 16,\n  },\n  emailHeader: { flexDirection: "row", alignItems: "center", gap: 12 },\n  emailIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(201,160,53,0.12)", alignItems: "center", justifyContent: "center" },\n  emailTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },\n  emailSubtitle: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 3, textAlign: "right" },\n  emailAddressRow: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: C.background, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },\n  emailAddress: { flex: 1, fontSize: 12, color: C.primary, fontFamily: "Inter_500Medium", textAlign: "right" },\n  emailBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.navy, borderRadius: 12, paddingVertical: 13 },\n  emailBtnText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#fff" },\n\n  // ── Meeting card ──\n  meetCard:'
+              ),
+          ])
