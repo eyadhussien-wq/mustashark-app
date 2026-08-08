@@ -150,11 +150,17 @@ export const confirmBooking = async (req: Request, res: Response) => {
       });
     }
 
+    let googleMeetLink: string | null = null;
+    if (booking.type === "video") {
+      googleMeetLink = `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}`;
+    }
+
     const updatedBooking = await db.transaction(async (tx) => {
       const [updated] = await tx
         .update(bookingsTable)
         .set({
           status: "accepted",
+          googleMeetLink,
           updatedAt: new Date(),
         })
         .where(
