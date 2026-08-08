@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "../middlewares/requireAuth"; // تأكد من المسار الصحيح لملف المصادقة لديك
 import {
   confirmBooking,
   recordJoin,
@@ -7,8 +8,9 @@ import {
 
 const bookingsRouter = Router();
 
-bookingsRouter.post("/bookings/confirm", confirmBooking);
-bookingsRouter.post("/bookings/join", recordJoin);
-bookingsRouter.post("/bookings/check-absence", checkLawyerAbsence);
+// تطبيق المصادقة الإجبارية على جميع مسارات الحجوزات الحساسة
+bookingsRouter.post("/bookings/confirm", requireAuth, confirmBooking);
+bookingsRouter.post("/bookings/join", requireAuth, recordJoin);
+bookingsRouter.post("/bookings/check-absence", requireAuth, checkLawyerAbsence);
 
 export default bookingsRouter;
