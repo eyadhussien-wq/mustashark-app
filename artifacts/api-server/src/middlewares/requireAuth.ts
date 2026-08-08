@@ -1,79 +1,85 @@
-import { type Request, type Response, type NextFunction } from "express";
-import { verifyToken, type JwtPayload } from "../lib/jwt";
-import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
+import { db, usersTable } from "@workspace/db";
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      authUser?: JwtPayload;
+      authUser?: typeof usersTable.$inferSelect & { userId?: string };
     }
   }
 }
 
-export async function requireAuth(
+interface JwtPayload {
+  userId: string;
+}
+
+export const requireAuth = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): Promise<void> {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    res.status(401).json({ ok: false, error: "غير مصرح" });
-    return;
-  }
-
-  const token = header.slice("Bearer ".length).trim();
-
-  let payload: JwtPayload;
+): Promise<Response | void> => {
   try {
-    payload = verifyToken(token);
-  } catch {
-    res
-      .status(401)
-      .json({ ok: false, error: "انتهت الجلسة، يرجى تسجيل الدخول مجدداً" });
-    return;
-  }
-
-  // Validate current account status — reject soft-deleted/terminated accounts
-  // even if their JWT is still cryptographically valid.
-  try {
-    const [row] = await db
-      .select({
-        deletedAt: usersTable.deletedAt,
-        accountStatus: usersTable.accountStatus,
-      })
-      .from(usersTable)
-      .where(eq(usersTable.id, payload.userId))
-      .limit(1);
-
-    if (!row) {
-      res.status(401).json({ ok: false, error: "الحساب غير موجود" });
-      return;
-    }
-
-    if (row.deletedAt !== null) {
-      res.status(401).json({
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
         ok: false,
-        error:
-          "تم جدولة حذف حسابك. يرجى تسجيل الدخول مجدداً لاسترداده خلال فترة السماح.",
+        error: "missing_or_invalid_authorization_header",
       });
-      return;
     }
 
-    if (row.accountStatus === "terminated") {
-      res
+    const token = authHeader.split(" ")[1];
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      console.error(
+        "CRITICAL: JWT_SECRET is not configured in environment variables.",
+      );
+      return res.status(500).json({
+        ok: false,
+        error: "authentication_configuration_error",
+      });
+    }
+
+    const payload = jwt.verify(token, secret) as JwtPayload;
+
+    if (!payload || !payload.userId) {
+      return res
         .status(401)
-        .json({ ok: false, error: "تم إنهاء حسابك ولا يمكن الوصول إليه" });
-      return;
+        .json({ ok: false, error: "invalid_token_payload" });
     }
-  } catch (dbErr) {
-    // DB unreachable — fail open (log and proceed) so the middleware does not
-    // take down all authenticated endpoints during a transient DB outage.
-    req.log?.warn({ err: dbErr }, "requireAuth: DB status check failed, proceeding");
-  }
 
-  req.authUser = payload;
-  next();
-}
+    try {
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, payload.userId))
+        .limit(1);
+
+      if (!user || user.deletedAt || user.accountStatus !== "active") {
+        return res
+          .status(403)
+          .json({ ok: false, error: "unauthorized_or_suspended" });
+      }
+
+      req.authUser = { ...user, userId: user.id };
+      return next();
+    } catch (dbErr) {
+      console.error("Auth DB Error:", dbErr);
+      return res.status(503).json({
+        ok: false,
+        error: "authentication_service_unavailable",
+      });
+    }
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ ok: false, error: "token_expired" });
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ ok: false, error: "invalid_token" });
+    }
+    console.error("Authentication Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
+  }
+};

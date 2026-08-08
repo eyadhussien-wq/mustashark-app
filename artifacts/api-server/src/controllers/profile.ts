@@ -6,35 +6,52 @@ import {
   lawyerProfileChangeRequestsTable,
 } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 // Fields that require admin approval before going live on a lawyer's public profile
-const MODERATED_LAWYER_FIELDS = ["specialization", "bio", "hourlyRate"] as const;
+const MODERATED_LAWYER_FIELDS = [
+  "specialization",
+  "bio",
+  "hourlyRate",
+] as const;
 type ModeratedField = (typeof MODERATED_LAWYER_FIELDS)[number];
 
 // ── PATCH /api/profile ────────────────────────────────────────────────────────
 
 const updateProfileSchema = z.object({
-  name: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(100).optional(),
+  name: z
+    .string()
+    .min(2, "الاسم يجب أن يكون حرفين على الأقل")
+    .max(100)
+    .optional(),
   phone: z.string().max(20).optional().nullable(),
   country: z.enum(["qatar", "jordan"]).optional().nullable(),
   // Lawyer-specific fields — queued for admin review, not applied directly
   specialization: z.string().max(200).optional().nullable(),
   bio: z.string().max(2000).optional().nullable(),
-  hourlyRate: z.number().positive("الأتعاب يجب أن تكون قيمة موجبة").optional().nullable(),
+  hourlyRate: z
+    .number()
+    .positive("الأتعاب يجب أن تكون قيمة موجبة")
+    .optional()
+    .nullable(),
 });
 
 export async function updateProfile(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
 
   const parsed = updateProfileSchema.safeParse(req.body);
   if (!parsed.success) {
     return res
       .status(400)
-      .json({ ok: false, error: "validation_error", issues: parsed.error.issues });
+      .json({
+        ok: false,
+        error: "validation_error",
+        issues: parsed.error.issues,
+      });
   }
 
   const { name, phone, country, specialization, bio, hourlyRate } = parsed.data;
@@ -55,7 +72,7 @@ export async function updateProfile(req: Request, res: Response) {
       const [row] = await db
         .select()
         .from(usersTable)
-        .where(eq(usersTable.id, authUser.userId))
+        .where(eq(usersTable.id, userId))
         .limit(1);
       currentUser = row ?? null;
     }
@@ -64,7 +81,7 @@ export async function updateProfile(req: Request, res: Response) {
     const [updated] = await db
       .update(usersTable)
       .set(immediateUpdates as any)
-      .where(eq(usersTable.id, authUser.userId))
+      .where(eq(usersTable.id, userId))
       .returning();
 
     if (!updated) {
@@ -89,7 +106,7 @@ export async function updateProfile(req: Request, res: Response) {
           .delete(lawyerProfileChangeRequestsTable)
           .where(
             and(
-              eq(lawyerProfileChangeRequestsTable.lawyerId, authUser.userId),
+              eq(lawyerProfileChangeRequestsTable.lawyerId, userId),
               eq(lawyerProfileChangeRequestsTable.field, field),
               eq(lawyerProfileChangeRequestsTable.status, "pending"),
             ),
@@ -103,8 +120,8 @@ export async function updateProfile(req: Request, res: Response) {
         if (oldVal !== newVal) {
           // Lawyer changed to a new value — queue a new request
           requestsToInsert.push({
-            id: `pcr-${authUser.userId.slice(0, 8)}-spec-${Date.now()}`,
-            lawyerId: authUser.userId,
+            id: `pcr-${userId.slice(0, 8)}-spec-${Date.now()}`,
+            lawyerId: userId,
             field: "specialization",
             oldValue: oldVal,
             newValue: newVal,
@@ -120,8 +137,8 @@ export async function updateProfile(req: Request, res: Response) {
         await cancelPending("bio");
         if (oldVal !== newVal) {
           requestsToInsert.push({
-            id: `pcr-${authUser.userId.slice(0, 8)}-bio-${Date.now()}`,
-            lawyerId: authUser.userId,
+            id: `pcr-${userId.slice(0, 8)}-bio-${Date.now()}`,
+            lawyerId: userId,
             field: "bio",
             oldValue: oldVal,
             newValue: newVal,
@@ -131,13 +148,15 @@ export async function updateProfile(req: Request, res: Response) {
       }
 
       if (hourlyRate !== undefined) {
-        const oldVal = currentUser.hourlyRate ? String(parseFloat(currentUser.hourlyRate)) : null;
+        const oldVal = currentUser.hourlyRate
+          ? String(parseFloat(currentUser.hourlyRate))
+          : null;
         const newVal = hourlyRate !== null ? String(hourlyRate) : null;
         await cancelPending("hourlyRate");
         if (oldVal !== newVal) {
           requestsToInsert.push({
-            id: `pcr-${authUser.userId.slice(0, 8)}-rate-${Date.now()}`,
-            lawyerId: authUser.userId,
+            id: `pcr-${userId.slice(0, 8)}-rate-${Date.now()}`,
+            lawyerId: userId,
             field: "hourlyRate",
             oldValue: oldVal,
             newValue: newVal,
@@ -147,12 +166,14 @@ export async function updateProfile(req: Request, res: Response) {
       }
 
       if (requestsToInsert.length > 0) {
-        await db.insert(lawyerProfileChangeRequestsTable).values(requestsToInsert);
+        await db
+          .insert(lawyerProfileChangeRequestsTable)
+          .values(requestsToInsert);
       }
     }
 
     req.log.info(
-      { userId: authUser.userId, pendingFields },
+      { userId, pendingFields },
       "profile updated (moderated fields queued)",
     );
 
@@ -184,21 +205,16 @@ export async function updateProfile(req: Request, res: Response) {
 
 export async function getPendingChanges(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
+
   if (authUser.role !== "lawyer") {
     return res.json({ ok: true, requests: [] });
   }
 
   try {
-    // Fetch all non-approved requests for this lawyer.
-    // - `pending` rows: the lawyer has a queued change awaiting admin review.
-    // - `rejected` rows WHERE reviewedBy IS NOT NULL: an admin explicitly rejected
-    //   the change. Rows without reviewedBy are system-cancelled (superseded/reverted)
-    //   and must not be shown.
-    // We then deduplicate to at most one entry per field: the pending one (if any)
-    // takes precedence, otherwise the latest admin rejection.
     const rows = await db
       .select({
         id: lawyerProfileChangeRequestsTable.id,
@@ -212,34 +228,39 @@ export async function getPendingChanges(req: Request, res: Response) {
       .from(lawyerProfileChangeRequestsTable)
       .where(
         and(
-          eq(lawyerProfileChangeRequestsTable.lawyerId, authUser.userId),
-          inArray(lawyerProfileChangeRequestsTable.status, ["pending", "rejected"]),
+          eq(lawyerProfileChangeRequestsTable.lawyerId, userId),
+          inArray(lawyerProfileChangeRequestsTable.status, [
+            "pending",
+            "rejected",
+          ]),
         ),
       )
       .orderBy(lawyerProfileChangeRequestsTable.createdAt);
 
     // Keep only relevant rows: pending (any reviewedBy) or admin-rejected
     const filtered = rows.filter(
-      (r) => r.status === "pending" || (r.status === "rejected" && r.reviewedBy !== null),
+      (r) =>
+        r.status === "pending" ||
+        (r.status === "rejected" && r.reviewedBy !== null),
     );
 
     // Deduplicate: one entry per field — pending wins over rejection; within same
     // status, keep the latest (rows are ordered ASC so last wins)
-    const byField = new Map<string, typeof filtered[0]>();
+    const byField = new Map<string, (typeof filtered)[0]>();
     for (const row of filtered) {
       const existing = byField.get(row.field);
       if (!existing) {
         byField.set(row.field, row);
       } else if (row.status === "pending") {
-        // Pending always beats a rejection
         byField.set(row.field, row);
       } else if (existing.status === "rejected") {
-        // Both rejected — keep the latest
         byField.set(row.field, row);
       }
     }
 
-    const requests = Array.from(byField.values()).map(({ reviewedBy: _rb, ...rest }) => rest);
+    const requests = Array.from(byField.values()).map(
+      ({ reviewedBy: _rb, ...rest }) => rest,
+    );
 
     return res.json({ ok: true, requests });
   } catch (err) {
@@ -252,9 +273,11 @@ export async function getPendingChanges(req: Request, res: Response) {
 
 export async function softDeleteClient(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
+
   if (authUser.role !== "client") {
     return res.status(403).json({
       ok: false,
@@ -274,12 +297,9 @@ export async function softDeleteClient(req: Request, res: Response) {
         accountStatus: "terminated",
         updatedAt: now,
       })
-      .where(eq(usersTable.id, authUser.userId));
+      .where(eq(usersTable.id, userId));
 
-    req.log.info(
-      { userId: authUser.userId, scheduledAt },
-      "client account soft-deleted",
-    );
+    req.log.info({ userId, scheduledAt }, "client account soft-deleted");
 
     return res.json({
       ok: true,
@@ -297,9 +317,11 @@ export async function softDeleteClient(req: Request, res: Response) {
 
 export async function requestLawyerDeletion(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
+
   if (authUser.role !== "lawyer") {
     return res
       .status(403)
@@ -313,7 +335,7 @@ export async function requestLawyerDeletion(req: Request, res: Response) {
       .from(lawyerDeletionRequestsTable)
       .where(
         and(
-          eq(lawyerDeletionRequestsTable.lawyerId, authUser.userId),
+          eq(lawyerDeletionRequestsTable.lawyerId, userId),
           eq(lawyerDeletionRequestsTable.status, "pending"),
         ),
       )
@@ -326,22 +348,19 @@ export async function requestLawyerDeletion(req: Request, res: Response) {
       });
     }
 
-    const requestId = `delreq-${authUser.userId.slice(0, 8)}-${Date.now()}`;
+    const requestId = `delreq-${userId.slice(0, 8)}-${Date.now()}`;
     const [request] = await db
       .insert(lawyerDeletionRequestsTable)
       .values({
         id: requestId,
-        lawyerId: authUser.userId,
+        lawyerId: userId,
         status: "pending",
         requestedAt: new Date(),
         createdAt: new Date(),
       })
       .returning();
 
-    req.log.info(
-      { requestId, lawyerId: authUser.userId },
-      "lawyer deletion requested",
-    );
+    req.log.info({ requestId, lawyerId: userId }, "lawyer deletion requested");
 
     return res.json({
       ok: true,
@@ -359,9 +378,10 @@ export async function requestLawyerDeletion(req: Request, res: Response) {
 
 export async function getDeletionStatus(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
 
   try {
     const [userRow] = await db
@@ -371,7 +391,7 @@ export async function getDeletionStatus(req: Request, res: Response) {
         deletionScheduledAt: usersTable.deletionScheduledAt,
       })
       .from(usersTable)
-      .where(eq(usersTable.id, authUser.userId))
+      .where(eq(usersTable.id, userId))
       .limit(1);
 
     const pendingRequest =
@@ -381,7 +401,7 @@ export async function getDeletionStatus(req: Request, res: Response) {
             .from(lawyerDeletionRequestsTable)
             .where(
               and(
-                eq(lawyerDeletionRequestsTable.lawyerId, authUser.userId),
+                eq(lawyerDeletionRequestsTable.lawyerId, userId),
                 eq(lawyerDeletionRequestsTable.status, "pending"),
               ),
             )
@@ -403,15 +423,16 @@ export async function getDeletionStatus(req: Request, res: Response) {
 
 export async function dismissRejectionNote(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser) {
+  if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
   }
+  const userId = authUser.userId;
 
   try {
     await db
       .update(usersTable)
       .set({ deletionRejectionNote: null, updatedAt: new Date() })
-      .where(eq(usersTable.id, authUser.userId));
+      .where(eq(usersTable.id, userId));
 
     return res.json({ ok: true });
   } catch (err) {

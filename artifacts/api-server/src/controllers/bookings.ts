@@ -1,47 +1,128 @@
-import { type Request, type Response } from "express";
+import { Request, Response } from "express";
+import { z } from "zod";
+import { eq, and, isNull } from "drizzle-orm";
+import crypto from "crypto";
 import { db } from "@workspace/db";
 import {
   bookingsTable,
   platformDuesTable,
   usersTable,
-  officesTable,
-} from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { z } from "zod/v4";
-import {
-  createMeetEvent,
-  cancelCalendarEvent,
-} from "../services/googleCalendar";
+  PLATFORM_COMMISSION_RATE,
+} from "@workspace/db/schema";
 
-const COMMISSION_RATE = 0.15;
-const ABSENCE_WINDOW_MINUTES = 15;
-
-// ── Confirm booking + create Google Meet event ───────────────────────────────
-
-const confirmSchema = z.object({
-  bookingId: z.string().min(1),
+const createBookingSchema = z.object({
+  lawyerId: z.string().min(1, "lawyerId is required"),
+  subject: z.string().min(1, "subject is required"),
+  description: z.string().optional(),
+  scheduledDate: z.string().min(1, "scheduledDate is required"),
+  scheduledTime: z.string().min(1, "scheduledTime is required"),
+  type: z.enum(["video", "chat", "phone"]),
+  officeId: z.string().optional(),
 });
 
-export async function confirmBooking(req: Request, res: Response) {
-  const parsed = confirmSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({
+const checkAbsenceSchema = z.object({
+  bookingId: z.string().min(1, "bookingId is required"),
+});
+
+export const createBooking = async (req: Request, res: Response) => {
+  try {
+    const parseResult = createBookingSchema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_input",
+        details: parseResult.error.errors,
+      });
+    }
+
+    const {
+      lawyerId,
+      subject,
+      description,
+      scheduledDate,
+      scheduledTime,
+      type,
+      officeId,
+    } = parseResult.data;
+
+    const authUser = req.authUser!;
+
+    const [lawyer] = await db
+      .select()
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.id, lawyerId),
+          eq(usersTable.role, "lawyer"),
+          eq(usersTable.accountStatus, "active"),
+          isNull(usersTable.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!lawyer) {
+      return res.status(404).json({
+        ok: false,
+        error: "lawyer_not_found_or_inactive",
+      });
+    }
+
+    const price = lawyer.hourlyRate ?? "0";
+
+    const bookingId = crypto.randomUUID();
+
+    const serialNumber = `BK-${Date.now()}-${crypto
+      .randomBytes(3)
+      .toString("hex")
+      .toUpperCase()}`;
+
+    const [newBooking] = await db
+      .insert(bookingsTable)
+      .values({
+        id: bookingId,
+        serialNumber,
+        clientId: authUser.id,
+        lawyerId,
+        officeId: officeId || null,
+        subject,
+        description: description || null,
+        scheduledDate,
+        scheduledTime,
+        status: "pending",
+        type,
+        price,
+        paymentStatus: "pending",
+      })
+      .returning();
+
+    return res.status(201).json({
+      ok: true,
+      booking: newBooking,
+    });
+  } catch (error) {
+    console.error("Create Booking Error:", error);
+
+    return res.status(500).json({
       ok: false,
-      error: "validation_error",
-      issues: parsed.error.issues,
+      error: "internal_server_error",
     });
   }
+};
 
-  const { bookingId } = parsed.data;
-  const authUser = (req as any).authUser;
-
-  let meetResult: {
-    googleMeetLink: string;
-    googleEventId: string;
-    isSimulated: boolean;
-  } | null = null;
-
+export const confirmBooking = async (req: Request, res: Response) => {
   try {
+    const { bookingId } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "bookingId_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
     const [booking] = await db
       .select()
       .from(bookingsTable)
@@ -49,66 +130,30 @@ export async function confirmBooking(req: Request, res: Response) {
       .limit(1);
 
     if (!booking) {
-      return res.status(404).json({ ok: false, error: "booking_not_found" });
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
     }
 
-    if (booking.lawyerId !== authUser.userId) {
-      return res
-        .status(403)
-        .json({ ok: false, error: "forbidden_not_booking_owner" });
+    if (booking.lawyerId !== authUser.id && authUser.role !== "admin") {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
     }
 
     if (booking.status !== "pending") {
       return res.status(400).json({
         ok: false,
-        error: "booking_already_processed_or_invalid_status",
+        error: "invalid_booking_status",
       });
     }
 
-    const grossAmount = Number(booking.price);
-    const lawyerId = booking.lawyerId;
-    const officeId = booking.officeId;
-
-    const [lawyerUser, clientUser] = await Promise.all([
-      lawyerId
-        ? db
-            .select()
-            .from(usersTable)
-            .where(eq(usersTable.id, lawyerId))
-            .limit(1)
-        : Promise.resolve([]),
-      booking.clientId
-        ? db
-            .select()
-            .from(usersTable)
-            .where(eq(usersTable.id, booking.clientId))
-            .limit(1)
-        : Promise.resolve([]),
-    ]);
-
-    const lawyerName = lawyerUser[0]?.name ?? lawyerId;
-    const clientName = clientUser[0]?.name ?? booking.clientId ?? "Client";
-
-    meetResult = await createMeetEvent({
-      bookingId: booking.id,
-      lawyerName: lawyerName,
-      clientName: clientName,
-      subject: booking.subject,
-      scheduledDate: booking.scheduledDate,
-      scheduledTime: booking.scheduledTime,
-      slotDurationMinutes: undefined,
-    });
-
-    const commissionAmount =
-      Math.round(grossAmount * COMMISSION_RATE * 100) / 100;
-    const dueId = `due-${bookingId}`;
-
-    await db.transaction(async (tx) => {
-      const updatedRows = await tx
+    const updatedBooking = await db.transaction(async (tx) => {
+      const [updated] = await tx
         .update(bookingsTable)
         .set({
-          googleMeetLink: meetResult!.googleMeetLink,
-          googleEventId: meetResult!.googleEventId,
           status: "accepted",
           updatedAt: new Date(),
         })
@@ -118,70 +163,70 @@ export async function confirmBooking(req: Request, res: Response) {
             eq(bookingsTable.status, "pending"),
           ),
         )
-        .returning({ id: bookingsTable.id });
+        .returning();
 
-      if (updatedRows.length === 0) {
-        throw new Error("CONCURRENT_UPDATE_CONFLICT");
+      if (!updated) {
+        throw new Error("ALREADY_PROCESSED");
       }
+
+      const grossAmount = booking.price;
+      const commissionRate = PLATFORM_COMMISSION_RATE;
+
+      const commissionAmount = String(
+        (Number(grossAmount) * Number(commissionRate)).toFixed(2),
+      );
 
       await tx
         .insert(platformDuesTable)
         .values({
-          id: dueId,
-          bookingId: bookingId,
-          officeId: officeId ?? null,
-          lawyerId: lawyerId,
-          grossAmount: grossAmount.toFixed(2),
-          commissionRate: COMMISSION_RATE.toFixed(4),
-          commissionAmount: commissionAmount.toFixed(2),
+          id: crypto.randomUUID(),
+          bookingId,
+          officeId: booking.officeId,
+          lawyerId: booking.lawyerId,
+          grossAmount,
+          commissionRate,
+          commissionAmount,
           status: "pending",
         })
         .onConflictDoNothing();
-    });
 
-    req.log.info(
-      {
-        bookingId: bookingId,
-        meetLink: meetResult.googleMeetLink,
-        isSimulated: meetResult.isSimulated,
-      },
-      "booking confirmed successfully with race-condition protection",
-    );
+      return updated;
+    });
 
     return res.json({
       ok: true,
-      googleMeetLink: meetResult.googleMeetLink,
-      googleEventId: meetResult.googleEventId,
-      isSimulated: meetResult.isSimulated,
-      commissionAmount,
+      booking: updatedBooking,
     });
-  } catch (err: any) {
-    req.log.error(err, "confirmBooking failed");
-
-    if (meetResult?.googleEventId) {
-      try {
-        await cancelCalendarEvent(meetResult.googleEventId);
-      } catch (cleanupErr) {
-        req.log.error(cleanupErr, "failed to cleanup google calendar event");
-      }
-    }
-
-    if (err.message === "CONCURRENT_UPDATE_CONFLICT") {
+  } catch (error: any) {
+    if (error?.message === "ALREADY_PROCESSED") {
       return res.status(409).json({
         ok: false,
-        error: "booking_already_processed_concurrently",
+        error: "already_processed_or_invalid_state",
       });
     }
 
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    console.error("Confirm Booking Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};
 
-// ── Check Lawyer Absence & Refund Protocol ───────────────────────────────────
-
-export async function checkLawyerAbsence(req: Request, res: Response) {
+export const recordJoin = async (req: Request, res: Response) => {
   try {
-    const bookingId = String(req.params.id);
+    const { bookingId } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "bookingId_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
     const [booking] = await db
       .select()
       .from(bookingsTable)
@@ -189,311 +234,440 @@ export async function checkLawyerAbsence(req: Request, res: Response) {
       .limit(1);
 
     if (!booking) {
-      return res.status(404).json({ ok: false, error: "booking_not_found" });
-    }
-
-    if (booking.status !== "accepted" || !booking.clientJoinedAt) {
-      return res.json({
-        ok: true,
-        action: "no_action",
-        reason:
-          booking.status !== "accepted"
-            ? "booking_not_active"
-            : "client_has_not_joined",
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
       });
     }
 
-    if (booking.lawyerJoinedAt) {
-      return res.json({
-        ok: true,
-        action: "no_action",
-        reason: "lawyer_already_joined",
+    if (booking.status !== "accepted") {
+      return res.status(400).json({
+        ok: false,
+        error: "booking_not_in_accepted_state",
       });
     }
 
-    const scheduledStart = new Date(
-      `${booking.scheduledDate}T${booking.scheduledTime}`,
-    );
-    const elapsedMinutes =
-      (Date.now() - scheduledStart.getTime()) / (1000 * 60);
-
-    if (elapsedMinutes < ABSENCE_WINDOW_MINUTES) {
-      const remainingMinutes = Math.ceil(
-        ABSENCE_WINDOW_MINUTES - elapsedMinutes,
-      );
-      return res.json({
-        ok: true,
-        action: "no_action",
-        reason: "absence_window_not_elapsed",
-        remainingMinutes,
-      });
-    }
-
-    const grossAmount = Number(booking.price);
     const now = new Date();
 
-    await db
+    const updateData: {
+      updatedAt: Date;
+      lawyerJoinedAt?: Date;
+      clientJoinedAt?: Date;
+    } = {
+      updatedAt: now,
+    };
+
+    if (booking.lawyerId === authUser.id) {
+      if (booking.lawyerJoinedAt) {
+        return res.json({
+          ok: true,
+          booking,
+          message: "already_recorded",
+        });
+      }
+
+      updateData.lawyerJoinedAt = now;
+    } else if (booking.clientId === authUser.id) {
+      if (booking.clientJoinedAt) {
+        return res.json({
+          ok: true,
+          booking,
+          message: "already_recorded",
+        });
+      }
+
+      updateData.clientJoinedAt = now;
+    } else {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
+    }
+
+    const [updated] = await db
       .update(bookingsTable)
-      .set({
-        status: "refunded_absent",
-        paymentStatus: "refunded",
-        googleMeetLink: null,
-        actualEndTime: now,
-        updatedAt: now,
-      })
-      .where(eq(bookingsTable.id, bookingId));
-
-    if (booking.googleEventId) {
-      await cancelCalendarEvent(booking.googleEventId);
-    }
-
-    await db
-      .update(platformDuesTable)
-      .set({ status: "waived", updatedAt: now })
-      .where(
-        and(
-          eq(platformDuesTable.bookingId, bookingId),
-          eq(platformDuesTable.status, "pending"),
-        ),
-      );
-
-    if (booking.officeId) {
-      await checkOfficeKillSwitch(booking.officeId);
-    }
-
-    req.log.warn(
-      {
-        bookingId,
-        lawyerId: booking.lawyerId,
-        grossAmount,
-        elapsedMinutes: Math.round(elapsedMinutes),
-      },
-      "lawyer absence confirmed — 100% refund triggered",
-    );
+      .set(updateData)
+      .where(eq(bookingsTable.id, bookingId))
+      .returning();
 
     return res.json({
       ok: true,
-      action: "refunded_absent",
-      bookingId,
-      refundAmount: grossAmount,
-      message:
-        "لم يحضر المحامي خلال 15 دقيقة — تم استرداد 100% إلى محفظة العميل وإلغاء جلسة Google Meet",
+      booking: updated,
     });
-  } catch (err) {
-    req.log.error(err, "checkLawyerAbsence failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
+  } catch (error) {
+    console.error("Record Join Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};
 
-// ── Internal: kill switch check for an office after absence ──────────────────
-
-async function checkOfficeKillSwitch(officeId: string) {
+export const checkLawyerAbsence = async (req: Request, res: Response) => {
   try {
-    const [office] = await db
-      .select()
-      .from(officesTable)
-      .where(eq(officesTable.id, officeId))
-      .limit(1);
-    if (!office || office.isSuspended) return;
+    const parseResult = checkAbsenceSchema.safeParse(req.body);
 
-    const threshold = Number(office.debtThreshold);
-    const [summary] = await db
-      .select({
-        totalPending: db.$count(
-          platformDuesTable,
-          eq(platformDuesTable.status, "pending"),
-        ),
-      })
-      .from(platformDuesTable)
-      .where(
-        and(
-          eq(platformDuesTable.officeId, officeId),
-          eq(platformDuesTable.status, "pending"),
-        ),
-      );
-
-    const totalPending = Number(summary?.totalPending ?? 0);
-    if (totalPending > threshold) {
-      await db
-        .update(officesTable)
-        .set({
-          isSuspended: true,
-          suspensionReason: `تجاوز حد الديون المعلقة (${totalPending} > ${threshold}) — تفعيل تلقائي`,
-          updatedAt: new Date(),
-        })
-        .where(eq(officesTable.id, officeId));
+    if (!parseResult.success) {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_input",
+        details: parseResult.error.errors,
+      });
     }
-  } catch {
-    // Non-critical — don't propagate
-  }
-}
 
-// ── Other Bookings Controllers ───────────────────────────────────────────────
+    const { bookingId } = parseResult.data;
+    const authUser = req.authUser!;
 
-export async function getBookings(req: Request, res: Response) {
-  try {
-    const authUser = (req as any).authUser;
-    const allBookings = await db.select().from(bookingsTable);
-    const filtered = allBookings.filter(
-      (b) => b.clientId === authUser.userId || b.lawyerId === authUser.userId,
-    );
-    return res.json({ ok: true, bookings: filtered });
-  } catch (err) {
-    req.log.error(err, "getBookings failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
-  }
-}
-
-export async function getBookingById(req: Request, res: Response) {
-  try {
-    const id = String(req.params.id);
     const [booking] = await db
       .select()
       .from(bookingsTable)
-      .where(eq(bookingsTable.id, id))
+      .where(eq(bookingsTable.id, bookingId))
       .limit(1);
 
     if (!booking) {
-      return res.status(404).json({ ok: false, error: "booking_not_found" });
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
     }
 
-    return res.json({ ok: true, booking });
-  } catch (err) {
-    req.log.error(err, "getBookingById failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
-  }
-}
+    if (booking.clientId !== authUser.id && authUser.role !== "admin") {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
+    }
 
-export async function createBooking(req: Request, res: Response) {
-  try {
-    const authUser = (req as any).authUser;
-    const body = req.body;
-    const id = `booking-${Date.now()}`;
-    const serialNumber = `SR-${Math.floor(100000 + Math.random() * 900000)}`;
+    if (!booking.clientJoinedAt) {
+      return res.status(400).json({
+        ok: false,
+        error: "client_did_not_join",
+      });
+    }
 
-    const [newBooking] = await db
-      .insert(bookingsTable)
-      .values({
-        id,
-        serialNumber,
-        clientId: authUser.userId,
-        lawyerId: body.lawyerId,
-        officeId: body.officeId,
-        subject: body.subject,
-        description: body.description,
-        scheduledDate: body.scheduledDate,
-        scheduledTime: body.scheduledTime,
-        type: body.type ?? "video",
-        price: body.price ?? "0.00",
-        status: "pending",
-        paymentStatus: "pending",
-      })
-      .returning();
+    const scheduledDateTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}`;
 
-    return res.json({ ok: true, booking: newBooking });
-  } catch (err) {
-    req.log.error(err, "createBooking failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
-  }
-}
+    const scheduledStartTime = new Date(scheduledDateTimeStr);
 
-export async function recordJoin(req: Request, res: Response) {
-  try {
-    const id = String(req.params.id);
-    const authUser = (req as any).authUser;
+    if (Number.isNaN(scheduledStartTime.getTime())) {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_scheduled_datetime",
+      });
+    }
+
     const now = new Date();
 
+    const diffMinutes = (now.getTime() - scheduledStartTime.getTime()) / 60000;
+
+    if (diffMinutes < 15) {
+      return res.status(400).json({
+        ok: false,
+        error: "wait_15_minutes_from_scheduled_start_before_claiming_absence",
+      });
+    }
+
+    const updatedBooking = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(bookingsTable)
+        .set({
+          status: "refunded_absent",
+          paymentStatus: "refunded",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(bookingsTable.id, bookingId),
+            eq(bookingsTable.status, "accepted"),
+            isNull(bookingsTable.lawyerJoinedAt),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new Error("ALREADY_PROCESSED");
+      }
+
+      await tx
+        .update(platformDuesTable)
+        .set({
+          status: "waived",
+          updatedAt: new Date(),
+        })
+        .where(eq(platformDuesTable.bookingId, bookingId));
+
+      return updated;
+    });
+
+    return res.json({
+      ok: true,
+      message: "lawyer_absent_refund_processed_successfully",
+      booking: updatedBooking,
+    });
+  } catch (error: any) {
+    if (error?.message === "ALREADY_PROCESSED") {
+      return res.status(409).json({
+        ok: false,
+        error: "already_processed_or_invalid_state",
+      });
+    }
+
+    console.error("Check Lawyer Absence Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
+  }
+};
+
+export const getBookingById = async (req: Request, res: Response) => {
+  try {
+    const rawBookingId = req.params.id;
+
+    const bookingId = Array.isArray(rawBookingId)
+      ? rawBookingId[0]
+      : rawBookingId;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "booking_id_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
     const [booking] = await db
       .select()
       .from(bookingsTable)
-      .where(eq(bookingsTable.id, id))
+      .where(eq(bookingsTable.id, bookingId))
       .limit(1);
 
     if (!booking) {
-      return res.status(404).json({ ok: false, error: "booking_not_found" });
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
     }
 
-    const updates: any = {};
-    if (booking.lawyerId === authUser.userId) {
-      updates.lawyerJoinedAt = now;
-    } else if (booking.clientId === authUser.userId) {
-      updates.clientJoinedAt = now;
-    } else {
-      return res.status(403).json({ ok: false, error: "forbidden" });
+    if (
+      booking.clientId !== authUser.id &&
+      booking.lawyerId !== authUser.id &&
+      authUser.role !== "admin"
+    ) {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_access",
+      });
     }
 
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, id));
+    return res.json({
+      ok: true,
+      booking,
+    });
+  } catch (error) {
+    console.error("Get Booking By ID Error:", error);
 
-    return res.json({ ok: true, message: "join recorded" });
-  } catch (err) {
-    req.log.error(err, "recordJoin failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};
 
-export async function checkAttendance(req: Request, res: Response) {
+export const completeBooking = async (req: Request, res: Response) => {
   try {
-    const id = String(req.params.id);
+    const { bookingId } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "bookingId_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
     const [booking] = await db
       .select()
       .from(bookingsTable)
-      .where(eq(bookingsTable.id, id))
+      .where(eq(bookingsTable.id, bookingId))
       .limit(1);
 
     if (!booking) {
-      return res.status(404).json({ ok: false, error: "booking_not_found" });
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
     }
 
-    const lawyerAttended = !!booking.lawyerJoinedAt;
-    return res.json({ ok: true, lawyerAttended });
-  } catch (err) {
-    req.log.error(err, "checkAttendance failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
-  }
-}
+    if (booking.lawyerId !== authUser.id && authUser.role !== "admin") {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
+    }
 
-export async function completeBooking(req: Request, res: Response) {
-  try {
-    const id = String(req.params.id);
-    await db
+    if (booking.status !== "accepted") {
+      return res.status(400).json({
+        ok: false,
+        error: "invalid_state_transition",
+      });
+    }
+
+    const [updated] = await db
       .update(bookingsTable)
-      .set({ status: "completed", updatedAt: new Date() })
-      .where(eq(bookingsTable.id, id));
+      .set({
+        status: "completed",
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingsTable.id, bookingId))
+      .returning();
 
-    return res.json({ ok: true, message: "booking completed" });
-  } catch (err) {
-    req.log.error(err, "completeBooking failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    return res.json({
+      ok: true,
+      booking: updated,
+    });
+  } catch (error) {
+    console.error("Complete Booking Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};
 
-export async function disputeBooking(req: Request, res: Response) {
-  `use strict`;
+export const disputeBooking = async (req: Request, res: Response) => {
   try {
-    const id = String(req.params.id);
-    await db
+    const { bookingId } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "bookingId_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+
+    if (!booking) {
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
+    }
+
+    if (
+      booking.clientId !== authUser.id &&
+      booking.lawyerId !== authUser.id &&
+      authUser.role !== "admin"
+    ) {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
+    }
+
+    const [updated] = await db
       .update(bookingsTable)
-      .set({ status: "disputed", updatedAt: new Date() })
-      .where(eq(bookingsTable.id, id));
+      .set({
+        status: "disputed",
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingsTable.id, bookingId))
+      .returning();
 
-    return res.json({ ok: true, message: "booking disputed" });
-  } catch (err) {
-    req.log.error(err, "disputeBooking failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    return res.json({
+      ok: true,
+      booking: updated,
+    });
+  } catch (error) {
+    console.error("Dispute Booking Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};
 
-export async function cancelBooking(req: Request, res: Response) {
+export const cancelBooking = async (req: Request, res: Response) => {
   try {
-    const id = String(req.params.id);
-    await db
-      .update(bookingsTable)
-      .set({ status: "cancelled_by_client", updatedAt: new Date() })
-      .where(eq(bookingsTable.id, id));
+    const { bookingId } = req.body;
 
-    return res.json({ ok: true, message: "booking cancelled" });
-  } catch (err) {
-    req.log.error(err, "cancelBooking failed");
-    return res.status(500).json({ ok: false, error: "internal_error" });
+    if (!bookingId) {
+      return res.status(400).json({
+        ok: false,
+        error: "bookingId_is_required",
+      });
+    }
+
+    const authUser = req.authUser!;
+
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+
+    if (!booking) {
+      return res.status(404).json({
+        ok: false,
+        error: "booking_not_found",
+      });
+    }
+
+    if (
+      booking.clientId !== authUser.id &&
+      booking.lawyerId !== authUser.id &&
+      authUser.role !== "admin"
+    ) {
+      return res.status(403).json({
+        ok: false,
+        error: "unauthorized_action",
+      });
+    }
+
+    if (booking.status === "completed") {
+      return res.status(400).json({
+        ok: false,
+        error: "cannot_cancel_completed_booking",
+      });
+    }
+
+    const cancelStatus =
+      booking.clientId === authUser.id
+        ? "cancelled_by_client"
+        : "cancelled_by_lawyer";
+
+    const [updated] = await db
+      .update(bookingsTable)
+      .set({
+        status: cancelStatus,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingsTable.id, bookingId))
+      .returning();
+
+    return res.json({
+      ok: true,
+      booking: updated,
+    });
+  } catch (error) {
+    console.error("Cancel Booking Error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "internal_server_error",
+    });
   }
-}
+};

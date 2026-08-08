@@ -2,7 +2,7 @@ import { type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { usersTable, lawyerReviewsTable, bookingsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 // ── POST /api/reviews ─────────────────────────────────────────────────────────
 
@@ -15,19 +15,18 @@ const submitReviewSchema = z.object({
 
 export async function submitReview(req: Request, res: Response) {
   const { authUser } = req;
-  if (!authUser || authUser.role !== "client") {
+  if (!authUser || !authUser.userId || authUser.role !== "client") {
     return res.status(403).json({ ok: false, error: "clients_only" });
   }
+  const userId = authUser.userId;
 
   const parsed = submitReviewSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res
-      .status(400)
-      .json({
-        ok: false,
-        error: "validation_error",
-        issues: parsed.error.issues,
-      });
+    return res.status(400).json({
+      ok: false,
+      error: "validation_error",
+      issues: parsed.error.issues,
+    });
   }
 
   const { consultationId, lawyerId, stars } = parsed.data;
@@ -47,7 +46,7 @@ export async function submitReview(req: Request, res: Response) {
         .json({ ok: false, error: "consultation_not_found" });
     }
 
-    if (booking.clientId !== authUser.userId) {
+    if (booking.clientId !== userId) {
       return res
         .status(403)
         .json({ ok: false, error: "forbidden_not_booking_client" });
@@ -80,7 +79,7 @@ export async function submitReview(req: Request, res: Response) {
       .from(lawyerReviewsTable)
       .where(
         and(
-          eq(lawyerReviewsTable.clientId, authUser.userId),
+          eq(lawyerReviewsTable.clientId, userId),
           eq(lawyerReviewsTable.consultationId, consultationId),
         ),
       )
@@ -93,9 +92,9 @@ export async function submitReview(req: Request, res: Response) {
     await db.transaction(async (tx) => {
       // Insert review
       await tx.insert(lawyerReviewsTable).values({
-        id: `rev-${authUser.userId.slice(0, 8)}-${Date.now()}`,
+        id: `rev-${userId.slice(0, 8)}-${Date.now()}`,
         consultationId,
-        clientId: authUser.userId,
+        clientId: userId,
         lawyerId,
         stars,
         commentStatus: "none",
@@ -121,7 +120,7 @@ export async function submitReview(req: Request, res: Response) {
     });
 
     req.log.info(
-      { lawyerId, stars, clientId: authUser.userId, consultationId },
+      { lawyerId, stars, clientId: userId, consultationId },
       "review submitted securely",
     );
     return res.status(201).json({ ok: true });
