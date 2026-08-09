@@ -9,17 +9,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 // تعريف واجهة الطلب الموسعة لدعم مصادقة المستخدم وسجل الأخطاء (Pino logger)
-interface AuthenticatedRequest extends Request {
-  authUser?: {
-    userId: string;
-    role: "client" | "lawyer" | "admin";
-    [key: string]: any;
-  };
-  log: {
-    info: (obj: object, msg: string) => void;
-    error: (err: unknown, msg: string) => void;
-  };
-}
+type AuthenticatedRequest = Request;
 
 // Fields that require admin approval before going live on a lawyer's public profile
 const MODERATED_LAWYER_FIELDS = [

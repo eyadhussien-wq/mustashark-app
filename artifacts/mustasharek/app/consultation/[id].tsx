@@ -280,7 +280,7 @@ export default function ConsultationDetail() {
     if (!consult || !consult.meetLink) return;
     setLoading("join");
     const role = isLawyer ? "lawyer" : "client";
-    await recordAttendance(consult.id, role);
+    await recordAttendance(consult.id, user.id, role);
     setLoading(null);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const supported = await Linking.canOpenURL(consult.meetLink);
