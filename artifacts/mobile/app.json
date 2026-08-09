@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "مستشارك",
+    "slug": "mustashark",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "mustashark",
+    "android": {
+      "package": "com.mustashark.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.mustashark.app"
+    }
+  }
+}
