@@ -1,440 +1,111 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
-import { useAuth } from "@/contexts/AuthContext";
+import { type RecoveryChannel, useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
-
-type Step = "email" | "otp";
+type Step = "request" | "otp";
 
 export default function ForgotPassword() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { requestPasswordReset, resetPassword } = useAuth();
-
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>("request");
   const [email, setEmail] = useState("");
+  const [channel, setChannel] = useState<RecoveryChannel>("email");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpCode, setOtpCode] = useState(""); // the generated code shown to user
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [success, setSuccess] = useState(false);
-
   const otpRefs = useRef<Array<TextInput | null>>([]);
 
   async function handleRequestOtp() {
-    if (!email.trim()) {
-      setError("يرجى إدخال البريد الإلكتروني");
-      return;
-    }
-    setError("");
-    setLoading(true);
+    if (!email.trim()) return setError("يرجى إدخال البريد الإلكتروني");
+    setError(""); setNotice(""); setLoading(true);
     try {
-      const code = await requestPasswordReset(email.trim());
-      setOtpCode(code);
+      const result = await requestPasswordReset(email.trim(), channel);
+      setNotice(result.developmentOtp ? `رمز الاختبار: ${result.developmentOtp}` : result.message);
       setStep("otp");
-    } catch (e: any) {
-      setError(e.message ?? "حدث خطأ");
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { setError(e?.message ?? "تعذر إرسال رمز الاستعادة"); }
+    finally { setLoading(false); }
   }
 
-  function handleOtpChange(val: string, idx: number) {
-    const cleaned = val.replace(/[^0-9]/g, "").slice(-1);
-    const next = [...otp];
-    next[idx] = cleaned;
-    setOtp(next);
-    if (cleaned && idx < 5) {
-      otpRefs.current[idx + 1]?.focus();
-    }
+  function handleOtpChange(value: string, index: number) {
+    const digit = value.replace(/[^0-9]/g, "").slice(-1);
+    const next = [...otp]; next[index] = digit; setOtp(next);
+    if (digit && index < 5) otpRefs.current[index + 1]?.focus();
   }
 
-  function handleOtpKeyPress(key: string, idx: number) {
-    if (key === "Backspace" && !otp[idx] && idx > 0) {
-      otpRefs.current[idx - 1]?.focus();
-    }
+  async function handleReset() {
+    const code = otp.join("");
+    if (code.length !== 6) return setError("يرجى إدخال رمز التحقق المكوّن من 6 أرقام");
+    if (newPassword.length < 6) return setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+    if (newPassword !== confirmPassword) return setError("كلمتا المرور غير متطابقتين");
+    setError(""); setLoading(true);
+    try { await resetPassword(email.trim(), code, newPassword); setSuccess(true); }
+    catch (e: any) { setError(e?.message ?? "تعذر تغيير كلمة المرور"); }
+    finally { setLoading(false); }
   }
 
-  async function handleResetPassword() {
-    const enteredOtp = otp.join("");
-    if (enteredOtp.length < 6) {
-      setError("يرجى إدخال رمز التحقق المكوّن من 6 أرقام");
-      return;
-    }
-    if (!newPassword) {
-      setError("يرجى إدخال كلمة المرور الجديدة");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("كلمتا المرور غير متطابقتين");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    try {
-      await resetPassword(email.trim(), enteredOtp, newPassword);
-      setSuccess(true);
-    } catch (e: any) {
-      setError(e.message ?? "حدث خطأ");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <View style={[styles.successContainer, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 40) }]}>
-        <View style={styles.successIcon}>
-          <Feather name="check-circle" size={52} color={C.success} />
-        </View>
-        <Text style={styles.successTitle}>تم تغيير كلمة المرور</Text>
-        <Text style={styles.successSub}>
-          يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة
-        </Text>
-        <TouchableOpacity
-          style={styles.successBtn}
-          onPress={() => router.replace("/auth/login")}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.successBtnText}>الذهاب إلى تسجيل الدخول</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  if (success) return (
+    <View style={[styles.success, { paddingTop: insets.top + 60 }]}>
+      <Feather name="check-circle" size={56} color={C.success} />
+      <Text style={styles.title}>تم تغيير كلمة المرور</Text>
+      <Text style={styles.sub}>يمكنك الآن تسجيل الدخول باستخدام كلمة المرور الجديدة.</Text>
+      <TouchableOpacity style={styles.button} onPress={() => router.replace("/auth/login")}><Text style={styles.buttonText}>الذهاب إلى تسجيل الدخول</Text></TouchableOpacity>
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: C.background }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          {
-            paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20),
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 24),
-          },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => (step === "otp" ? setStep("email") : router.back())}
-        >
-          <Feather name="arrow-right" size={22} color={C.foreground} />
-        </TouchableOpacity>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 30 }]} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity style={styles.back} onPress={() => step === "otp" ? setStep("request") : router.back()}><Feather name="arrow-right" size={22} color={C.foreground} /></TouchableOpacity>
+        <View style={styles.header}><View style={styles.icon}><Feather name={step === "otp" ? "message-square" : "lock"} size={28} color={C.navy} /></View><Text style={styles.title}>نسيت كلمة المرور؟</Text><Text style={styles.sub}>{step === "request" ? "اختر طريقة استلام رمز التحقق لاستعادة حسابك." : `أدخل الرمز المرسل إلى ${channel === "email" ? "بريدك الإلكتروني" : "رقم WhatsApp المرتبط بحسابك"}.`}</Text></View>
+        {!!error && <View style={styles.error}><Feather name="alert-circle" size={15} color={C.destructive} /><Text style={styles.errorText}>{error}</Text></View>}
+        {!!notice && <View style={styles.notice}><Feather name="info" size={15} color={C.navy} /><Text style={styles.noticeText}>{notice}</Text></View>}
 
-        {/* Progress steps */}
-        <View style={styles.steps}>
-          <View style={styles.stepItem}>
-            <View style={[styles.stepDot, styles.stepDotActive]}>
-              <Text style={styles.stepNum}>١</Text>
-            </View>
-            <Text style={[styles.stepLabel, styles.stepLabelActive]}>البريد</Text>
+        {step === "request" ? <>
+          <Text style={styles.label}>البريد الإلكتروني</Text>
+          <View style={styles.inputRow}><Feather name="mail" size={16} color={C.mutedForeground} /><TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="email@example.com" placeholderTextColor={C.mutedForeground} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} /></View>
+          <Text style={[styles.label, { marginTop: 18 }]}>طريقة استلام الرمز</Text>
+          <View style={styles.channels}>
+            <TouchableOpacity style={[styles.channel, channel === "email" && styles.channelActive]} onPress={() => setChannel("email")}><Feather name="mail" size={18} color={channel === "email" ? C.navy : C.mutedForeground} /><Text style={styles.channelText}>البريد الإلكتروني</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.channel, channel === "whatsapp" && styles.channelActive]} onPress={() => setChannel("whatsapp")}><Feather name="message-circle" size={18} color={channel === "whatsapp" ? C.navy : C.mutedForeground} /><Text style={styles.channelText}>WhatsApp</Text></TouchableOpacity>
           </View>
-          <View style={[styles.stepLine, step === "otp" && styles.stepLineActive]} />
-          <View style={styles.stepItem}>
-            <View style={[styles.stepDot, step === "otp" && styles.stepDotActive]}>
-              <Text style={[styles.stepNum, step === "otp" && styles.stepNumActive]}>٢</Text>
-            </View>
-            <Text style={[styles.stepLabel, step === "otp" && styles.stepLabelActive]}>
-              التحقق
-            </Text>
-          </View>
-        </View>
-
-        {step === "email" ? (
-          <>
-            <View style={styles.header}>
-              <View style={styles.iconWrap}>
-                <Feather name="lock" size={28} color={C.navy} />
-              </View>
-              <Text style={styles.title}>نسيت كلمة المرور؟</Text>
-              <Text style={styles.sub}>
-                أدخل بريدك الإلكتروني وسنُرسل لك رمز التحقق لاستعادة حسابك
-              </Text>
-            </View>
-
-            {!!error && <ErrorBox message={error} />}
-
-            <View style={styles.field}>
-              <Text style={styles.label}>البريد الإلكتروني</Text>
-              <View style={styles.inputRow}>
-                <Feather name="mail" size={16} color={C.mutedForeground} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="email@example.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor={C.mutedForeground}
-                  autoFocus
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.btn, loading && { opacity: 0.7 }]}
-              onPress={handleRequestOtp}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.btnText}>إرسال رمز التحقق</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View style={styles.header}>
-              <View style={[styles.iconWrap, styles.iconWrapOtp]}>
-                <Feather name="message-square" size={28} color={C.gold} />
-              </View>
-              <Text style={styles.title}>أدخل رمز التحقق</Text>
-              <Text style={styles.sub}>
-                تم إرسال رمز التحقق إلى{"\n"}
-                <Text style={styles.emailHighlight}>{email}</Text>
-              </Text>
-            </View>
-
-            {!!error && <ErrorBox message={error} />}
-
-            <View style={styles.otpSection}>
-              <Text style={styles.label}>رمز التحقق (6 أرقام)</Text>
-              <View style={styles.otpRow}>
-                {otp.map((digit, idx) => (
-                  <TextInput
-                    key={idx}
-                    ref={(r) => { otpRefs.current[idx] = r; }}
-                    style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
-                    value={digit}
-                    onChangeText={(v) => handleOtpChange(v, idx)}
-                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, idx)}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    selectTextOnFocus
-                    textAlign="center"
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>كلمة المرور الجديدة</Text>
-              <View style={styles.inputRow}>
-                <Feather name="lock" size={16} color={C.mutedForeground} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry={!showPass}
-                  placeholderTextColor={C.mutedForeground}
-                />
-                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                  <Feather name={showPass ? "eye-off" : "eye"} size={16} color={C.mutedForeground} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>تأكيد كلمة المرور</Text>
-              <View style={styles.inputRow}>
-                <Feather name="lock" size={16} color={C.mutedForeground} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirm}
-                  placeholderTextColor={C.mutedForeground}
-                />
-                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
-                  <Feather name={showConfirm ? "eye-off" : "eye"} size={16} color={C.mutedForeground} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {newPassword.length > 0 && (
-              <PasswordStrength password={newPassword} />
-            )}
-
-            <TouchableOpacity
-              style={[styles.btn, loading && { opacity: 0.7 }]}
-              onPress={handleResetPassword}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.btnText}>تغيير كلمة المرور</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.resendBtn}
-              onPress={() => { setStep("email"); setOtp(["", "", "", "", "", ""]); setError(""); }}
-            >
-              <Text style={styles.resendText}>إعادة إرسال الرمز</Text>
-            </TouchableOpacity>
-          </>
-        )}
+          <TouchableOpacity style={styles.button} onPress={handleRequestOtp} disabled={loading}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>إرسال رمز التحقق</Text>}</TouchableOpacity>
+        </> : <>
+          <Text style={styles.label}>رمز التحقق</Text>
+          <View style={styles.otpRow}>{otp.map((digit, index) => <TextInput key={index} ref={(ref) => { otpRefs.current[index] = ref; }} style={[styles.otp, digit && styles.otpFilled]} value={digit} onChangeText={(v) => handleOtpChange(v, index)} keyboardType="number-pad" maxLength={1} textAlign="center" selectTextOnFocus />)}</View>
+          <Text style={styles.label}>كلمة المرور الجديدة</Text>
+          <View style={styles.inputRow}><Feather name="lock" size={16} color={C.mutedForeground} /><TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showPass} placeholder="••••••••" placeholderTextColor={C.mutedForeground} /><TouchableOpacity onPress={() => setShowPass(!showPass)}><Feather name={showPass ? "eye-off" : "eye"} size={16} color={C.mutedForeground} /></TouchableOpacity></View>
+          <Text style={styles.label}>تأكيد كلمة المرور</Text>
+          <View style={styles.inputRow}><Feather name="lock" size={16} color={C.mutedForeground} /><TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showConfirm} placeholder="••••••••" placeholderTextColor={C.mutedForeground} /><TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}><Feather name={showConfirm ? "eye-off" : "eye"} size={16} color={C.mutedForeground} /></TouchableOpacity></View>
+          <TouchableOpacity style={styles.button} onPress={handleReset} disabled={loading}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>تغيير كلمة المرور</Text>}</TouchableOpacity>
+          <TouchableOpacity onPress={() => { setStep("request"); setOtp(["", "", "", "", "", ""]); setNotice(""); setError(""); }}><Text style={styles.resend}>إعادة إرسال الرمز</Text></TouchableOpacity>
+        </>}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function ErrorBox({ message }: { message: string }) {
-  return (
-    <View style={styles.errorBox}>
-      <Feather name="alert-circle" size={14} color={C.destructive} />
-      <Text style={styles.errorText}>{message}</Text>
-    </View>
-  );
-}
-
-function PasswordStrength({ password }: { password: string }) {
-  const len = password.length;
-  const hasNum = /\d/.test(password);
-  const hasMix = /[a-zA-Z]/.test(password) && hasNum;
-  const score = len >= 8 ? (hasMix ? 3 : 2) : len >= 6 ? 1 : 0;
-  const labels = ["ضعيفة", "مقبولة", "جيدة", "قوية"];
-  const barColors = [C.destructive, C.warning, "#22C55E", C.success];
-
-  return (
-    <View style={styles.strengthWrap}>
-      <View style={styles.strengthBars}>
-        {[0, 1, 2, 3].map((i) => (
-          <View
-            key={i}
-            style={[
-              styles.strengthBar,
-              { backgroundColor: i <= score - 1 ? barColors[score - 1] : C.border },
-            ]}
-          />
-        ))}
-      </View>
-      <Text style={[styles.strengthLabel, { color: score > 0 ? barColors[score - 1] : C.mutedForeground }]}>
-        {score > 0 ? `قوة كلمة المرور: ${labels[score - 1]}` : ""}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, paddingHorizontal: 24 },
-  backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 20 },
-
-  steps: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
-    gap: 0,
-  },
-  stepItem: { alignItems: "center", gap: 4 },
-  stepDot: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: C.muted, alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: C.border,
-  },
-  stepDotActive: { backgroundColor: C.navy, borderColor: C.navy },
-  stepNum: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.mutedForeground },
-  stepNumActive: { color: "#fff" },
-  stepLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.mutedForeground },
-  stepLabelActive: { color: C.navy },
-  stepLine: { width: 48, height: 2, backgroundColor: C.border, marginHorizontal: 8, marginBottom: 14 },
-  stepLineActive: { backgroundColor: C.navy },
-
-  header: { alignItems: "center", gap: 10, marginBottom: 28 },
-  iconWrap: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: "#EEF2F8", alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "rgba(27,58,107,0.12)",
-  },
-  iconWrapOtp: { backgroundColor: "#FEF9EC", borderColor: "rgba(201,160,53,0.2)" },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground },
-  sub: {
-    fontSize: 14, color: C.mutedForeground, fontFamily: "Inter_400Regular",
-    textAlign: "center", lineHeight: 22,
-  },
-  emailHighlight: { color: C.navy, fontFamily: "Inter_600SemiBold" },
-
-  errorBox: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 16,
-  },
-  errorText: { color: C.destructive, fontFamily: "Inter_500Medium", fontSize: 13, flex: 1, textAlign: "right" },
-
-  field: { gap: 6, marginBottom: 14 },
-  label: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.foreground, textAlign: "right" },
-  inputRow: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border,
-    paddingHorizontal: 14, paddingVertical: 14,
-  },
-  input: { flex: 1, fontSize: 15, color: C.foreground, fontFamily: "Inter_400Regular", textAlign: "right" },
-
-  otpSection: { gap: 10, marginBottom: 20 },
-  otpRow: { flexDirection: "row", gap: 10, justifyContent: "center" },
-  otpBox: {
-    width: 46, height: 56, borderRadius: 12, borderWidth: 2, borderColor: C.border,
-    backgroundColor: C.card, fontSize: 22, fontFamily: "Inter_700Bold", color: C.foreground,
-    textAlign: "center",
-  },
-  otpBoxFilled: { borderColor: C.navy, backgroundColor: "#EEF2F8" },
-
-  strengthWrap: { marginBottom: 14, gap: 6 },
-  strengthBars: { flexDirection: "row", gap: 4 },
-  strengthBar: { flex: 1, height: 4, borderRadius: 2 },
-  strengthLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textAlign: "right" },
-
-  btn: {
-    backgroundColor: C.navy, borderRadius: colors.radius,
-    paddingVertical: 16, alignItems: "center", marginBottom: 12,
-  },
-  btnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-
-  resendBtn: { alignItems: "center", paddingVertical: 10 },
-  resendText: { fontSize: 14, color: C.primary, fontFamily: "Inter_500Medium" },
-
-  successContainer: {
-    flex: 1, backgroundColor: C.background,
-    alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 32, gap: 16,
-  },
-  successIcon: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: "#ECFDF5", alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "#D1FAE5",
-  },
-  successTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground },
-  successSub: { fontSize: 14, color: C.mutedForeground, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
-  successBtn: {
-    backgroundColor: C.navy, borderRadius: colors.radius,
-    paddingVertical: 16, paddingHorizontal: 32, marginTop: 8,
-  },
-  successBtnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  root: { flex: 1, backgroundColor: C.background }, container: { flexGrow: 1, paddingHorizontal: 24 }, back: { alignSelf: "flex-end", padding: 4, marginBottom: 25 },
+  header: { alignItems: "center", gap: 10, marginBottom: 26 }, icon: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#EEF2F8", alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "center" }, sub: { fontSize: 14, lineHeight: 22, color: C.mutedForeground, textAlign: "center", fontFamily: "Inter_400Regular" },
+  label: { fontSize: 13, color: C.foreground, fontFamily: "Inter_600SemiBold", textAlign: "right", marginBottom: 7, marginTop: 10 },
+  inputRow: { minHeight: 50, borderWidth: 1, borderColor: C.border, borderRadius: 12, backgroundColor: C.card, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 }, input: { flex: 1, color: C.foreground, fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "right" },
+  channels: { flexDirection: "row", gap: 10, marginBottom: 22 }, channel: { flex: 1, minHeight: 54, borderWidth: 1, borderColor: C.border, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 5 }, channelActive: { borderColor: C.navy, backgroundColor: "#EEF2F8" }, channelText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.foreground },
+  button: { height: 52, borderRadius: 12, backgroundColor: C.navy, alignItems: "center", justifyContent: "center", marginTop: 22 }, buttonText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  otpRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }, otp: { width: 44, height: 52, borderWidth: 1, borderColor: C.border, borderRadius: 10, backgroundColor: C.card, fontSize: 20, color: C.foreground }, otpFilled: { borderColor: C.navy },
+  error: { flexDirection: "row", gap: 8, alignItems: "flex-start", backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 12 }, errorText: { flex: 1, color: C.destructive, fontSize: 13, lineHeight: 20, textAlign: "right" },
+  notice: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "#EEF2F8", borderRadius: 10, padding: 12, marginBottom: 12 }, noticeText: { flex: 1, color: C.navy, fontSize: 12, textAlign: "right" }, resend: { textAlign: "center", color: C.navy, fontFamily: "Inter_600SemiBold", fontSize: 13, marginTop: 18 },
+  success: { flex: 1, backgroundColor: C.background, alignItems: "center", paddingHorizontal: 24, gap: 14 },
 });
