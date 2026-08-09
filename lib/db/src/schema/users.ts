@@ -29,22 +29,21 @@ export const usersTable = pgTable("users", {
   country: countryEnum("country"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
-  accountStatus: accountStatusEnum("account_status")
-    .notNull()
-    .default("active"),
+  accountStatus: accountStatusEnum("account_status").notNull().default("active"),
   statusReason: text("status_reason"),
-  // Lawyer-specific profile fields
   specialization: text("specialization"),
   bio: text("bio"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
-  // Lawyer aggregate review stats (updated on every new review)
   rating: numeric("rating", { precision: 3, scale: 1 }),
   reviewsCount: integer("reviews_count").notNull().default(0),
-  // Soft-delete for clients (30-day window)
   deletedAt: timestamp("deleted_at"),
   deletionScheduledAt: timestamp("deletion_scheduled_at"),
-  // Lawyer deletion request rejection note from admin
   deletionRejectionNote: text("deletion_rejection_note"),
+  // Server-side password recovery. Only the hash is stored; the OTP itself never is.
+  passwordResetTokenHash: text("password_reset_token_hash"),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at"),
+  passwordResetChannel: text("password_reset_channel"),
+  passwordResetAttempts: integer("password_reset_attempts").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
