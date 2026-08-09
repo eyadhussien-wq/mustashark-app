@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -18,13 +19,16 @@ import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 import { useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
+const SESSION_KEY = "mustasharek_session_v2";
+
+type PortalRole = "client" | "lawyer";
 
 export default function Login() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const params = useLocalSearchParams<{ role?: string }>();
-  const role = (params.role ?? "client") as "client" | "lawyer";
+  const role: PortalRole = params.role === "lawyer" ? "lawyer" : "client";
   const isLawyer = role === "lawyer";
 
   const [email, setEmail] = useState("");
@@ -40,6 +44,23 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
+
+      // Authentication and portal authorization are separate concerns.
+      // The selected portal must match the authenticated user's authoritative role.
+      const rawSession = await AsyncStorage.getItem(SESSION_KEY);
+      const session = rawSession
+        ? (JSON.parse(rawSession) as { role?: string })
+        : null;
+
+      if (session?.role !== role) {
+        await logout();
+        throw new Error(
+          isLawyer
+            ? "هذا الحساب ليس حساب محامٍ. يرجى استخدام بوابة العميل."
+            : "هذا الحساب ليس حساب عميل. يرجى استخدام بوابة المحامي."
+        );
+      }
+
       router.replace("/");
     } catch (e: any) {
       const msg: string = e.message ?? "حدث خطأ";
@@ -158,7 +179,6 @@ export default function Login() {
           )}
         </TouchableOpacity>
 
-        {/* Inline row: Forgot Password + Sign Up */}
         <View style={styles.actionLinksRow}>
           <TouchableOpacity
             onPress={() =>
