@@ -6,7 +6,7 @@ import { db, usersTable } from "@workspace/db";
 declare global {
   namespace Express {
     interface Request {
-      authUser?: typeof usersTable.$inferSelect & { userId?: string };
+      authUser?: typeof usersTable.$inferSelect & { userId: string };
     }
   }
 }

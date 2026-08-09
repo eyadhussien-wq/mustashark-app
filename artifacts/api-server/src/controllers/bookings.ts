@@ -24,6 +24,21 @@ const checkAbsenceSchema = z.object({
   bookingId: z.string().min(1, "bookingId is required"),
 });
 
+const APPOINTMENT_EARLY_ACCESS_MS = 5 * 60 * 1000;
+const APPOINTMENT_DURATION_MS = 30 * 60 * 1000;
+
+function isWithinAppointmentWindow(booking: {
+  scheduledDate: string;
+  scheduledTime: string;
+}, now = new Date()) {
+  const appointment = new Date(`${booking.scheduledDate}T${booking.scheduledTime}`);
+  if (Number.isNaN(appointment.getTime())) return false;
+
+  const currentTime = now.getTime();
+  return currentTime >= appointment.getTime() - APPOINTMENT_EARLY_ACCESS_MS &&
+    currentTime <= appointment.getTime() + APPOINTMENT_DURATION_MS;
+}
+
 export const createBooking = async (req: Request, res: Response) => {
   try {
     const parseResult = createBookingSchema.safeParse(req.body);
@@ -231,13 +246,37 @@ export const recordJoin = async (req: Request, res: Response) => {
     }
 
     const authUser = req.authUser!;
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: "booking_not_found" });
+    }
+
+    const isLawyer = authUser.role === "lawyer" && booking.lawyerId === authUser.id;
+    const isClient = authUser.role === "client" && booking.clientId === authUser.id;
+    if (!isLawyer && !isClient) {
+      return res.status(403).json({ ok: false, error: "unauthorized_access" });
+    }
+
+    if (
+      booking.status !== "accepted" ||
+      !isWithinAppointmentWindow(booking) ||
+      (booking.type === "video" && !booking.googleMeetLink)
+    ) {
+      return res.status(400).json({ ok: false, error: "consultation_not_available" });
+    }
+
     const now = new Date();
 
     const result = await db
       .update(bookingsTable)
       .set({
         updatedAt: now,
-        ...(authUser.role === "lawyer"
+        ...(isLawyer
           ? { lawyerJoinedAt: now }
           : { clientJoinedAt: now }),
       })
@@ -245,10 +284,10 @@ export const recordJoin = async (req: Request, res: Response) => {
         and(
           eq(bookingsTable.id, bookingId),
           eq(bookingsTable.status, "accepted"),
-          authUser.role === "lawyer"
+          isLawyer
             ? isNull(bookingsTable.lawyerJoinedAt)
             : isNull(bookingsTable.clientJoinedAt),
-          authUser.role === "lawyer"
+          isLawyer
             ? eq(bookingsTable.lawyerId, authUser.id)
             : eq(bookingsTable.clientId, authUser.id),
         ),
