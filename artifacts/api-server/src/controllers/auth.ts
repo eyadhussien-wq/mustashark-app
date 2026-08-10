@@ -10,6 +10,20 @@ import { signToken } from "../lib/jwt";
 
 const appleJwksClient = jwksClient({ jwksUri: "https://appleid.apple.com/auth/keys", cache: true, cacheMaxAge: 600_000, rateLimit: true });
 
+function normalizePhone(phone: string): string {
+  return phone.replace(/[\s()-]/g, "");
+}
+
+function getPhoneCountry(phone: string): string | null {
+  if (phone.startsWith("+974")) return "qatar";
+  if (phone.startsWith("+962")) return "jordan";
+  return null;
+}
+
+function isSupportedPhone(phone: string): boolean {
+  return /^\+974\d{8}$/.test(phone) || /^\+9627\d{8}$/.test(phone);
+}
+
 async function verifyGoogleToken(accessToken: string): Promise<{ id: string; email: string; name: string } | null> {
   try { const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`); if (!res.ok) return null; const data = await res.json() as Record<string, string>; if (!data.email_verified || data.email_verified === "false") return null; return { id: data.sub, email: data.email, name: data.name ?? data.email }; } catch { return null; }
 }
@@ -50,7 +64,7 @@ export async function socialAuth(req: Request, res: Response) {
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json({ ok: false, error: "role_mismatch", message: dbUser.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
     const jwtToken = signToken({ userId: dbUser.id, email: dbUser.email, role: (dbUser.role ?? "client") as "client" | "lawyer" | "admin", provider });
-    return res.json({ ok: true, jwt: jwtToken, user: { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role, country: dbUser.country, authProvider: dbUser.authProvider, deletionRejectionNote: dbUser.deletionRejectionNote ?? null, createdAt: dbUser.createdAt } });
+    return res.json({ ok: true, jwt: jwtToken, user: { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role, country: dbUser.country, nationality: dbUser.nationality, phone: dbUser.phone, phoneCountry: dbUser.phoneCountry, authProvider: dbUser.authProvider, deletionRejectionNote: dbUser.deletionRejectionNote ?? null, createdAt: dbUser.createdAt } });
   } catch (err) { req.log.error(err, "socialAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" }); }
 }
 
@@ -59,12 +73,13 @@ async function findUser(provider: string, providerId: string, email: string) {
   return rows[0] ?? null;
 }
 
-const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(20).optional(), country: z.enum(["qatar", "jordan"]).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional() });
+const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional() });
 
 export async function localAuth(req: Request, res: Response) {
   const parsed = localAuthSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { email, password, name, phone, country, role, specialization, bio, hourlyRate } = parsed.data;
+  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate } = parsed.data;
+  const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : undefined;
   const normalEmail = email.trim().toLowerCase();
   const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
   try {
@@ -79,27 +94,20 @@ export async function localAuth(req: Request, res: Response) {
         req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
         return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
       }
-
-      // The selected portal is part of the authentication boundary. Never issue
-      // a JWT for a valid password if the account belongs to the other portal.
       if (existing.role !== "admin" && existing.role !== role) {
-        return res.status(403).json({
-          ok: false,
-          error: "role_mismatch",
-          message: existing.role === "lawyer"
-            ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين."
-            : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء.",
-        });
+        return res.status(403).json({ ok: false, error: "role_mismatch", message: existing.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
       }
-
       const jwtToken = signToken({ userId: existing.id, email: existing.email, role: (existing.role ?? "client") as "client" | "lawyer" | "admin", provider: "local" });
-      return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, phone: existing.phone, country: existing.country, specialization: existing.specialization, bio: existing.bio, hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null } });
+      return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, phone: existing.phone, phoneCountry: existing.phoneCountry, country: existing.country, nationality: existing.nationality, specialization: existing.specialization, bio: existing.bio, hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null } });
     }
     if (!name?.trim()) return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
+    if (!phone) return res.status(400).json({ ok: false, error: "phone_required", message: "رقم الهاتف مطلوب لإنشاء الحساب" });
+    if (!isSupportedPhone(phone)) return res.status(400).json({ ok: false, error: "invalid_phone", message: "رقم الهاتف غير صالح. استخدم رقمًا قطريًا يبدأ +974 أو أردنيًا يبدأ +962 وبالطول الصحيح." });
+    const phoneCountry = getPhoneCountry(phone);
     const passwordHash = await bcrypt.hash(password, 10);
     const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone: phone ?? null, country: country ?? null, role, authProvider: "local", accountStatus: "active", ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
+    await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus: "active", ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
-    return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, user: { id: newId, name: name.trim(), email: normalEmail, role, phone: phone ?? null, country: country ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
+    return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, user: { id: newId, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
   } catch (err) { req.log.error(err, "localAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" }); }
 }
