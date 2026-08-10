@@ -49,18 +49,13 @@ async function deliverOtp(params: {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.PASSWORD_RESET_FROM_EMAIL;
     if (!apiKey || !from) {
-      if (process.env.NODE_ENV !== "production") {
-        return { delivered: true, developmentOtp: otp };
-      }
+      if (process.env.NODE_ENV !== "production") return { delivered: true, developmentOtp: otp };
       throw new Error("PASSWORD_RESET_EMAIL_NOT_CONFIGURED");
     }
 
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from,
         to: [email],
@@ -68,7 +63,6 @@ async function deliverOtp(params: {
         text: `رمز استعادة كلمة المرور الخاص بك هو: ${otp}\n\nالرمز صالح لمدة 10 دقائق. إذا لم تطلب استعادة كلمة المرور فتجاهل هذه الرسالة.`,
       }),
     });
-
     if (!response.ok) throw new Error("PASSWORD_RESET_EMAIL_DELIVERY_FAILED");
     return { delivered: true };
   }
@@ -76,19 +70,14 @@ async function deliverOtp(params: {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!accessToken || !phoneNumberId) {
-    if (process.env.NODE_ENV !== "production") {
-      return { delivered: true, developmentOtp: otp };
-    }
+    if (process.env.NODE_ENV !== "production") return { delivered: true, developmentOtp: otp };
     throw new Error("PASSWORD_RESET_WHATSAPP_NOT_CONFIGURED");
   }
   if (!phone) throw new Error("PHONE_REQUIRED_FOR_WHATSAPP");
 
   const response = await fetch(`https://graph.facebook.com/v23.0/${phoneNumberId}/messages`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       messaging_product: "whatsapp",
       to: phone.replace(/\D/g, ""),
@@ -100,7 +89,6 @@ async function deliverOtp(params: {
       },
     }),
   });
-
   if (!response.ok) throw new Error("PASSWORD_RESET_WHATSAPP_DELIVERY_FAILED");
   return { delivered: true };
 }
@@ -113,14 +101,13 @@ export async function requestPasswordReset(req: Request, res: Response) {
   const channel = parsed.data.channel as RecoveryChannel;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
 
-  // Always return the same public response for unknown, terminated, and social-only
-  // identities. This prevents account enumeration through the recovery endpoint.
+  // Keep unknown, terminated, and social-only identities indistinguishable.
   if (!user || user.accountStatus === "terminated" || user.authProvider !== "local" || !user.passwordHash) {
     return res.json({ ok: true, message: "إذا كان الحساب مؤهلاً للاستعادة، سيتم إرسال رمز التحقق." });
   }
 
+  // Do not disclose account existence when WhatsApp is unavailable for the account.
   if (channel === "whatsapp" && !user.phone) {
-    // Do not reveal whether the email is registered; keep recovery responses generic.
     return res.json({ ok: true, message: "إذا كان الحساب مؤهلاً للاستعادة، سيتم إرسال رمز التحقق." });
   }
 
@@ -149,7 +136,6 @@ export async function requestPasswordReset(req: Request, res: Response) {
     return res.json(response);
   } catch (error) {
     req.log.error(error, "password recovery OTP delivery failed");
-    // Clear only the OTP created by this request; a newer OTP remains untouched.
     await db.update(usersTable).set({
       passwordResetTokenHash: null,
       passwordResetExpiresAt: null,
@@ -192,7 +178,6 @@ export async function confirmPasswordReset(req: Request, res: Response) {
         eq(usersTable.passwordResetTokenHash, expectedHash),
         lt(usersTable.passwordResetAttempts, MAX_ATTEMPTS),
       ));
-
     if (result.rowCount === 0) {
       return res.status(429).json({ ok: false, error: "too_many_attempts", message: "تم تجاوز عدد المحاولات. اطلب رمزاً جديداً." });
     }
@@ -211,7 +196,6 @@ export async function confirmPasswordReset(req: Request, res: Response) {
     eq(usersTable.id, user.id),
     eq(usersTable.passwordResetTokenHash, expectedHash),
     eq(usersTable.passwordResetExpiresAt, user.passwordResetExpiresAt),
-    lt(usersTable.passwordResetExpiresAt, new Date(Date.now() + 1)),
   ));
 
   if (result.rowCount === 0) {
