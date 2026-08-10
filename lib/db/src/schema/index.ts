@@ -5,3 +5,4 @@ export * from "./platformDues";
 export * from "./lawyerDeletionRequests";
 export * from "./lawyerProfileChangeRequests";
 export * from "./lawyerReviews";
+export * from "./documentHandovers";
