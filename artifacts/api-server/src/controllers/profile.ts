@@ -9,17 +9,6 @@ import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 // تعريف واجهة الطلب الموسعة لدعم مصادقة المستخدم وسجل الأخطاء (Pino logger)
-interface AuthenticatedRequest extends Request {
-  authUser?: {
-    userId: string;
-    role: "client" | "lawyer" | "admin";
-    [key: string]: any;
-  };
-  log: {
-    info: (obj: object, msg: string) => void;
-    error: (err: unknown, msg: string) => void;
-  };
-}
 
 // Fields that require admin approval before going live on a lawyer's public profile
 const MODERATED_LAWYER_FIELDS = [
@@ -49,7 +38,7 @@ const updateProfileSchema = z.object({
     .nullable(),
 });
 
-export async function updateProfile(req: AuthenticatedRequest, res: Response) {
+export async function updateProfile(req: Request, res: Response) {
   const { authUser } = req;
   if (!authUser || !authUser.userId) {
     return res.status(401).json({ ok: false, error: "غير مصرح" });
@@ -217,7 +206,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
 // Returns the lawyer's own pending and recently-rejected change requests.
 
 export async function getPendingChanges(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
 ) {
   const { authUser } = req;
@@ -288,7 +277,7 @@ export async function getPendingChanges(
 // ── DELETE /api/profile  (client only — 30-day soft delete) ──────────────────
 
 export async function softDeleteClient(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
 ) {
   const { authUser } = req;
@@ -335,7 +324,7 @@ export async function softDeleteClient(
 // ── POST /api/profile/deletion-request  (lawyer only) ────────────────────────
 
 export async function requestLawyerDeletion(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
 ) {
   const { authUser } = req;
@@ -399,7 +388,7 @@ export async function requestLawyerDeletion(
 // ── GET /api/profile/deletion-status  (lawyer only) ──────────────────────────
 
 export async function getDeletionStatus(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
 ) {
   const { authUser } = req;
@@ -447,7 +436,7 @@ export async function getDeletionStatus(
 // ── POST /api/profile/dismiss-rejection  (lawyer — clears rejection note) ────
 
 export async function dismissRejectionNote(
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
 ) {
   const { authUser } = req;
