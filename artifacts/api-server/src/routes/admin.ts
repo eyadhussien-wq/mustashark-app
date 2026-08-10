@@ -32,6 +32,8 @@ import {
   approveReview,
   rejectReview,
 } from "../controllers/adminReviews";
+import { listAdminBankAccounts } from "../controllers/adminBankAccounts";
+import { reviewBankAccount } from "../controllers/lawyerBankAccounts";
 
 const adminRouter = Router();
 
@@ -99,6 +101,14 @@ adminRouter.post(
   "/admin/profile-change-requests/:id/reject",
   requireAdmin,
   rejectProfileChange,
+);
+
+// ── Lawyer bank account verification ─────────────────────────────────────────
+adminRouter.get("/admin/bank-accounts", requireAdmin, listAdminBankAccounts);
+adminRouter.post(
+  "/admin/bank-accounts/:id/:action",
+  requireAdmin,
+  reviewBankAccount,
 );
 
 // ── Text review moderation ────────────────────────────────────────────────────
