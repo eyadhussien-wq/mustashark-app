@@ -10,7 +10,20 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 export const db = drizzle(pool, { schema });
 
-export * from "./schema";
+export * from "./schema/users";
+export * from "./schema/offices";
+export * from "./schema/bookings";
+export * from "./schema/platformDues";
+export * from "./schema/lawyerDeletionRequests";
+export * from "./schema/lawyerProfileChangeRequests";
+export * from "./schema/lawyerReviews";
+export * from "./schema/adminRoles";
+export * from "./schema/adminPermissions";
+export * from "./schema/adminRolePermissions";
+

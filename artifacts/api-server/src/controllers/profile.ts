@@ -9,17 +9,13 @@ import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 // تعريف واجهة الطلب الموسعة لدعم مصادقة المستخدم وسجل الأخطاء (Pino logger)
-interface AuthenticatedRequest extends Request {
+type AuthenticatedRequest = Request & {
   authUser?: {
     userId: string;
     role: "client" | "lawyer" | "admin";
     [key: string]: any;
   };
-  log: {
-    info: (obj: object, msg: string) => void;
-    error: (err: unknown, msg: string) => void;
-  };
-}
+};
 
 // Fields that require admin approval before going live on a lawyer's public profile
 const MODERATED_LAWYER_FIELDS = [
@@ -211,7 +207,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
     req.log.error(err, "updateProfile failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
 
 // ── GET /api/profile/pending-changes ─────────────────────────────────────────
 // Returns the lawyer's own pending and recently-rejected change requests.
@@ -283,7 +279,7 @@ export async function getPendingChanges(
     req.log.error(err, "getPendingChanges failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
 
 // ── DELETE /api/profile  (client only — 30-day soft delete) ──────────────────
 
@@ -330,7 +326,7 @@ export async function softDeleteClient(
     req.log.error(err, "softDeleteClient failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
 
 // ── POST /api/profile/deletion-request  (lawyer only) ────────────────────────
 
@@ -394,7 +390,7 @@ export async function requestLawyerDeletion(
     req.log.error(err, "requestLawyerDeletion failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
 
 // ── GET /api/profile/deletion-status  (lawyer only) ──────────────────────────
 
@@ -442,7 +438,7 @@ export async function getDeletionStatus(
     req.log.error(err, "getDeletionStatus failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
 
 // ── POST /api/profile/dismiss-rejection  (lawyer — clears rejection note) ────
 
@@ -467,4 +463,4 @@ export async function dismissRejectionNote(
     req.log.error(err, "dismissRejectionNote failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
-}
+};
