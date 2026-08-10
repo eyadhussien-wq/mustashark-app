@@ -113,23 +113,15 @@ export async function requestPasswordReset(req: Request, res: Response) {
   const channel = parsed.data.channel as RecoveryChannel;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
 
-  // Do not reveal whether an email exists.
-  if (!user || user.accountStatus === "terminated") {
-    return res.json({ ok: true, message: "إذا كان الحساب موجوداً، سيتم إرسال رمز الاستعادة." });
-  }
-
-  // A social-only identity must not be converted into a local password account
-  // through recovery. The user must continue with the linked social provider.
-  if (user.authProvider !== "local" || !user.passwordHash) {
-    return res.status(400).json({
-      ok: false,
-      error: "social_account_only",
-      message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام مزود تسجيل الدخول المرتبط بالحساب.",
-    });
+  // Always return the same public response for unknown, terminated, and social-only
+  // identities. This prevents account enumeration through the recovery endpoint.
+  if (!user || user.accountStatus === "terminated" || user.authProvider !== "local" || !user.passwordHash) {
+    return res.json({ ok: true, message: "إذا كان الحساب مؤهلاً للاستعادة، سيتم إرسال رمز التحقق." });
   }
 
   if (channel === "whatsapp" && !user.phone) {
-    return res.status(400).json({ ok: false, error: "phone_required", message: "لا يوجد رقم هاتف مرتبط بهذا الحساب لاستخدام WhatsApp." });
+    // Do not reveal whether the email is registered; keep recovery responses generic.
+    return res.json({ ok: true, message: "إذا كان الحساب مؤهلاً للاستعادة، سيتم إرسال رمز التحقق." });
   }
 
   const otp = String(randomInt(0, 1_000_000)).padStart(OTP_LENGTH, "0");
@@ -157,8 +149,7 @@ export async function requestPasswordReset(req: Request, res: Response) {
     return res.json(response);
   } catch (error) {
     req.log.error(error, "password recovery OTP delivery failed");
-    // Clear only the OTP we just created. A newer request may already have
-    // replaced it while the delivery provider was responding.
+    // Clear only the OTP created by this request; a newer OTP remains untouched.
     await db.update(usersTable).set({
       passwordResetTokenHash: null,
       passwordResetExpiresAt: null,
@@ -181,11 +172,7 @@ export async function confirmPasswordReset(req: Request, res: Response) {
   }
 
   if (user.authProvider !== "local" || !user.passwordHash) {
-    return res.status(400).json({
-      ok: false,
-      error: "social_account_only",
-      message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام مزود تسجيل الدخول المرتبط بالحساب.",
-    });
+    return res.status(400).json({ ok: false, error: "invalid_or_expired_otp", message: "رمز التحقق غير صحيح أو منتهي الصلاحية." });
   }
 
   if (user.passwordResetAttempts >= MAX_ATTEMPTS) {
@@ -198,9 +185,6 @@ export async function confirmPasswordReset(req: Request, res: Response) {
   const expectedHash = user.passwordResetTokenHash;
   const valid = hashOtp(parsed.data.otp) === expectedHash;
   if (!valid) {
-    // Atomic increment: only increment the counter if this request is still
-    // validating the same active OTP. Concurrent requests cannot overwrite a
-    // newer counter value with a stale `attempts + 1` value.
     const result = await db.update(usersTable)
       .set({ passwordResetAttempts: sql`${usersTable.passwordResetAttempts} + 1`, updatedAt: new Date() })
       .where(and(
@@ -216,11 +200,8 @@ export async function confirmPasswordReset(req: Request, res: Response) {
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
-  // The hash and expiry are part of the guard, so a stale verification request
-  // cannot reset a newer password-recovery session.
   const result = await db.update(usersTable).set({
     passwordHash,
-    authProvider: "local",
     passwordResetTokenHash: null,
     passwordResetExpiresAt: null,
     passwordResetChannel: null,
@@ -230,6 +211,7 @@ export async function confirmPasswordReset(req: Request, res: Response) {
     eq(usersTable.id, user.id),
     eq(usersTable.passwordResetTokenHash, expectedHash),
     eq(usersTable.passwordResetExpiresAt, user.passwordResetExpiresAt),
+    lt(usersTable.passwordResetExpiresAt, new Date(Date.now() + 1)),
   ));
 
   if (result.rowCount === 0) {
