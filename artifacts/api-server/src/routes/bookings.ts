@@ -1,16 +1,24 @@
 import { Router } from "express";
-import { requireAuth } from "../middlewares/requireAuth"; // تأكد من المسار الصحيح لملف المصادقة لديك
+import { requireAuth } from "../middlewares/requireAuth";
 import {
+  createBooking,
   confirmBooking,
   recordJoin,
   checkLawyerAbsence,
+  getBookingById,
+  completeBooking,
+  disputeBooking,
 } from "../controllers/bookings";
 
 const bookingsRouter = Router();
 
-// تطبيق المصادقة الإجبارية على جميع مسارات الحجوزات الحساسة
+// All booking lifecycle operations require an authenticated user.
+bookingsRouter.post("/bookings", requireAuth, createBooking);
+bookingsRouter.get("/bookings/:id", requireAuth, getBookingById);
 bookingsRouter.post("/bookings/confirm", requireAuth, confirmBooking);
 bookingsRouter.post("/bookings/join", requireAuth, recordJoin);
 bookingsRouter.post("/bookings/check-absence", requireAuth, checkLawyerAbsence);
+bookingsRouter.post("/bookings/complete", requireAuth, completeBooking);
+bookingsRouter.post("/bookings/dispute", requireAuth, disputeBooking);
 
 export default bookingsRouter;
