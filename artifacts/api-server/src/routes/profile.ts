@@ -8,6 +8,7 @@ import {
   dismissRejectionNote,
 } from "../controllers/profile";
 import { requireAuth } from "../middlewares/requireAuth";
+import { getLawyerBankAccount, upsertLawyerBankAccount } from "../controllers/lawyerBankAccounts";
 
 const profileRouter = Router();
 
@@ -30,6 +31,12 @@ function protectResidenceCountry(req: any, res: any, next: any) {
 
 profileRouter.patch("/profile", requireAuth, protectResidenceCountry, updateProfile);
 profileRouter.get("/profile/pending-changes", requireAuth, getPendingChanges);
+
+// Lawyer financial identity: the submitted account always returns to pending
+// verification, including when an already verified IBAN is replaced.
+profileRouter.get("/profile/bank-account", requireAuth, getLawyerBankAccount);
+profileRouter.put("/profile/bank-account", requireAuth, upsertLawyerBankAccount);
+
 profileRouter.delete("/profile", requireAuth, softDeleteClient);
 profileRouter.post(
   "/profile/deletion-request",
