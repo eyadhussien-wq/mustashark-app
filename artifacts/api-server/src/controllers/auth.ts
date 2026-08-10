@@ -7,6 +7,7 @@ import { usersTable } from "@workspace/db";
 import { eq, and, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
+import { ROLE_UI } from "../lib/roleUi";
 
 const appleJwksClient = jwksClient({ jwksUri: "https://appleid.apple.com/auth/keys", cache: true, cacheMaxAge: 600_000, rateLimit: true });
 
@@ -62,9 +63,10 @@ export async function socialAuth(req: Request, res: Response) {
       if (dbUser && (dbUser.authProvider === "local" || !dbUser.providerId)) await db.update(usersTable).set({ authProvider: provider, providerId: providerUser.id, updatedAt: new Date() }).where(eq(usersTable.id, dbUser.id));
     }
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
-    if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json({ ok: false, error: "role_mismatch", message: dbUser.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
+    if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json({ ok: false, error: "role_mismatch", roleUi: ROLE_UI[dbUser.role as keyof typeof ROLE_UI], message: dbUser.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
     const jwtToken = signToken({ userId: dbUser.id, email: dbUser.email, role: (dbUser.role ?? "client") as "client" | "lawyer" | "admin", provider });
-    return res.json({ ok: true, jwt: jwtToken, user: { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role, country: dbUser.country, nationality: dbUser.nationality, phone: dbUser.phone, phoneCountry: dbUser.phoneCountry, authProvider: dbUser.authProvider, deletionRejectionNote: dbUser.deletionRejectionNote ?? null, createdAt: dbUser.createdAt } });
+    const roleUi = ROLE_UI[dbUser.role as keyof typeof ROLE_UI];
+    return res.json({ ok: true, jwt: jwtToken, roleUi, user: { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role, country: dbUser.country, nationality: dbUser.nationality, phone: dbUser.phone, phoneCountry: dbUser.phoneCountry, authProvider: dbUser.authProvider, deletionRejectionNote: dbUser.deletionRejectionNote ?? null, createdAt: dbUser.createdAt } });
   } catch (err) { req.log.error(err, "socialAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" }); }
 }
 
@@ -95,10 +97,10 @@ export async function localAuth(req: Request, res: Response) {
         return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
       }
       if (existing.role !== "admin" && existing.role !== role) {
-        return res.status(403).json({ ok: false, error: "role_mismatch", message: existing.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
+        return res.status(403).json({ ok: false, error: "role_mismatch", roleUi: ROLE_UI[existing.role as keyof typeof ROLE_UI], message: existing.role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." });
       }
       const jwtToken = signToken({ userId: existing.id, email: existing.email, role: (existing.role ?? "client") as "client" | "lawyer" | "admin", provider: "local" });
-      return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, phone: existing.phone, phoneCountry: existing.phoneCountry, country: existing.country, nationality: existing.nationality, specialization: existing.specialization, bio: existing.bio, hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null } });
+      return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, roleUi: ROLE_UI[existing.role as keyof typeof ROLE_UI], user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, phone: existing.phone, phoneCountry: existing.phoneCountry, country: existing.country, nationality: existing.nationality, specialization: existing.specialization, bio: existing.bio, hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null } });
     }
     if (!name?.trim()) return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
     if (!phone) return res.status(400).json({ ok: false, error: "phone_required", message: "رقم الهاتف مطلوب لإنشاء الحساب" });
@@ -108,6 +110,6 @@ export async function localAuth(req: Request, res: Response) {
     const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus: "active", ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
-    return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, user: { id: newId, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
+    return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, roleUi: ROLE_UI[role], user: { id: newId, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
   } catch (err) { req.log.error(err, "localAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" }); }
 }
