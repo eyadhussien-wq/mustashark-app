@@ -7,3 +7,6 @@ export * from "./lawyerProfileChangeRequests";
 export * from "./lawyerReviews";
 export * from "./adminAuditLogs";
 export * from "./accountStatusHistory";
+export * from "./consultationEvents";
+export * from "./consultationRescheduleRequests";
+export * from "./lawyerCommitmentScores";
