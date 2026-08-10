@@ -18,6 +18,13 @@ export const accountStatusEnum = pgEnum("account_status", [
   "rejected",
   "blocked",
 ]);
+export const bankVerificationStatusEnum = pgEnum("bank_verification_status", [
+  "not_submitted",
+  "pending",
+  "verified",
+  "rejected",
+  "suspended",
+]);
 
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
@@ -26,7 +33,6 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   phone: text("phone"),
   // Country inferred from the phone country calling code (+974, +962, ...).
-  // This is deliberately separate from residence country and nationality.
   phoneCountry: text("phone_country"),
   role: userRoleEnum("role").notNull().default("client"),
   // Country of residence; it must not be changed by a regular user after registration.
@@ -43,13 +49,28 @@ export const usersTable = pgTable("users", {
   specialization: text("specialization"),
   bio: text("bio"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
-  // Lawyer aggregate review stats (updated on every new review)
   rating: numeric("rating", { precision: 3, scale: 1 }),
   reviewsCount: integer("reviews_count").notNull().default(0),
-  // Soft-delete for clients (30-day window)
+
+  // Lawyer bank-account verification. Sensitive IBAN/SWIFT values are stored
+  // separately from the public profile and must never be exposed in full.
+  bankName: text("bank_name"),
+  bankAccountHolderName: text("bank_account_holder_name"),
+  bankCountry: countryEnum("bank_country"),
+  bankIbanEncrypted: text("bank_iban_encrypted"),
+  bankIbanLast4: text("bank_iban_last4"),
+  bankSwiftEncrypted: text("bank_swift_encrypted"),
+  bankVerificationStatus: bankVerificationStatusEnum("bank_verification_status")
+    .notNull()
+    .default("not_submitted"),
+  bankVerificationDocumentKey: text("bank_verification_document_key"),
+  bankVerificationNote: text("bank_verification_note"),
+  bankVerifiedAt: timestamp("bank_verified_at"),
+  bankVerifiedBy: text("bank_verified_by"),
+  bankUpdatedAt: timestamp("bank_updated_at"),
+
   deletedAt: timestamp("deleted_at"),
   deletionScheduledAt: timestamp("deletion_scheduled_at"),
-  // Lawyer deletion request rejection note from admin
   deletionRejectionNote: text("deletion_rejection_note"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
