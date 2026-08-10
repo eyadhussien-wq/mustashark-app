@@ -5,3 +5,6 @@ export * from "./platformDues";
 export * from "./lawyerDeletionRequests";
 export * from "./lawyerProfileChangeRequests";
 export * from "./lawyerReviews";
+export * from "./adminRoles";
+export * from "./adminPermissions";
+export * from "./adminRolePermissions";

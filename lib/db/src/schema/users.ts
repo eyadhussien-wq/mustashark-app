@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, pgEnum, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { adminRolesTable } from "./adminRoles";
 import { z } from "zod/v4";
 
 export const userRoleEnum = pgEnum("user_role", ["client", "lawyer", "admin"]);
@@ -26,6 +27,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   phone: text("phone"),
   role: userRoleEnum("role").notNull().default("client"),
+  adminRoleId: text("admin_role_id").references(() => adminRolesTable.id),
   country: countryEnum("country"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
