@@ -25,8 +25,14 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"),
   phone: text("phone"),
+  // Country inferred from the phone country calling code (+974, +962, ...).
+  // This is deliberately separate from residence country and nationality.
+  phoneCountry: text("phone_country"),
   role: userRoleEnum("role").notNull().default("client"),
+  // Country of residence; it must not be changed by a regular user after registration.
   country: countryEnum("country"),
+  // Nationality is an independent user-declared identity field.
+  nationality: text("nationality"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
   accountStatus: accountStatusEnum("account_status")
