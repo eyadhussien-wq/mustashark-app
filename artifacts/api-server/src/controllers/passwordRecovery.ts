@@ -2,7 +2,7 @@ import { type Request, type Response } from "express";
 import { randomInt, createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -117,16 +117,28 @@ export async function requestPasswordReset(req: Request, res: Response) {
   if (!user || user.accountStatus === "terminated") {
     return res.json({ ok: true, message: "إذا كان الحساب موجوداً، سيتم إرسال رمز الاستعادة." });
   }
+
+  // A social-only identity must not be converted into a local password account
+  // through recovery. The user must continue with the linked social provider.
+  if (user.authProvider !== "local" || !user.passwordHash) {
+    return res.status(400).json({
+      ok: false,
+      error: "social_account_only",
+      message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام مزود تسجيل الدخول المرتبط بالحساب.",
+    });
+  }
+
   if (channel === "whatsapp" && !user.phone) {
     return res.status(400).json({ ok: false, error: "phone_required", message: "لا يوجد رقم هاتف مرتبط بهذا الحساب لاستخدام WhatsApp." });
   }
 
   const otp = String(randomInt(0, 1_000_000)).padStart(OTP_LENGTH, "0");
+  const otpHash = hashOtp(otp);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
 
   await db.update(usersTable).set({
-    passwordResetTokenHash: hashOtp(otp),
+    passwordResetTokenHash: otpHash,
     passwordResetExpiresAt: expiresAt,
     passwordResetChannel: channel,
     passwordResetAttempts: 0,
@@ -145,13 +157,15 @@ export async function requestPasswordReset(req: Request, res: Response) {
     return res.json(response);
   } catch (error) {
     req.log.error(error, "password recovery OTP delivery failed");
+    // Clear only the OTP we just created. A newer request may already have
+    // replaced it while the delivery provider was responding.
     await db.update(usersTable).set({
       passwordResetTokenHash: null,
       passwordResetExpiresAt: null,
       passwordResetChannel: null,
       passwordResetAttempts: 0,
       updatedAt: new Date(),
-    }).where(eq(usersTable.id, user.id));
+    }).where(and(eq(usersTable.id, user.id), eq(usersTable.passwordResetTokenHash, otpHash)));
     return res.status(503).json({ ok: false, error: "delivery_unavailable", message: "تعذر إرسال رمز الاستعادة حالياً. يرجى المحاولة لاحقاً." });
   }
 }
@@ -165,6 +179,15 @@ export async function confirmPasswordReset(req: Request, res: Response) {
   if (!user || !user.passwordResetTokenHash || !user.passwordResetExpiresAt) {
     return res.status(400).json({ ok: false, error: "invalid_or_expired_otp", message: "رمز التحقق غير صحيح أو منتهي الصلاحية." });
   }
+
+  if (user.authProvider !== "local" || !user.passwordHash) {
+    return res.status(400).json({
+      ok: false,
+      error: "social_account_only",
+      message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام مزود تسجيل الدخول المرتبط بالحساب.",
+    });
+  }
+
   if (user.passwordResetAttempts >= MAX_ATTEMPTS) {
     return res.status(429).json({ ok: false, error: "too_many_attempts", message: "تم تجاوز عدد المحاولات. اطلب رمزاً جديداً." });
   }
@@ -172,14 +195,30 @@ export async function confirmPasswordReset(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: "expired_otp", message: "انتهت صلاحية الرمز. اطلب رمزاً جديداً." });
   }
 
-  const valid = hashOtp(parsed.data.otp) === user.passwordResetTokenHash;
+  const expectedHash = user.passwordResetTokenHash;
+  const valid = hashOtp(parsed.data.otp) === expectedHash;
   if (!valid) {
-    await db.update(usersTable).set({ passwordResetAttempts: user.passwordResetAttempts + 1, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    // Atomic increment: only increment the counter if this request is still
+    // validating the same active OTP. Concurrent requests cannot overwrite a
+    // newer counter value with a stale `attempts + 1` value.
+    const result = await db.update(usersTable)
+      .set({ passwordResetAttempts: sql`${usersTable.passwordResetAttempts} + 1`, updatedAt: new Date() })
+      .where(and(
+        eq(usersTable.id, user.id),
+        eq(usersTable.passwordResetTokenHash, expectedHash),
+        lt(usersTable.passwordResetAttempts, MAX_ATTEMPTS),
+      ));
+
+    if (result.rowCount === 0) {
+      return res.status(429).json({ ok: false, error: "too_many_attempts", message: "تم تجاوز عدد المحاولات. اطلب رمزاً جديداً." });
+    }
     return res.status(400).json({ ok: false, error: "invalid_otp", message: "رمز التحقق غير صحيح." });
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
-  await db.update(usersTable).set({
+  // The hash and expiry are part of the guard, so a stale verification request
+  // cannot reset a newer password-recovery session.
+  const result = await db.update(usersTable).set({
     passwordHash,
     authProvider: "local",
     passwordResetTokenHash: null,
@@ -187,7 +226,15 @@ export async function confirmPasswordReset(req: Request, res: Response) {
     passwordResetChannel: null,
     passwordResetAttempts: 0,
     updatedAt: new Date(),
-  }).where(eq(usersTable.id, user.id));
+  }).where(and(
+    eq(usersTable.id, user.id),
+    eq(usersTable.passwordResetTokenHash, expectedHash),
+    eq(usersTable.passwordResetExpiresAt, user.passwordResetExpiresAt),
+  ));
+
+  if (result.rowCount === 0) {
+    return res.status(400).json({ ok: false, error: "invalid_or_expired_otp", message: "رمز التحقق غير صحيح أو منتهي الصلاحية." });
+  }
 
   return res.json({ ok: true, message: "تم تغيير كلمة المرور بنجاح." });
 }
