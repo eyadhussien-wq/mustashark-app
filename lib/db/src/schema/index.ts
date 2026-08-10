@@ -10,3 +10,4 @@ export * from "./accountStatusHistory";
 export * from "./consultationEvents";
 export * from "./consultationRescheduleRequests";
 export * from "./lawyerCommitmentScores";
+export * from "./lawyerBankAccounts";
