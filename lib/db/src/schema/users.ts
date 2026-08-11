@@ -4,20 +4,8 @@ import { z } from "zod/v4";
 
 export const userRoleEnum = pgEnum("user_role", ["client", "lawyer", "admin"]);
 export const countryEnum = pgEnum("country", ["qatar", "jordan"]);
-export const authProviderEnum = pgEnum("auth_provider", [
-  "local",
-  "google",
-  "facebook",
-  "apple",
-]);
-export const accountStatusEnum = pgEnum("account_status", [
-  "pending",
-  "active",
-  "suspended",
-  "terminated",
-  "rejected",
-  "blocked",
-]);
+export const authProviderEnum = pgEnum("auth_provider", ["local", "google", "facebook", "apple"]);
+export const accountStatusEnum = pgEnum("account_status", ["pending", "active", "suspended", "terminated", "rejected", "blocked"]);
 
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
@@ -31,11 +19,10 @@ export const usersTable = pgTable("users", {
   nationality: text("nationality"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
-  accountStatus: accountStatusEnum("account_status")
-    .notNull()
-    .default("active"),
+  accountStatus: accountStatusEnum("account_status").notNull().default("active"),
   statusReason: text("status_reason"),
   specialization: text("specialization"),
+  litigationTier: text("litigation_tier").notNull().default("general"),
   bio: text("bio"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
   rating: numeric("rating", { precision: 3, scale: 1 }),
@@ -47,11 +34,7 @@ export const usersTable = pgTable("users", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true, updatedAt: true });
 export const selectUserSchema = createSelectSchema(usersTable);
-
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
