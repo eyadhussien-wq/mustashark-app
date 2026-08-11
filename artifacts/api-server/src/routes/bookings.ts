@@ -9,10 +9,14 @@ import {
   completeBooking,
   disputeBooking,
 } from "../controllers/bookings";
+import { createEmailBooking } from "../controllers/emailBooking";
 
 const bookingsRouter = Router();
 
 // All booking lifecycle operations require an authenticated user.
+// Email consultations use a dedicated endpoint so the existing security-sensitive
+// generic booking controller remains unchanged.
+bookingsRouter.post("/bookings/email", requireAuth, createEmailBooking);
 bookingsRouter.post("/bookings", requireAuth, createBooking);
 bookingsRouter.get("/bookings/:id", requireAuth, getBookingById);
 bookingsRouter.post("/bookings/confirm", requireAuth, confirmBooking);
