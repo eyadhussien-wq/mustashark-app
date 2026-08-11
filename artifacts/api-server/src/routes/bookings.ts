@@ -10,20 +10,23 @@ const bookingsRouter = Router();
 const requireClient = requireRole("client");
 const requireLawyer = requireRole("lawyer");
 const requireClientOrLawyer = requireRole("client", "lawyer");
+const requireClientLawyerOrAdmin = requireRole("client", "lawyer", "admin");
+const requireLawyerOrAdmin = requireRole("lawyer", "admin");
+const requireClientOrAdmin = requireRole("client", "admin");
 
 bookingsRouter.post("/bookings/email", requireAuth, requireClient, createEmailBooking);
 bookingsRouter.post("/bookings", requireAuth, requireClient, createBooking);
-bookingsRouter.get("/bookings/:id", requireAuth, requireClientOrLawyer, getBookingById);
-bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyer, confirmBooking);
+bookingsRouter.get("/bookings/:id", requireAuth, requireClientLawyerOrAdmin, getBookingById);
+bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, confirmBooking);
 bookingsRouter.post("/bookings/join", requireAuth, requireClientOrLawyer, recordJoin);
-bookingsRouter.post("/bookings/check-absence", requireAuth, requireClient, checkLawyerAbsence);
-bookingsRouter.post("/bookings/complete", requireAuth, requireLawyer, completeBooking);
-bookingsRouter.post("/bookings/dispute", requireAuth, requireClientOrLawyer, disputeBooking);
+bookingsRouter.post("/bookings/check-absence", requireAuth, requireClientOrAdmin, checkLawyerAbsence);
+bookingsRouter.post("/bookings/complete", requireAuth, requireLawyerOrAdmin, completeBooking);
+bookingsRouter.post("/bookings/dispute", requireAuth, requireClientLawyerOrAdmin, disputeBooking);
 
-// Lawyer no-show recovery belongs to the affected client. Administrative
-// recovery, when needed, must use a dedicated admin workflow rather than
-// widening these client endpoints.
-bookingsRouter.post("/bookings/:id/no-show", requireAuth, requireClient, claimLawyerNoShow);
+// Lawyer no-show recovery belongs to the affected client. The claim endpoint
+// also permits admin because the controller explicitly supports administrative
+// recovery; refund/transfer remain client-owned operations.
+bookingsRouter.post("/bookings/:id/no-show", requireAuth, requireClientOrAdmin, claimLawyerNoShow);
 bookingsRouter.post("/bookings/:id/no-show/refund", requireAuth, requireClient, refundLawyerNoShow);
 bookingsRouter.get("/bookings/:id/no-show/transfer-options", requireAuth, requireClient, getSmartTransferOptions);
 bookingsRouter.post("/bookings/:id/no-show/transfer", requireAuth, requireClient, transferLawyerNoShowBooking);
