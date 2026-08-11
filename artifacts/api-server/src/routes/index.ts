@@ -5,6 +5,7 @@ import bookingsRouter from "./bookings";
 import authRouter from "./auth";
 import profileRouter from "./profile";
 import reviewsRouter from "./reviews";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(profileRouter);
 router.use(adminRouter);
 router.use(bookingsRouter);
 router.use(reviewsRouter);
+router.use(notificationsRouter);
 
 export default router;
