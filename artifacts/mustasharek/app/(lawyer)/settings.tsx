@@ -41,50 +41,43 @@ export default function LawyerSettings() {
   const lawyer = lawyers.find((l) => l.id === user?.id);
   const currentAvail = lawyer?.availability;
 
-  const [workingDays, setWorkingDays] = useState<number[]>(
-    currentAvail?.workingDays ?? [1, 2, 3, 4, 5]
-  );
+  const [workingDays, setWorkingDays] = useState<number[]>(currentAvail?.workingDays ?? [1, 2, 3, 4, 5]);
   const [startHour, setStartHour] = useState(currentAvail?.startHour ?? "09:00");
   const [endHour, setEndHour] = useState(currentAvail?.endHour ?? "17:00");
-  const [slotDuration, setSlotDuration] = useState<30 | 60>(
-    currentAvail?.slotDuration ?? 60
-  );
+  const [slotDuration, setSlotDuration] = useState<30 | 60>(currentAvail?.slotDuration ?? 60);
   const [saving, setSaving] = useState(false);
 
-  const defaultChannels: LawyerCommunicationChannels = {
-    chat: true,
-    phone: true,
-    video: true,
-    email: true,
-  };
+  const defaultChannels: LawyerCommunicationChannels = { chat: true, phone: true, video: true, email: true };
   const currentChannels = (lawyer?.channels ?? defaultChannels) as LawyerCommunicationChannels;
   const [channels, setChannels] = useState<LawyerCommunicationChannels>(currentChannels);
 
   function toggleDay(day: number) {
-    setWorkingDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
-    );
+    setWorkingDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort());
   }
 
   async function handleSave() {
     if (!user) return;
     const start = parseInt(startHour.split(":")[0], 10);
     const end = parseInt(endHour.split(":")[0], 10);
-    if (start >= end) {
-      Alert.alert(t("error"), t("tryAgain"));
-      return;
-    }
-    if (workingDays.length === 0) {
+    if (start >= end || workingDays.length === 0) {
       Alert.alert(t("error"), t("tryAgain"));
       return;
     }
 
     setSaving(true);
-    const availability: Availability = { workingDays, startHour, endHour, slotDuration };
-    await updateLawyerAvailability(user.id, availability);
-    await updateLawyerChannels(user.id, channels);
-    setSaving(false);
-    Alert.alert(t("done"), t("consultationSent"), [{ text: t("back"), onPress: () => router.back() }]);
+    try {
+      const availability: Availability = { workingDays, startHour, endHour, slotDuration };
+      await updateLawyerAvailability(user.id, availability);
+      await updateLawyerChannels(user.id, channels);
+      Alert.alert("تم", "تم حفظ التعديلات وإعدادات المواعيد بنجاح.", [
+        { text: "موافق" },
+      ]);
+    } catch (error) {
+      console.error("Lawyer settings save failed:", error);
+      Alert.alert(t("error"), t("tryAgain"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const labelAlign = lang === "ar" ? "right" : "left";
@@ -93,11 +86,7 @@ export default function LawyerSettings() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: C.background }}
-      contentContainerStyle={{
-        paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
-        paddingBottom: insets.bottom + 40,
-        paddingHorizontal: 20,
-      }}
+      contentContainerStyle={{ paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: insets.bottom + 40, paddingHorizontal: 20 }}
     >
       <View style={[styles.header, { flexDirection: rowDir }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -127,25 +116,21 @@ export default function LawyerSettings() {
           <View style={styles.hourBox}>
             <Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("startHour")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.hourChips}>
-                {HOURS.slice(0, 18).map((h) => (
-                  <TouchableOpacity key={h} style={[styles.hourChip, startHour === h && styles.hourChipActive]} onPress={() => setStartHour(h)}>
-                    <Text style={[styles.hourChipText, startHour === h && styles.hourChipTextActive]}>{h}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <View style={styles.hourChips}>{HOURS.slice(0, 18).map((h) => (
+                <TouchableOpacity key={h} style={[styles.hourChip, startHour === h && styles.hourChipActive]} onPress={() => setStartHour(h)}>
+                  <Text style={[styles.hourChipText, startHour === h && styles.hourChipTextActive]}>{h}</Text>
+                </TouchableOpacity>
+              ))}</View>
             </ScrollView>
           </View>
           <View style={styles.hourBox}>
             <Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("endHour")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.hourChips}>
-                {HOURS.slice(12, 24).map((h) => (
-                  <TouchableOpacity key={h} style={[styles.hourChip, endHour === h && styles.hourChipActive]} onPress={() => setEndHour(h)}>
-                    <Text style={[styles.hourChipText, endHour === h && styles.hourChipTextActive]}>{h}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <View style={styles.hourChips}>{HOURS.slice(12, 24).map((h) => (
+                <TouchableOpacity key={h} style={[styles.hourChip, endHour === h && styles.hourChipActive]} onPress={() => setEndHour(h)}>
+                  <Text style={[styles.hourChipText, endHour === h && styles.hourChipTextActive]}>{h}</Text>
+                </TouchableOpacity>
+              ))}</View>
             </ScrollView>
           </View>
         </View>
