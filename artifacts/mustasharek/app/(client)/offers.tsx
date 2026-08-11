@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingTop: 58, paddingBottom: 120 },
   header: { backgroundColor: C.navy, borderRadius: 20, padding: 18, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "rgba(201,160,53,.35)", marginBottom: 14 },
   headerIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,.08)", alignItems: "center", justifyContent: "center", marginRight: 12 },
-  headerCopy: { flex: 1, alignItems: "flex-end" }, eyebrow: { color: C.gold, fontSize: 10, fontFamily: "Inter_600SemiBold" }, title: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold", marginTop: 3, textAlign: "right", fontFamily: "Inter_700Bold" }, subtitle: { color: "rgba(255,255,255,.72)", fontSize: 11, lineHeight: 18, marginTop: 4, textAlign: "right", fontFamily: "Inter_400Regular" },
+  headerCopy: { flex: 1, alignItems: "flex-end" }, eyebrow: { color: C.gold, fontSize: 10, fontFamily: "Inter_600SemiBold" }, title: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold", marginTop: 3, textAlign: "right" }, subtitle: { color: "rgba(255,255,255,.72)", fontSize: 11, lineHeight: 18, marginTop: 4, textAlign: "right", fontFamily: "Inter_400Regular" },
   legend: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 14, backgroundColor: "#FFFCF3", borderWidth: 1, borderColor: "rgba(201,160,53,.3)", marginBottom: 14 }, legendText: { flex: 1, fontSize: 10, lineHeight: 17, color: C.foreground, textAlign: "right", fontFamily: "Inter_400Regular" },
   note: { fontSize: 10, color: C.mutedForeground, textAlign: "right", marginTop: -6, marginBottom: 12, paddingHorizontal: 4, fontFamily: "Inter_400Regular" },
 });
