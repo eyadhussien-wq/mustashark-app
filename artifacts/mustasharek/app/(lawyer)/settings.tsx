@@ -40,45 +40,28 @@ export default function LawyerSettings() {
 
   const lawyer = lawyers.find((l) => l.id === user?.id);
   const currentAvail = lawyer?.availability;
-
-  const [workingDays, setWorkingDays] = useState<number[]>(
-    currentAvail?.workingDays ?? [1, 2, 3, 4, 5]
-  );
+  const [workingDays, setWorkingDays] = useState<number[]>(currentAvail?.workingDays ?? [1, 2, 3, 4, 5]);
   const [startHour, setStartHour] = useState(currentAvail?.startHour ?? "09:00");
   const [endHour, setEndHour] = useState(currentAvail?.endHour ?? "17:00");
-  const [slotDuration, setSlotDuration] = useState<30 | 60>(
-    currentAvail?.slotDuration ?? 60
-  );
+  const [slotDuration, setSlotDuration] = useState<30 | 60>(currentAvail?.slotDuration ?? 60);
   const [saving, setSaving] = useState(false);
 
-  const defaultChannels: LawyerCommunicationChannels = {
-    chat: true,
-    phone: true,
-    video: true,
-    email: true,
-  };
+  const defaultChannels: LawyerCommunicationChannels = { chat: true, phone: true, video: true, email: true };
   const currentChannels = (lawyer?.channels ?? defaultChannels) as LawyerCommunicationChannels;
   const [channels, setChannels] = useState<LawyerCommunicationChannels>(currentChannels);
 
   function toggleDay(day: number) {
-    setWorkingDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
-    );
+    setWorkingDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort());
   }
 
   async function handleSave() {
     if (!user) return;
     const start = parseInt(startHour.split(":")[0], 10);
     const end = parseInt(endHour.split(":")[0], 10);
-    if (start >= end) {
+    if (start >= end || workingDays.length === 0) {
       Alert.alert(t("error"), t("tryAgain"));
       return;
     }
-    if (workingDays.length === 0) {
-      Alert.alert(t("error"), t("tryAgain"));
-      return;
-    }
-
     setSaving(true);
     const availability: Availability = { workingDays, startHour, endHour, slotDuration };
     await updateLawyerAvailability(user.id, availability);
@@ -91,116 +74,49 @@ export default function LawyerSettings() {
   const rowDir = lang === "ar" ? "row-reverse" : "row";
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: C.background }}
-      contentContainerStyle={{
-        paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
-        paddingBottom: insets.bottom + 40,
-        paddingHorizontal: 20,
-      }}
-    >
+    <ScrollView style={{ flex: 1, backgroundColor: C.background }} contentContainerStyle={{ paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: insets.bottom + 40, paddingHorizontal: 20 }}>
       <View style={[styles.header, { flexDirection: rowDir }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name={lang === "ar" ? "arrow-right" : "arrow-left"} size={22} color={C.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.title}>{t("availability")}</Text>
-        <View style={{ width: 30 }} />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Feather name={lang === "ar" ? "arrow-right" : "arrow-left"} size={22} color={C.foreground} /></TouchableOpacity>
+        <Text style={styles.title}>{t("availability")}</Text><View style={{ width: 30 }} />
       </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { textAlign: labelAlign }]}>{t("workingDays")}</Text>
-        <View style={styles.daysRow}>
-          {DAYS.map((d) => {
-            const active = workingDays.includes(d.idx);
-            return (
-              <TouchableOpacity key={d.idx} style={[styles.dayChip, active && styles.dayChipActive]} onPress={() => toggleDay(d.idx)} activeOpacity={0.8}>
-                <Text style={[styles.dayText, active && styles.dayTextActive]}>{lang === "ar" ? d.ar : d.en}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <View style={styles.daysRow}>{DAYS.map((d) => { const active = workingDays.includes(d.idx); return <TouchableOpacity key={d.idx} style={[styles.dayChip, active && styles.dayChipActive]} onPress={() => toggleDay(d.idx)} activeOpacity={0.8}><Text style={[styles.dayText, active && styles.dayTextActive]}>{lang === "ar" ? d.ar : d.en}</Text></TouchableOpacity>; })}</View>
       </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { textAlign: labelAlign }]}>{t("startHour")} — {t("endHour")}</Text>
         <View style={[styles.hoursRow, { flexDirection: rowDir }]}>
-          <View style={styles.hourBox}>
-            <Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("startHour")}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.hourChips}>
-                {HOURS.slice(0, 18).map((h) => (
-                  <TouchableOpacity key={h} style={[styles.hourChip, startHour === h && styles.hourChipActive]} onPress={() => setStartHour(h)}>
-                    <Text style={[styles.hourChipText, startHour === h && styles.hourChipTextActive]}>{h}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-          <View style={styles.hourBox}>
-            <Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("endHour")}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.hourChips}>
-                {HOURS.slice(12, 24).map((h) => (
-                  <TouchableOpacity key={h} style={[styles.hourChip, endHour === h && styles.hourChipActive]} onPress={() => setEndHour(h)}>
-                    <Text style={[styles.hourChipText, endHour === h && styles.hourChipTextActive]}>{h}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
+          <View style={styles.hourBox}><Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("startHour")}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}><View style={styles.hourChips}>{HOURS.slice(0, 18).map((h) => <TouchableOpacity key={h} style={[styles.hourChip, startHour === h && styles.hourChipActive]} onPress={() => setStartHour(h)}><Text style={[styles.hourChipText, startHour === h && styles.hourChipTextActive]}>{h}</Text></TouchableOpacity>)}</View></ScrollView></View>
+          <View style={styles.hourBox}><Text style={[styles.hourLabel, { textAlign: labelAlign }]}>{t("endHour")}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}><View style={styles.hourChips}>{HOURS.slice(12, 24).map((h) => <TouchableOpacity key={h} style={[styles.hourChip, endHour === h && styles.hourChipActive]} onPress={() => setEndHour(h)}><Text style={[styles.hourChipText, endHour === h && styles.hourChipTextActive]}>{h}</Text></TouchableOpacity>)}</View></ScrollView></View>
         </View>
       </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { textAlign: labelAlign }]}>{t("slotDuration")}</Text>
         <View style={[styles.durationRow, { flexDirection: rowDir }]}>
-          <TouchableOpacity style={[styles.durationChip, slotDuration === 30 && styles.durationChipActive]} onPress={() => setSlotDuration(30)}>
-            <Text style={[styles.durationText, slotDuration === 30 && styles.durationTextActive]}>30 {t("minutes")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.durationChip, slotDuration === 60 && styles.durationChipActive]} onPress={() => setSlotDuration(60)}>
-            <Text style={[styles.durationText, slotDuration === 60 && styles.durationTextActive]}>1 {t("hours")}</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.durationChip, slotDuration === 30 && styles.durationChipActive]} onPress={() => setSlotDuration(30)}><Text style={[styles.durationText, slotDuration === 30 && styles.durationTextActive]}>30 {t("minutes")}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.durationChip, slotDuration === 60 && styles.durationChipActive]} onPress={() => setSlotDuration(60)}><Text style={[styles.durationText, slotDuration === 60 && styles.durationTextActive]}>1 {t("hours")}</Text></TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.previewBox}>
-        <Feather name="calendar" size={16} color={C.gold} />
-        <Text style={styles.previewText}>{workingDays.length} {t("workingDays")} · {startHour}–{endHour} · {slotDuration} {t("minutes")}</Text>
-      </View>
+      <View style={styles.previewBox}><Feather name="calendar" size={16} color={C.gold} /><Text style={styles.previewText}>{workingDays.length} {t("workingDays")} · {startHour}–{endHour} · {slotDuration} {t("minutes")}</Text></View>
+
+      <TouchableOpacity style={[styles.servicesLink, { flexDirection: rowDir }]} onPress={() => router.push("/(lawyer)/services")} activeOpacity={0.85}>
+        <View style={styles.servicesIcon}><Feather name="briefcase" size={18} color={C.gold} /></View>
+        <View style={{ flex: 1 }}><Text style={[styles.servicesTitle, { textAlign: labelAlign }]}>الخدمات التي أقدمها</Text><Text style={[styles.servicesHint, { textAlign: labelAlign }]}>استشارة قانونية • كتابة مذكرات • توكيل وتمثيل</Text></View>
+        <Feather name={lang === "ar" ? "chevron-left" : "chevron-right"} size={18} color={C.mutedForeground} />
+      </TouchableOpacity>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { textAlign: labelAlign }]}>قنوات التواصل</Text>
         <Text style={[styles.sectionHint, { textAlign: labelAlign }]}>اختر القنوات المتاحة للعملاء لحجز استشاراتك</Text>
-        {[
-          { key: "email" as const, label: "رسالة عبر البريد الإلكتروني", icon: "mail", description: "يتواصل العميل معك عبر البريد الإلكتروني بعد تأكيد الحجز" },
-          { key: "chat" as const, label: "محادثة نصية", icon: "message-square", description: "محادثة داخل التطبيق" },
-          { key: "phone" as const, label: "مكالمة صوتية", icon: "phone", description: "مكالمة صوتية مجدولة" },
-          { key: "video" as const, label: "مكالمة فيديو", icon: "video", description: "مكالمة فيديو مجدولة" },
-        ].map((ch) => (
-          <View key={ch.key} style={[styles.channelRow, { flexDirection: rowDir }]}>
-            <View style={[styles.channelLeft, { flexDirection: rowDir }]}>
-              <View style={[styles.channelIcon, { backgroundColor: channels[ch.key] ? "rgba(201,160,53,0.14)" : C.border + "30" }]}>
-                <Feather name={ch.icon as any} size={16} color={channels[ch.key] ? C.navy : C.mutedForeground} />
-              </View>
-              <View style={styles.channelCopy}>
-                <Text style={[styles.channelLabel, channels[ch.key] ? styles.channelLabelActive : styles.channelLabelInactive, { textAlign: labelAlign }]}>{ch.label}</Text>
-                <Text style={[styles.channelDescription, { textAlign: labelAlign }]}>{ch.description}</Text>
-              </View>
-            </View>
-            <Switch value={channels[ch.key]} onValueChange={(v) => setChannels((prev) => ({ ...prev, [ch.key]: v }))} trackColor={{ false: C.border, true: C.navy }} thumbColor="#fff" ios_backgroundColor={C.border} />
-          </View>
-        ))}
+        {[{ key: "email" as const, label: "رسالة عبر البريد الإلكتروني", icon: "mail", description: "يتواصل العميل معك عبر البريد الإلكتروني بعد تأكيد الحجز" }, { key: "chat" as const, label: "محادثة نصية", icon: "message-square", description: "محادثة داخل التطبيق" }, { key: "phone" as const, label: "مكالمة صوتية", icon: "phone", description: "مكالمة صوتية مجدولة" }, { key: "video" as const, label: "مكالمة فيديو", icon: "video", description: "مكالمة فيديو مجدولة" }].map((ch) => <View key={ch.key} style={[styles.channelRow, { flexDirection: rowDir }]}><View style={[styles.channelLeft, { flexDirection: rowDir }]}><View style={[styles.channelIcon, { backgroundColor: channels[ch.key] ? "rgba(201,160,53,0.14)" : C.border + "30" }]}><Feather name={ch.icon as any} size={16} color={channels[ch.key] ? C.navy : C.mutedForeground} /></View><View style={styles.channelCopy}><Text style={[styles.channelLabel, channels[ch.key] ? styles.channelLabelActive : styles.channelLabelInactive, { textAlign: labelAlign }]}>{ch.label}</Text><Text style={[styles.channelDescription, { textAlign: labelAlign }]}>{ch.description}</Text></View></View><Switch value={channels[ch.key]} onValueChange={(v) => setChannels((prev) => ({ ...prev, [ch.key]: v }))} trackColor={{ false: C.border, true: C.navy }} thumbColor="#fff" ios_backgroundColor={C.border} /></View>)}
       </View>
 
-      <View style={styles.emailNotice}>
-        <Feather name="shield" size={17} color={C.gold} />
-        <Text style={styles.emailNoticeText}>عند تفعيل البريد الإلكتروني، يظهر هذا الخيار للعميل عند حجز الاستشارة، ويُستخدم بريد الطرفين للتواصل بشأن الاستشارة.</Text>
-      </View>
-
-      <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.65 }]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
-        <Feather name="save" size={16} color="#fff" />
-        <Text style={styles.saveBtnText}>{saving ? t("loading") : t("save")}</Text>
-      </TouchableOpacity>
+      <View style={styles.emailNotice}><Feather name="shield" size={17} color={C.gold} /><Text style={styles.emailNoticeText}>عند تفعيل البريد الإلكتروني، يظهر هذا الخيار للعميل عند حجز الاستشارة، ويُستخدم بريد الطرفين للتواصل بشأن الاستشارة.</Text></View>
+      <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.65 }]} onPress={handleSave} disabled={saving} activeOpacity={0.85}><Feather name="save" size={16} color="#fff" /><Text style={styles.saveBtnText}>{saving ? t("loading") : t("save")}</Text></TouchableOpacity>
     </ScrollView>
   );
 }
@@ -216,32 +132,10 @@ const styles = StyleSheet.create({
   dayChipActive: { backgroundColor: C.navy, borderColor: C.navy },
   dayText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.mutedForeground },
   dayTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
-  hoursRow: { gap: 12 },
-  hourBox: { flex: 1, gap: 6 },
-  hourLabel: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-  hourChips: { flexDirection: "row", gap: 6 },
-  hourChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card },
-  hourChipActive: { backgroundColor: C.navy, borderColor: C.navy },
-  hourChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.foreground },
-  hourChipTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
-  durationRow: { gap: 10 },
-  durationChip: { flex: 1, alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card },
-  durationChipActive: { backgroundColor: C.navy, borderColor: C.navy },
-  durationText: { fontSize: 14, fontFamily: "Inter_500Medium", color: C.foreground },
-  durationTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
-  previewBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(201,160,53,0.1)", borderWidth: 1, borderColor: "rgba(201,160,53,0.25)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20 },
-  previewText: { fontSize: 13, color: C.gold, fontFamily: "Inter_600SemiBold" },
-  sectionHint: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginBottom: 12, marginTop: -4 },
-  channelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 },
-  channelLeft: { flex: 1, alignItems: "center", gap: 12 },
-  channelCopy: { flex: 1 },
-  channelIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  channelLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  channelLabelActive: { color: C.foreground },
-  channelLabelInactive: { color: C.mutedForeground },
-  channelDescription: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 2 },
-  emailNotice: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 9, backgroundColor: "rgba(201,160,53,0.08)", borderWidth: 1, borderColor: "rgba(201,160,53,0.22)", borderRadius: 14, padding: 13, marginBottom: 20 },
-  emailNoticeText: { flex: 1, color: C.mutedForeground, fontSize: 11, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "right" },
-  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.navy, borderRadius: 14, paddingVertical: 16 },
-  saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+  hoursRow: { gap: 12 }, hourBox: { flex: 1, gap: 6 }, hourLabel: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular" }, hourChips: { flexDirection: "row", gap: 6 }, hourChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card }, hourChipActive: { backgroundColor: C.navy, borderColor: C.navy }, hourChipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.foreground }, hourChipTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
+  durationRow: { gap: 10 }, durationChip: { flex: 1, alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card }, durationChipActive: { backgroundColor: C.navy, borderColor: C.navy }, durationText: { fontSize: 14, fontFamily: "Inter_500Medium", color: C.foreground }, durationTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
+  previewBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(201,160,53,0.1)", borderWidth: 1, borderColor: "rgba(201,160,53,0.25)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 }, previewText: { fontSize: 13, color: C.gold, fontFamily: "Inter_600SemiBold" },
+  servicesLink: { alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 15, borderWidth: 1, borderColor: "rgba(201,160,53,0.35)", padding: 14, marginBottom: 24 }, servicesIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(201,160,53,0.12)", alignItems: "center", justifyContent: "center" }, servicesTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.foreground }, servicesHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.mutedForeground, marginTop: 3 },
+  sectionHint: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginBottom: 12, marginTop: -4 }, channelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 }, channelLeft: { flex: 1, alignItems: "center", gap: 12 }, channelCopy: { flex: 1 }, channelIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" }, channelLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" }, channelLabelActive: { color: C.foreground }, channelLabelInactive: { color: C.mutedForeground }, channelDescription: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 2 },
+  emailNotice: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 9, backgroundColor: "rgba(201,160,53,0.08)", borderWidth: 1, borderColor: "rgba(201,160,53,0.22)", borderRadius: 14, padding: 13, marginBottom: 20 }, emailNoticeText: { flex: 1, color: C.mutedForeground, fontSize: 11, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "right" }, saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.navy, borderRadius: 14, paddingVertical: 16 }, saveBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
 });
