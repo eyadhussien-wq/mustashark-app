@@ -4,18 +4,14 @@ import React, { useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
-import { HandoverMode, HandoverOptions } from "@/components/HandoverOptions";
+import { HandoverOptions } from "@/components/HandoverOptions";
+import type { HandoverMode } from "@/components/HandoverOptions";
 
 const C = colors.light;
 const TRACKING = [
-  ["requested", "تم طلب التسليم"],
-  ["approved", "تم اعتماد الطلب"],
-  ["preparing", "جاري تجهيز المستند"],
-  ["dispatched", "تم الإرسال"],
-  ["in_transit", "في الطريق"],
-  ["customs", "إجراءات الجمارك"],
-  ["ready_for_delivery", "جاهز للتسليم"],
-  ["delivered", "تم التسليم"],
+  ["requested", "تم طلب التسليم"], ["approved", "تم اعتماد الطلب"], ["preparing", "جاري تجهيز المستند"],
+  ["dispatched", "تم الإرسال"], ["in_transit", "في الطريق"], ["customs", "إجراءات الجمارك"],
+  ["ready_for_delivery", "جاهز للتسليم"], ["delivered", "تم التسليم"],
 ] as const;
 
 export default function DocumentHandover() {
@@ -26,24 +22,16 @@ export default function DocumentHandover() {
   const currentIndex = selected === "international" ? 4 : 2;
 
   return <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + (Platform.OS === "web" ? 67 : 10), paddingBottom: insets.bottom + 40 }}>
-    <View style={styles.header}>
-      <TouchableOpacity onPress={() => router.back()} accessibilityLabel="رجوع"><Feather name="arrow-right" size={22} color={C.foreground} /></TouchableOpacity>
-      <Text style={styles.title}>تسليم المستندات</Text><View style={{ width: 22 }} />
-    </View>
-
+    <View style={styles.header}><TouchableOpacity onPress={() => router.back()} accessibilityLabel="رجوع"><Feather name="arrow-right" size={22} color={C.foreground} /></TouchableOpacity><Text style={styles.title}>تسليم المستندات</Text><View style={{ width: 22 }} /></View>
     <View style={styles.case}><Feather name="folder" size={18} color={C.gold} /><Text style={styles.caseText}>القضية {String(id ?? "CASE-001")}</Text></View>
     <View style={styles.document}><View style={styles.documentIcon}><Feather name="file-text" size={21} color={C.navy} /></View><View style={{ flex: 1 }}><Text style={styles.documentTitle}>المستند القانوني</Text><Text style={styles.documentMeta}>مرتبط بالقضية • جاهز للتسليم</Text></View><View style={styles.ready}><Text style={styles.readyText}>جاهز</Text></View></View>
-
     <Text style={styles.sectionTitle}>طريقة التسليم</Text>
     <Text style={styles.intro}>يختار النظام الخيارات المناسبة حسب موقع العميل ومكتب المحامي، ويمكن إظهار الشحن الدولي عند اختلاف البلد.</Text>
     <HandoverOptions availableModes={["local", "office", "courier", "international"]} selected={selected} onSelect={setSelected} />
-
     <View style={styles.trackingHeader}><View><Text style={styles.trackTitle}>Tracking</Text><Text style={styles.trackSub}>حالة التسليم وسجل الأحداث</Text></View><Feather name="truck" size={19} color={C.navy} /></View>
     <View style={styles.timeline}>{TRACKING.map(([status, label], index) => { const done = index <= currentIndex; return <View key={status} style={styles.timelineRow}><View style={[styles.dot, done && styles.dotDone]}>{done && <Feather name="check" size={10} color="#fff" />}</View><View style={styles.timelineCopy}><Text style={[styles.timelineLabel, done && styles.timelineDone]}>{label}</Text><Text style={styles.timelineStatus}>{status}</Text></View>{index < TRACKING.length - 1 && <View style={[styles.line, index < currentIndex && styles.lineDone]} />}</View>; })}</View>
-
     <View style={styles.guidance}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.guidanceText}>التسليم النهائي لا يُعتبر مكتملًا إلا بعد تسجيل إثبات التسليم والتحقق من رمز OTP عند الحاجة.</Text></View>
     <View style={styles.international}><Feather name="globe" size={16} color={C.gold} /><Text style={styles.internationalText}>للشحن الدولي قد تُطلب مستندات تصديق أو إجراءات جمركية إضافية بحسب الدولة.</Text></View>
-
     <TouchableOpacity style={styles.primary} onPress={() => router.back()}><Text style={styles.primaryText}>بدء طلب التسليم</Text><Feather name="arrow-left" size={16} color="#fff" /></TouchableOpacity>
   </ScrollView>;
 }
