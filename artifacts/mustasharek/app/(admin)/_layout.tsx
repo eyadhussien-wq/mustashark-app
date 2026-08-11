@@ -16,6 +16,6 @@ export default function AdminTabLayout() {
     <Tabs.Screen name="index" options={{ title: "لوحة التحكم", tabBarIcon: ({ color }) => <Feather name="grid" size={22} color={color} /> }} />
     <Tabs.Screen name="lawyers" options={{ title: "المحامون", tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} /> }} />
     <Tabs.Screen name="consultations" options={{ title: "الاستشارات", tabBarIcon: ({ color }) => <Feather name="file-text" size={22} color={color} /> }} />
-    <Tabs.Screen name="../notifications" options={{ title: "التنبيهات", tabBarIcon: ({ color }) => <Feather name="bell" size={22} color={color} /> }} />
+    <Tabs.Screen name="notifications" options={{ title: "التنبيهات", tabBarIcon: ({ color }) => <Feather name="bell" size={22} color={color} /> }} />
   </Tabs>;
 }
