@@ -1,0 +1,19 @@
+import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React from "react";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import colors from "@/constants/colors";
+const C = colors.light;
+
+export default function PaymentSecurityPreview() {
+  const router = useRouter(); const insets = useSafeAreaInsets();
+  return <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + (Platform.OS === "web" ? 67 : 10), paddingBottom: insets.bottom + 40 }}>
+    <View style={styles.header}><TouchableOpacity onPress={() => router.back()}><Feather name="arrow-right" size={21} color={C.foreground}/></TouchableOpacity><Text style={styles.title}>أمان المدفوعات</Text><View style={{width:21}}/></View>
+    <View style={styles.hero}><View style={styles.shield}><Feather name="shield" size={28} color={C.gold}/></View><Text style={styles.heroTitle}>مدفوعات آمنة ومحمية</Text><Text style={styles.heroText}>طبقة ثقة مخصصة لصفحة الدفع قبل تفعيل بوابة الدفع الحقيقية.</Text></View>
+    <View style={styles.badges}><View><Text style={styles.brand}>VISA</Text></View><View><Text style={styles.brand}>mastercard</Text></View><View><Text style={styles.brand}>AMEX</Text></View></View>
+    {[['lock','تشفير كامل للبيانات','بيانات الدفع تنتقل عبر اتصال آمن ومشفر.'],['credit-card','لا نحفظ أرقام بطاقتك','عند ربط بوابة الدفع الحقيقية ستُستخدم آلية Tokenization ولا تُخزن بيانات البطاقة الخام في مستشارك.'],['check-circle','معيار أمان الدفع','سنربط الاعتماد الفعلي بالبوابة ومزود الدفع المعتمد عند الانتقال إلى Production.']].map(([icon,title,text])=><View key={title} style={styles.item}><View style={styles.itemIcon}><Feather name={icon as any} size={17} color={C.gold}/></View><View style={{flex:1}}><Text style={styles.itemTitle}>{title}</Text><Text style={styles.itemText}>{text}</Text></View></View>)}
+    <View style={styles.disclaimer}><Feather name="info" size={15} color={C.navy}/><Text style={styles.disclaimerText}>هذه واجهة Front فقط. لا نعلن اعتماد PCI-DSS فعليًا قبل اختيار مزود الدفع والتحقق من نطاق الاعتماد.</Text></View>
+  </ScrollView>
+}
+const styles=StyleSheet.create({screen:{flex:1,backgroundColor:C.background,paddingHorizontal:20},header:{flexDirection:'row-reverse',justifyContent:'space-between',alignItems:'center',paddingVertical:16},title:{fontSize:20,fontWeight:'800',color:C.foreground},hero:{backgroundColor:C.navy,borderRadius:20,padding:24,alignItems:'center',borderWidth:1,borderColor:'rgba(201,160,53,.35)'},shield:{width:58,height:58,borderRadius:18,backgroundColor:'rgba(201,160,53,.12)',alignItems:'center',justifyContent:'center'},heroTitle:{color:'#fff',fontSize:18,fontWeight:'800',marginTop:12},heroText:{color:'rgba(255,255,255,.72)',fontSize:11,lineHeight:18,textAlign:'center',marginTop:6},badges:{flexDirection:'row',justifyContent:'space-evenly',backgroundColor:C.card,borderRadius:15,padding:15,marginVertical:14,borderWidth:1,borderColor:C.border},brand:{fontWeight:'900',fontSize:15,color:C.navy},item:{flexDirection:'row-reverse',alignItems:'flex-start',gap:11,backgroundColor:C.card,borderRadius:15,borderWidth:1,borderColor:C.border,padding:14,marginBottom:10},itemIcon:{width:36,height:36,borderRadius:11,backgroundColor:'rgba(201,160,53,.1)',alignItems:'center',justifyContent:'center'},itemTitle:{fontSize:13,fontWeight:'800',color:C.foreground,textAlign:'right'},itemText:{fontSize:11,lineHeight:18,color:C.mutedForeground,textAlign:'right',marginTop:3},disclaimer:{flexDirection:'row-reverse',gap:8,alignItems:'flex-start',backgroundColor:'rgba(10,34,64,.06)',borderRadius:13,padding:12,marginTop:4},disclaimerText:{flex:1,fontSize:10,lineHeight:17,color:C.mutedForeground,textAlign:'right'}});
