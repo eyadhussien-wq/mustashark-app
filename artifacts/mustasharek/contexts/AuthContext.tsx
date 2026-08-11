@@ -94,7 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const users = await readUsers();
     const localRecord = users.find((u) => normalizeEmail(u.email) === email);
 
-    // Portal-role validation happens before creating a session.
     if (expectedRole && localRecord && localRecord.role !== expectedRole) {
       throw new Error(expectedRole === "client" ? "هذا الحساب مخصص للمحامين. يرجى استخدام بوابة المحامي." : "هذا الحساب مخصص للعملاء. يرجى استخدام بوابة العميل.");
     }
@@ -102,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (API_BASE) {
       let serverRes: Response | null = null;
       try {
-        serverRes = await fetch(`${API_BASE}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name, role: localRecord.role } : {}) }) });
+        serverRes = await fetch(`${API_BASE}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) }) });
       } catch {}
       if (serverRes !== null) {
         if (serverRes.ok) {
