@@ -1,13 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useAuth } from "@/contexts/AuthContext";
 
 function NativeTabLayout() {
   return <NativeTabs>
@@ -30,4 +31,11 @@ function ClassicTabLayout() {
     <Tabs.Screen name="profile" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="person" tintColor={color} size={24} /> : <Feather name="user" size={22} color={color} /> }} />
   </Tabs>;
 }
-export default function LawyerTabLayout() { if (isLiquidGlassAvailable()) return <NativeTabLayout />; return <ClassicTabLayout />; }
+export default function LawyerTabLayout() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!user) return <Redirect href="/auth/login?role=lawyer" />;
+  if (user.role !== "lawyer") return <Redirect href="/" />;
+  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
+  return <ClassicTabLayout />;
+}
