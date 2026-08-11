@@ -206,7 +206,9 @@ export const getSmartTransferOptions = async (req: Request, res: Response) => {
       eq(usersTable.role, "lawyer"),
       eq(usersTable.accountStatus, "active"),
       isNull(usersTable.deletedAt),
-      eq(usersTable.specialization, original.specialization),
+      original.specialization === null
+        ? isNull(usersTable.specialization)
+        : eq(usersTable.specialization, original.specialization),
       eq(usersTable.litigationTier, original.litigationTier),
       ne(usersTable.id, original.id),
     )).limit(20);
