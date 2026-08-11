@@ -12,3 +12,4 @@ export * from "./consultationRescheduleRequests";
 export * from "./lawyerBankAccounts";
 export * from "./userNotifications";
 export * from "./representationFinance";
+export * from "./documentHandovers";
