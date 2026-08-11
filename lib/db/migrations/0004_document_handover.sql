@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS document_handovers (
   origin_address text,
   destination_address text,
   delivery_otp_hash text,
+  delivery_otp_expires_at timestamp,
+  delivery_otp_attempts integer NOT NULL DEFAULT 0,
+  delivery_otp_consumed_at timestamp,
   delivered_to_name text,
   delivered_at timestamp,
   delivery_proof_uri text,
@@ -56,3 +59,4 @@ CREATE INDEX IF NOT EXISTS handovers_case_id_idx ON document_handovers(case_id);
 CREATE INDEX IF NOT EXISTS handovers_document_id_idx ON document_handovers(document_id);
 CREATE INDEX IF NOT EXISTS handovers_status_idx ON document_handovers(status);
 CREATE INDEX IF NOT EXISTS handover_events_handover_id_idx ON handover_tracking_events(handover_id);
+CREATE UNIQUE INDEX IF NOT EXISTS handover_events_handover_sequence_uidx ON handover_tracking_events(handover_id, sequence);
