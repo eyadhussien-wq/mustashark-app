@@ -27,7 +27,6 @@ export const bookingTypeEnum = pgEnum("booking_type", [
   "video",
   "chat",
   "phone",
-  "email",
 ]);
 
 export const paymentStatusEnum = pgEnum("payment_status", [
