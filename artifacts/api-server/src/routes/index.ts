@@ -6,6 +6,7 @@ import authRouter from "./auth";
 import profileRouter from "./profile";
 import reviewsRouter from "./reviews";
 import notificationsRouter from "./notifications";
+import documentHandoversRouter from "./documentHandovers";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(adminRouter);
 router.use(bookingsRouter);
 router.use(reviewsRouter);
 router.use(notificationsRouter);
+router.use(documentHandoversRouter);
 
 export default router;
