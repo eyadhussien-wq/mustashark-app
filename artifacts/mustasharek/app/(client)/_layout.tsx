@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Redirect, Tabs, usePathname } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
@@ -31,14 +31,9 @@ function ClassicTabLayout() {
 }
 export default function ClientTabLayout() {
   const { user, isLoading } = useAuth();
-  const pathname = usePathname();
-
   if (isLoading) return null;
   if (!user) return <Redirect href="/auth/login?role=client" />;
   if (user.role !== "client") return <Redirect href="/" />;
-
-  // Keep the guard active for deep links/direct navigation into the client portal.
-  void pathname;
   if (isLiquidGlassAvailable()) return <NativeTabLayout />;
   return <ClassicTabLayout />;
 }
