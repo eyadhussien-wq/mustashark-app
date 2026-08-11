@@ -137,7 +137,7 @@ export async function reviewBankAccount(req: Request, res: Response) {
       verifiedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(and(eq(lawyerBankAccountsTable.id, req.params.id), eq(lawyerBankAccountsTable.verificationStatus, "pending")))
+    .where(and(eq(lawyerBankAccountsTable.id, String(req.params.id)), eq(lawyerBankAccountsTable.verificationStatus, "pending")))
     .returning();
 
   if (!updated) return res.status(404).json({ ok: false, error: "bank_account_not_found_or_already_reviewed" });

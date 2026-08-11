@@ -9,7 +9,6 @@ export * from "./adminAuditLogs";
 export * from "./accountStatusHistory";
 export * from "./consultationEvents";
 export * from "./consultationRescheduleRequests";
-export * from "./lawyerCommitmentScores";
 export * from "./lawyerBankAccounts";
 export * from "./userNotifications";
 export * from "./representationFinance";
