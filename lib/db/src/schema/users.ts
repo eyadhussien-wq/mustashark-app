@@ -4,20 +4,8 @@ import { z } from "zod/v4";
 
 export const userRoleEnum = pgEnum("user_role", ["client", "lawyer", "admin"]);
 export const countryEnum = pgEnum("country", ["qatar", "jordan"]);
-export const authProviderEnum = pgEnum("auth_provider", [
-  "local",
-  "google",
-  "facebook",
-  "apple",
-]);
-export const accountStatusEnum = pgEnum("account_status", [
-  "pending",
-  "active",
-  "suspended",
-  "terminated",
-  "rejected",
-  "blocked",
-]);
+export const authProviderEnum = pgEnum("auth_provider", ["local", "google", "facebook", "apple"]);
+export const accountStatusEnum = pgEnum("account_status", ["pending", "active", "suspended", "terminated", "rejected", "blocked"]);
 
 export const usersTable = pgTable("users", {
   id: text("id").primaryKey(),
@@ -29,31 +17,22 @@ export const usersTable = pgTable("users", {
   country: countryEnum("country"),
   authProvider: authProviderEnum("auth_provider").notNull().default("local"),
   providerId: text("provider_id"),
-  accountStatus: accountStatusEnum("account_status")
-    .notNull()
-    .default("active"),
+  accountStatus: accountStatusEnum("account_status").notNull().default("active"),
   statusReason: text("status_reason"),
-  // Lawyer-specific profile fields
   specialization: text("specialization"),
+  litigationTier: text("litigation_tier").notNull().default("general"),
   bio: text("bio"),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
-  // Lawyer aggregate review stats (updated on every new review)
   rating: numeric("rating", { precision: 3, scale: 1 }),
   reviewsCount: integer("reviews_count").notNull().default(0),
-  // Soft-delete for clients (30-day window)
   deletedAt: timestamp("deleted_at"),
   deletionScheduledAt: timestamp("deletion_scheduled_at"),
-  // Lawyer deletion request rejection note from admin
   deletionRejectionNote: text("deletion_rejection_note"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true, updatedAt: true });
 export const selectUserSchema = createSelectSchema(usersTable);
-
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
