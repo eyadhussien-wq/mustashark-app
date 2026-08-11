@@ -98,6 +98,3 @@ CREATE TABLE IF NOT EXISTS lawyer_profile_change_requests (
   rejection_note TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
--- 14. Email consultation channel
-ALTER TYPE booking_type ADD VALUE IF NOT EXISTS 'email';
