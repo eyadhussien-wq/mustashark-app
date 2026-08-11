@@ -122,7 +122,7 @@ export default function LawyerAuth() {
     if (!loginEmail || !loginPassword) { setError("يرجى إدخال البريد وكلمة المرور"); return; }
     setLoginLoading(true);
     try {
-      await login(loginEmail, loginPassword);
+      await login(loginEmail, loginPassword, "lawyer");
       router.replace("/");
     } catch (e: any) {
       setError(e.message ?? "حدث خطأ في تسجيل الدخول");
