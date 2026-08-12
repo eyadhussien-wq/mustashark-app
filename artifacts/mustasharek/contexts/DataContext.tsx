@@ -379,6 +379,24 @@ const SAMPLE_CONSULTATIONS: Consultation[] = [
 ];
 
 // ── Lawyer dynamic ratings (persisted separately so SAMPLE_LAWYERS don't reset them) ──
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+const JWT_KEY = "mustasharek_jwt_v1";
+
+function mapServerBookingToConsultation(booking: any): Consultation {
+  return {
+    id: booking.id, serialNumber: booking.serialNumber,
+    clientId: booking.clientId ?? "", clientName: booking.clientName ?? "العميل",
+    lawyerId: booking.lawyerId ?? "", lawyerName: booking.lawyerName ?? "المحامي",
+    lawyerSpecialization: booking.lawyerSpecialization ?? "",
+    lawyerCountry: booking.lawyerCountry === "jordan" ? "jordan" : booking.lawyerCountry === "qatar" ? "qatar" : undefined,
+    subject: booking.subject, description: booking.description ?? "",
+    date: booking.scheduledDate, time: booking.scheduledTime, status: booking.status, createdAt: booking.createdAt,
+    type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? 0),
+    paymentStatus: booking.paymentStatus === "paid" ? "paid" : booking.paymentStatus === "refunded" ? "refunded" : booking.paymentStatus === "forfeited" ? "forfeited" : "unpaid",
+    meetLink: booking.googleMeetLink ?? undefined, lawyerJoinedAt: booking.lawyerJoinedAt ?? undefined, clientJoinedAt: booking.clientJoinedAt ?? undefined,
+  };
+}
+
 const RATINGS_KEY = "mustasharek_lawyer_ratings";
 
 async function loadLawyerRatingOverrides(): Promise<
@@ -417,16 +435,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const ratingOverrides = await loadLawyerRatingOverrides();
 
     const stored = await AsyncStorage.getItem("mustasharek_consultations");
+    let localConsultations = SAMPLE_CONSULTATIONS;
     if (stored) {
-      try {
-        setConsultations(JSON.parse(stored));
-      } catch {}
+      try { localConsultations = JSON.parse(stored) as Consultation[]; } catch {}
     } else {
-      await AsyncStorage.setItem(
-        "mustasharek_consultations",
-        JSON.stringify(SAMPLE_CONSULTATIONS)
-      );
+      await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(SAMPLE_CONSULTATIONS));
     }
+    let mergedConsultations = localConsultations;
+    if (API_BASE) {
+      try {
+        const token = await AsyncStorage.getItem(JWT_KEY);
+        if (token) {
+          const response = await fetch(`${API_BASE}/bookings`, { headers: { Authorization: `Bearer ${token}` } });
+          if (response.ok) {
+            const body = await response.json() as { ok?: boolean; bookings?: any[] };
+            const serverConsultations = (body.bookings ?? []).map(mapServerBookingToConsultation);
+            const serverIds = new Set(serverConsultations.map((c) => c.id));
+            mergedConsultations = [...localConsultations.filter((c) => !serverIds.has(c.id)), ...serverConsultations];
+            await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(mergedConsultations));
+          }
+        }
+      } catch {}
+    }
+    setConsultations(mergedConsultations);
 
     const storedLawyers = await AsyncStorage.getItem("mustasharek_lawyers");
     if (storedLawyers) {

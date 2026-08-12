@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (API_BASE) {
       let serverRes: Response | null = null;
       try {
-        serverRes = await fetch(`${API_BASE}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) }) });
+        serverRes = await fetch(`${API_BASE}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name, phone: localRecord.phone, country: localRecord.country, specialization: localRecord.specialization, bio: localRecord.bio, hourlyRate: localRecord.hourlyRate } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) }) });
       } catch {
         throw new Error("تعذر الاتصال بخدمة تسجيل الدخول. يرجى المحاولة مرة أخرى.");
       }
@@ -126,6 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await persist(base);
             if (base.role === "lawyer") await syncDeletionStatus(data.jwt, base);
             return;
+          } else {
+            throw new Error("تعذر إنشاء جلسة دخول آمنة. يرجى المحاولة مرة أخرى.");
           }
         }
         if (!serverRes.ok) {

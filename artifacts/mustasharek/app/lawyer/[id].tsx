@@ -47,7 +47,7 @@ export default function LawyerDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, getAuthToken } = useAuth();
-  const { getLawyerById, getAvailableSlots } = useData();
+  const { getLawyerById, getAvailableSlots, bookConsultation } = useData();
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
   const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
@@ -104,6 +104,17 @@ export default function LawyerDetail() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
+      const booking = body.booking;
+      if (booking) {
+        await bookConsultation({
+          clientId: user.id, clientName: user.name,
+          lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
+          subject: booking.subject, description: booking.description ?? description.trim(),
+          date: booking.scheduledDate, time: booking.scheduledTime,
+          type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
+          paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
+        });
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("تم إرسال طلبك", "تم إرسال الطلب إلى المحامي بنجاح. سيقوم بمراجعته وإرسال العرض لك قبل بدء الخدمة.", [{ text: "حسناً", onPress: () => router.replace("/") }]);
     } catch (requestError) {

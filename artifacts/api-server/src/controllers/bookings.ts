@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import {
@@ -219,6 +219,27 @@ export const checkLawyerAbsence = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error?.message === "ALREADY_PROCESSED") return res.status(409).json({ ok: false, error: "already_processed_or_invalid_state" });
     console.error("Check Lawyer Absence Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
+  }
+};
+
+export const listMyBookings = async (req: Request, res: Response) => {
+  try {
+    const authUser = req.authUser!;
+    const rows = await db.select().from(bookingsTable).where(
+      authUser.role === "admin"
+        ? undefined
+        : or(eq(bookingsTable.clientId, authUser.id), eq(bookingsTable.lawyerId, authUser.id)),
+    );
+    const bookings = await Promise.all(rows.map(async (booking) => {
+      const [client] = booking.clientId ? await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, booking.clientId)).limit(1) : [];
+      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId)).limit(1) : [];
+      return { ...booking, clientName: client?.name ?? "العميل", lawyerName: lawyer?.name ?? "المحامي", lawyerSpecialization: lawyer?.specialization ?? "", lawyerCountry: lawyer?.country ?? null };
+    }));
+    bookings.sort((a, b) => `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`));
+    return res.json({ ok: true, bookings });
+  } catch (error) {
+    console.error("List My Bookings Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };

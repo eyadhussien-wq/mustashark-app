@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
-import { createBooking, confirmBooking, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking } from "../controllers/bookings";
+import { createBooking, listMyBookings, confirmBooking, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking } from "../controllers/bookings";
 import { createEmailBooking } from "../controllers/emailBooking";
 import { claimLawyerNoShow, refundLawyerNoShow, getSmartTransferOptions, transferLawyerNoShowBooking } from "../controllers/lawyerNoShow";
 
@@ -16,6 +16,7 @@ const requireClientOrAdmin = requireRole("client", "admin");
 
 bookingsRouter.post("/bookings/email", requireAuth, requireClient, createEmailBooking);
 bookingsRouter.post("/bookings", requireAuth, requireClient, createBooking);
+bookingsRouter.get("/bookings", requireAuth, requireClientLawyerOrAdmin, listMyBookings);
 bookingsRouter.get("/bookings/:id", requireAuth, requireClientLawyerOrAdmin, getBookingById);
 bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, confirmBooking);
 bookingsRouter.post("/bookings/join", requireAuth, requireClientOrLawyer, recordJoin);
