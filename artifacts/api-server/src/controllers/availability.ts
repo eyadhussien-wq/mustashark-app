@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { and, asc, eq, notInArray } from "drizzle-orm";
-import { db } from "@workspace/db";
-import { bookingTimeBlocksTable, bookingsTable, usersTable, lawyerAvailabilityTable } from "@workspace/db/schema";
+import { db, bookingTimeBlocksTable, bookingsTable, usersTable, lawyerAvailabilityTable } from "@workspace/db";
 import crypto from "crypto";
 import { z } from "zod";
 
