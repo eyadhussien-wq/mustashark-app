@@ -4,26 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
+// Replit supplies these values through the workflow, but the build must also
+// work from a clean CI/local environment without requiring Replit variables.
+const port = Number(process.env.PORT ?? 22133);
+const basePath = process.env.BASE_PATH ?? "/admin/";
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
+if (!Number.isFinite(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: "${process.env.PORT}"`);
 }
 
 export default defineConfig({
