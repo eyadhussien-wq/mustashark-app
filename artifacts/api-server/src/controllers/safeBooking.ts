@@ -11,9 +11,22 @@ const schema = z.object({
   scheduledEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   type: z.enum(["video", "chat", "phone"]), officeId: z.string().optional(),
 });
+
 function minutes(value: string) { const [h, m] = value.split(":").map(Number); return h * 60 + m; }
 function formatTime(value: number) { return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
+
+function isValidCalendarDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 function scheduledAtQatar(date: string, time: string) {
+  if (!isValidCalendarDate(date)) return null;
   const [year, month, day] = date.split("-").map(Number); const [hour, minute] = time.split(":").map(Number);
   if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
   const requested = Date.UTC(year, month - 1, day, hour, minute);
@@ -22,6 +35,7 @@ function scheduledAtQatar(date: string, time: string) {
   const zoneWallClock = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute));
   return new Date(requested - (zoneWallClock - requested));
 }
+
 async function resolveLawyer(lawyerId: string) {
   let [lawyer] = await db.select().from(usersTable).where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt))).limit(1);
   if (!lawyer && lawyerId === "lawyer-test") [lawyer] = await db.select().from(usersTable).where(and(eq(usersTable.email, "lawyer@mustashark.com"), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt))).limit(1);
@@ -34,6 +48,8 @@ export const createBookingSafely = async (req: Request, res: Response) => {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
     const authUser = req.authUser!; const input = parsed.data;
+    if (!isValidCalendarDate(input.scheduledDate)) return res.status(400).json({ ok: false, error: "invalid_scheduled_date" });
+
     const start = minutes(input.scheduledTime); const requestedEnd = input.scheduledEndTime ? minutes(input.scheduledEndTime) : start + 60; const end = requestedEnd > start ? requestedEnd : start + 60;
     if (end <= start || end > 24 * 60) return res.status(400).json({ ok: false, error: "invalid_booking_time_range" });
     const scheduledStart = scheduledAtQatar(input.scheduledDate, input.scheduledTime);
