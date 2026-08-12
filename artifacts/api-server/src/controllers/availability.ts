@@ -50,9 +50,25 @@ export const updateMyAvailability = async (req: Request, res: Response) => {
     const parsed = availabilitySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_availability", details: parsed.error.errors });
     const lawyerId = req.authUser!.id;
+
+    const byDay = new Map<number, Array<{ start: number; end: number }>>();
     for (const slot of parsed.data.slots) {
-      if (minutes(slot.endTime) <= minutes(slot.startTime)) return res.status(400).json({ ok: false, error: "availability_end_must_be_after_start" });
+      const start = minutes(slot.startTime);
+      const end = minutes(slot.endTime);
+      if (end <= start) return res.status(400).json({ ok: false, error: "availability_end_must_be_after_start" });
+      const day = byDay.get(slot.dayOfWeek) ?? [];
+      day.push({ start, end });
+      byDay.set(slot.dayOfWeek, day);
     }
+    for (const day of byDay.values()) {
+      day.sort((a, b) => a.start - b.start);
+      for (let index = 1; index < day.length; index += 1) {
+        if (day[index].start < day[index - 1].end) {
+          return res.status(400).json({ ok: false, error: "availability_slots_overlap" });
+        }
+      }
+    }
+
     const rows = await db.transaction(async (tx) => {
       await tx.delete(lawyerAvailabilityTable).where(eq(lawyerAvailabilityTable.lawyerId, lawyerId));
       if (parsed.data.slots.length === 0) return [];
