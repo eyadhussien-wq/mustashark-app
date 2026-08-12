@@ -49,7 +49,8 @@ export const createBookingSafely = async (req: Request, res: Response) => {
     const authUser = req.authUser!;
     const input = parsed.data;
     const start = minutes(input.scheduledTime);
-    const end = minutes(input.scheduledEndTime ?? formatTime(start + 60));
+    const requestedEnd = input.scheduledEndTime ? minutes(input.scheduledEndTime) : start + 60;
+    const end = requestedEnd > start ? requestedEnd : start + 60;
     if (end <= start || end > 24 * 60) return res.status(400).json({ ok: false, error: "invalid_booking_time_range" });
 
     const lawyer = await resolveLawyer(input.lawyerId);
@@ -62,8 +63,6 @@ export const createBookingSafely = async (req: Request, res: Response) => {
       let availability = await tx.select().from(lawyerAvailabilityTable)
         .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
 
-      // Existing demo lawyers keep the current preview experience until a lawyer
-      // explicitly saves a custom weekly calendar.
       if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
         availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
       }
@@ -145,12 +144,8 @@ export const createBookingSafely = async (req: Request, res: Response) => {
 
     return res.status(201).json({ ok: true, booking: { ...booking, scheduledEndTime: formatTime(end) } });
   } catch (error: any) {
-    if (error?.message === "SLOT_ALREADY_BOOKED") {
-      return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
-    }
-    if (error?.message === "SLOT_OUTSIDE_AVAILABILITY") {
-      return res.status(409).json({ ok: false, error: "slot_not_available", message: "هذا الوقت خارج أوقات توفر المحامي." });
-    }
+    if (error?.message === "SLOT_ALREADY_BOOKED") return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
+    if (error?.message === "SLOT_OUTSIDE_AVAILABILITY") return res.status(409).json({ ok: false, error: "slot_not_available", message: "هذا الوقت خارج أوقات توفر المحامي." });
     console.error("Create Booking Safely Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
