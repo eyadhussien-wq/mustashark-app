@@ -9,8 +9,9 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { rateLabel } from "@/utils/currency";
-import { WhatsAppSupportCard } from "@/components/WhatsAppSupportCard";
+import { formatPrice } from "@/utils/currency";
+import { getUsableAuthToken } from "@/utils/authToken";
+import { ProfessionalCalendar, buildCalendarDays } from "@/components/ProfessionalCalendar";
 
 const C = colors.light;
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
@@ -24,29 +25,11 @@ const TYPES = [
 ];
 interface Attachment { name: string; uri: string; type: "image" | "file"; }
 
-function getCalendarDays(workingDays: number[], lang: "ar" | "en") {
-  const days: { date: string; dayOfWeek: number; dayNum: number; monthLabel: string; weekdayLabel: string }[] = [];
-  const today = new Date();
-  const dayLabelsAR = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-  const dayLabelsEN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const monthLabelsAR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-  const monthLabelsEN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(today); d.setDate(today.getDate() + i);
-    const dayOfWeek = d.getDay();
-    if (workingDays.includes(dayOfWeek)) {
-      const month = d.getMonth(); const dayNum = d.getDate(); const dateStr = d.toISOString().split("T")[0];
-      days.push({ date: dateStr, dayOfWeek, dayNum, monthLabel: lang === "ar" ? monthLabelsAR[month] : monthLabelsEN[month], weekdayLabel: lang === "ar" ? dayLabelsAR[dayOfWeek] : dayLabelsEN[dayOfWeek] });
-    }
-  }
-  return days;
-}
-
 export default function LawyerDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, getAuthToken, login } = useAuth();
+  const { user } = useAuth();
   const { getLawyerById, getAvailableSlots, bookConsultation } = useData();
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
@@ -73,8 +56,9 @@ export default function LawyerDetail() {
   }, [id]);
 
   const workingDays = lawyer?.availability?.workingDays ?? [1, 2, 3, 4, 5];
-  const calendarDays = useMemo(() => getCalendarDays(workingDays, lang), [workingDays, lang]);
-  const slots = useMemo(() => (selectedDate ? getAvailableSlots(lawyer!.id, selectedDate) : []), [selectedDate, lawyer, getAvailableSlots]);
+  const calendarDays = useMemo(() => buildCalendarDays(workingDays, lang, 21), [workingDays, lang]);
+  const activeDate = selectedDate || calendarDays[0]?.date || "";
+  const slots = useMemo(() => (activeDate && lawyer ? getAvailableSlots(lawyer.id, activeDate) : []), [activeDate, lawyer, getAvailableSlots]);
 
   if (!lawyer) return <View style={styles.notFound}><Text style={styles.notFoundText}>{t("noLawyersFound")}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>{t("back")}</Text></TouchableOpacity></View>;
 
@@ -89,24 +73,27 @@ export default function LawyerDetail() {
 
   async function handleProceed() {
     setError("");
-    if (!subject.trim() || !description.trim() || !selectedDate || !selectedTime) { setError(t("error")); return; }
+    if (!subject.trim() || !description.trim() || !activeDate || !selectedTime) { setError(t("error")); return; }
     if (!user || !lawyer) return;
     if (!API_BASE) { setError("تعذر الاتصال بالخدمة حالياً. حاول مرة أخرى."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
-      let token = await getAuthToken();
-      if (!token && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
-        await login(user.email, "test1234", user.role === "lawyer" ? "lawyer" : "client");
-        token = await getAuthToken();
+      const token = await getUsableAuthToken(user);
+      if (!token) {
+        setError("تعذر التحقق من جلسة الدخول. يرجى تسجيل الدخول مرة أخرى ثم المحاولة.");
+        return;
       }
-      if (!token) { setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى."); return; }
       const response = await fetch(`${API_BASE}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, type: selectedType }),
+        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: activeDate, scheduledTime: selectedTime, type: selectedType }),
       });
       const body = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        setError("تعذر التحقق من جلسة الدخول. يرجى تسجيل الدخول مرة أخرى ثم المحاولة.");
+        return;
+      }
       if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
       const booking = body.booking;
       if (booking) {
@@ -134,7 +121,7 @@ export default function LawyerDetail() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Feather name="arrow-left" size={22} color={C.foreground} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Feather name={lang === "ar" ? "arrow-right" : "arrow-left"} size={22} color={C.foreground} /></TouchableOpacity>
             <Text style={styles.topTitle}>{t("lawyerProfile")}</Text>
             <View style={{ width: 42 }} />
           </View>
@@ -142,7 +129,7 @@ export default function LawyerDetail() {
             <View style={styles.avatar}><Text style={styles.avatarText}>{lawyer.name.charAt(0)}</Text></View>
             <Text style={styles.lawyerName}>{lawyer.name}</Text>
             <Text style={styles.specialization}>{lawyer.specialization}</Text>
-            <Text style={styles.rate}>{rateLabel(lawyer.hourlyRate ?? 0, lawyer.country, lang)}</Text>
+            <Text style={styles.rate}>{formatPrice(lawyer.hourlyRate ?? 0, lawyer.country)}</Text>
           </View>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر نوع الاستشارة" : "Choose consultation type"}</Text>
@@ -155,28 +142,8 @@ export default function LawyerDetail() {
               ))}
             </View>
           </View>
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر التاريخ" : "Choose date"}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysRow}>
-              {calendarDays.map((day) => (
-                <TouchableOpacity key={day.date} style={[styles.dayBtn, selectedDate === day.date && styles.dayBtnActive]} onPress={() => { setSelectedDate(day.date); setSelectedTime(""); }}>
-                  <Text style={[styles.weekday, selectedDate === day.date && styles.dayTextActive]}>{day.weekdayLabel}</Text>
-                  <Text style={[styles.dayNum, selectedDate === day.date && styles.dayTextActive]}>{day.dayNum}</Text>
-                  <Text style={[styles.month, selectedDate === day.date && styles.dayTextActive]}>{day.monthLabel}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر الوقت" : "Choose time"}</Text>
-            <View style={styles.slotsRow}>
-              {slots.map((slot) => (
-                <TouchableOpacity key={slot} style={[styles.slotBtn, selectedTime === slot && styles.slotBtnActive]} onPress={() => setSelectedTime(slot)}>
-                  <Text style={[styles.slotText, selectedTime === slot && styles.slotTextActive]}>{slot}</Text>
-                </TouchableOpacity>
-              ))}
-              {selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
-            </View>
+          <View style={styles.calendarSection}>
+            <ProfessionalCalendar lang={lang} selectedDate={activeDate} onDateChange={(date) => { setSelectedDate(date); setSelectedTime(""); }} days={calendarDays} mode="booking" slots={slots} selectedTime={selectedTime} onTimeChange={setSelectedTime} title={lang === "ar" ? "حجز موعد مع المحامي" : "Book an appointment"} />
           </View>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "موضوع الاستشارة" : "Consultation subject"}</Text>
@@ -214,25 +181,13 @@ const styles = StyleSheet.create({
   specialization: { marginTop: 4, fontSize: 14, color: C.mutedForeground, fontFamily: "Inter_500Medium" },
   rate: { marginTop: 8, fontSize: 15, color: C.gold, fontFamily: "Inter_700Bold" },
   section: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  calendarSection: { padding: 20, borderBottomWidth: 1, borderBottomColor: C.border },
   sectionTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.foreground, marginBottom: 10 },
   typeRow: { gap: 10 },
   typeBtn: { flex: 1, minHeight: 64, borderWidth: 1.5, borderColor: C.border, borderRadius: 12, backgroundColor: C.card, alignItems: "center", justifyContent: "center", gap: 6 },
   typeBtnActive: { borderColor: C.gold, backgroundColor: "#F7F4EA" },
   typeText: { fontSize: 12, color: C.mutedForeground, fontFamily: "Inter_500Medium" },
   typeTextActive: { color: C.navy, fontFamily: "Inter_700Bold" },
-  daysRow: { gap: 8, paddingVertical: 4 },
-  dayBtn: { width: 72, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card, alignItems: "center" },
-  dayBtnActive: { backgroundColor: C.navy, borderColor: C.navy },
-  weekday: { fontSize: 11, color: C.mutedForeground, fontFamily: "Inter_500Medium" },
-  dayNum: { fontSize: 22, color: C.foreground, fontFamily: "Inter_700Bold", marginVertical: 2 },
-  month: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-  dayTextActive: { color: "#fff" },
-  slotsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  slotBtn: { minWidth: 86, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card, alignItems: "center" },
-  slotBtnActive: { backgroundColor: C.navy, borderColor: C.navy },
-  slotText: { fontSize: 13, color: C.foreground, fontFamily: "Inter_500Medium" },
-  slotTextActive: { color: "#fff", fontFamily: "Inter_700Bold" },
-  noSlots: { width: "100%", textAlign: "center", color: C.mutedForeground, paddingVertical: 12, fontFamily: "Inter_400Regular" },
   input: { minHeight: 48, borderWidth: 1.5, borderColor: C.border, borderRadius: 12, backgroundColor: C.card, paddingHorizontal: 14, color: C.foreground, fontFamily: "Inter_400Regular" },
   textArea: { minHeight: 120, paddingTop: 12, textAlignVertical: "top" },
   attachmentHeader: { justifyContent: "space-between", alignItems: "center" },
