@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -29,17 +29,7 @@ function canManageArchive(req: Request) {
 function sanitizePrintMetadata(metadata: unknown) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const source = metadata as Record<string, unknown>;
-  const allowedKeys = [
-    "message",
-    "text",
-    "content",
-    "note",
-    "reason",
-    "status",
-    "location",
-    "fromStatus",
-    "toStatus",
-  ] as const;
+  const allowedKeys = ["message", "text", "content", "note", "reason", "status", "location", "fromStatus", "toStatus"] as const;
   const safe: Record<string, string | number | boolean> = {};
   for (const key of allowedKeys) {
     const value = source[key];
@@ -100,8 +90,15 @@ export async function archiveConsultation(req: Request, res: Response) {
     const [updated] = await tx
       .update(bookingsTable)
       .set({ archivedAt, archivedBy: req.authUser!.id, updatedAt: archivedAt })
-      .where(eq(bookingsTable.id, bookingId))
+      .where(and(eq(bookingsTable.id, bookingId), isNull(bookingsTable.archivedAt)))
       .returning();
+
+    if (!updated) {
+      const [alreadyArchived] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+      return alreadyArchived
+        ? { kind: "already_archived" as const, booking: alreadyArchived }
+        : { kind: "not_found" as const };
+    }
 
     await tx.insert(consultationEventsTable).values({
       id: randomUUID(),
@@ -120,7 +117,7 @@ export async function archiveConsultation(req: Request, res: Response) {
         entityId: bookingId,
         description: parsed.data.reason ?? "Consultation archived",
         beforeData: { archivedAt: null, status: booking.status },
-        afterData: { archivedAt, status: updated?.status },
+        afterData: { archivedAt, status: updated.status },
       });
     }
 
@@ -132,6 +129,18 @@ export async function archiveConsultation(req: Request, res: Response) {
   if (result.kind === "not_terminal") return res.status(409).json({ ok: false, error: "consultation_not_terminal" });
   if (result.kind === "already_archived") return res.json({ ok: true, booking: result.booking, alreadyArchived: true });
   return res.json({ ok: true, booking: result.booking });
+}
+
+async function loadConsultationForActor(req: Request) {
+  const bookingId = String(req.params.id ?? "");
+  const [row] = await db
+    .select({ booking: bookingsTable })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId))
+    .limit(1);
+  if (!row) return { kind: "not_found" as const };
+  if (!canAccessBooking(req, row.booking)) return { kind: "forbidden" as const };
+  return { kind: "ok" as const, booking: row.booking };
 }
 
 export async function getConsultationPrintData(req: Request, res: Response) {
@@ -147,12 +156,7 @@ export async function getConsultationPrintData(req: Request, res: Response) {
   if (!canAccessBooking(req, row.booking)) return res.status(403).json({ ok: false, error: "forbidden" });
 
   const events = await db
-    .select({
-      id: consultationEventsTable.id,
-      eventType: consultationEventsTable.eventType,
-      metadata: consultationEventsTable.metadata,
-      createdAt: consultationEventsTable.createdAt,
-    })
+    .select({ id: consultationEventsTable.id, eventType: consultationEventsTable.eventType, metadata: consultationEventsTable.metadata, createdAt: consultationEventsTable.createdAt })
     .from(consultationEventsTable)
     .where(eq(consultationEventsTable.bookingId, bookingId))
     .orderBy(asc(consultationEventsTable.createdAt));
@@ -160,23 +164,15 @@ export async function getConsultationPrintData(req: Request, res: Response) {
   const safeClient = row.client
     ? { id: row.client.id, name: row.client.name, email: row.client.email, phone: row.client.phone }
     : null;
-  const safeAttachments = (row.booking.attachments ?? []).map((attachment) => ({
-    name: String(attachment.name).slice(0, 200),
-    uri: String(attachment.uri).slice(0, 2000),
-  }));
-  const safeEvents = events.map((event) => ({
-    id: event.id,
-    eventType: event.eventType,
-    metadata: sanitizePrintMetadata(event.metadata),
-    createdAt: event.createdAt,
-  }));
+  const safeAttachments = (row.booking.attachments ?? []).map((attachment) => ({ name: String(attachment.name).slice(0, 200), uri: String(attachment.uri).slice(0, 2000) }));
+  const safeEvents = events.map((event) => ({ id: event.id, eventType: event.eventType, metadata: sanitizePrintMetadata(event.metadata), createdAt: event.createdAt }));
 
   await db.insert(consultationEventsTable).values({
     id: randomUUID(),
     bookingId,
-    eventType: "document.printed",
+    eventType: "document.print_data_accessed",
     actorId: req.authUser!.id,
-    metadata: { format: "pdf", purpose: "consultation_documentation" },
+    metadata: { purpose: "consultation_documentation" },
   });
 
   return res.json({
@@ -202,4 +198,20 @@ export async function getConsultationPrintData(req: Request, res: Response) {
       generatedAt: new Date().toISOString(),
     },
   });
+}
+
+export async function recordConsultationPrintExport(req: Request, res: Response) {
+  const result = await loadConsultationForActor(req);
+  if (result.kind === "not_found") return res.status(404).json({ ok: false, error: "consultation_not_found" });
+  if (result.kind === "forbidden") return res.status(403).json({ ok: false, error: "forbidden" });
+
+  await db.insert(consultationEventsTable).values({
+    id: randomUUID(),
+    bookingId: result.booking.id,
+    eventType: "document.printed",
+    actorId: req.authUser!.id,
+    metadata: { format: "pdf", purpose: "consultation_documentation" },
+  });
+
+  return res.status(201).json({ ok: true, recorded: true });
 }
