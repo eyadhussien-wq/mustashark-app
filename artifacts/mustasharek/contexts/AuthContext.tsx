@@ -102,7 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let serverRes: Response | null = null;
       try {
         serverRes = await fetch(`${API_BASE}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) }) });
-      } catch {}
+      } catch {
+        throw new Error("تعذر الاتصال بخدمة تسجيل الدخول. يرجى المحاولة مرة أخرى.");
+      }
       if (serverRes !== null) {
         if (serverRes.ok) {
           const data = await serverRes.json() as { ok: boolean; jwt?: string; userId?: string; user?: { id: string; name: string; email: string; role: string; phone?: string | null; country?: string | null; specialization?: string | null; bio?: string | null; hourlyRate?: number | null } };
@@ -126,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
         }
-        if (serverRes.status < 500) {
+        if (!serverRes.ok) {
           const errBody = await serverRes.json().catch(() => ({}) as Record<string, unknown>);
           const errCode = (errBody as { error?: string }).error ?? "";
           const errMsg = (errBody as { message?: string }).message ?? "";
@@ -134,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (errCode === "account_terminated") throw new Error("تم إيقاف هذا الحساب. يرجى التواصل مع الدعم.");
           if (errCode === "account_permanently_deleted") throw new Error("تم حذف هذا الحساب نهائياً ولا يمكن استعادته.");
           if (serverRes.status === 401) throw new Error(users.some((u) => normalizeEmail(u.email) === email) ? "كلمة المرور غير صحيحة" : "البريد الإلكتروني غير مسجّل. يرجى إنشاء حساب جديد");
-          throw new Error(errMsg || "فشل تسجيل الدخول. يرجى المحاولة مجدداً.");
+          throw new Error(errMsg || "تعذر الاتصال بخدمة تسجيل الدخول. يرجى المحاولة مرة أخرى.");
         }
       }
     }
@@ -193,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await getAuthToken(); if (token && API_BASE) { const res = await fetch(`${API_BASE}/profile`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }); if (!res.ok) { const data = await res.json().catch(() => ({}) as Record<string, string>); throw new Error((data as any).message || "فشل في حذف الحساب"); } }
       const users = await readUsers(); await writeUsers(users.filter((u) => u.id !== user.id)); await AsyncStorage.multiRemove([SESSION_KEY, JWT_KEY]); setUser(null);
     } else if (user.role === "lawyer") {
-      const token = await getAuthToken(); if (token && API_BASE) { const res = await fetch(`${API_BASE}/profile/deletion-request`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }); if (!res.ok) { const data = await res.json().catch(() => ({}) as Record<string, string>); const errMsg = ((data as any).error as string) ?? ""; if (!errMsg.includes("قيد المراجعة")) throw new Error(errMsg || "فشل في تقديم طلب الحذف"); } }
+      const token = await getAuthToken(); if (token && API_BASE) { const res = await fetch(`${API_BASE}/profile/deletion-request`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }); if (!res.ok) { const data = await res.json().catch(() => ({})); const errMsg = (data as any).error as string ?? ""; if (!errMsg.includes("قيد المراجعة")) throw new Error(errMsg || "فشل في تقديم طلب الحذف"); } }
       const updatedUser: User = { ...user, deletionPendingRequest: true }; await persist(updatedUser); const users = await readUsers(); const idx = users.findIndex((u) => u.id === user.id); if (idx !== -1) { (users[idx] as any).deletionPendingRequest = true; await writeUsers(users); }
     }
   }, [user, getAuthToken, persist]);
