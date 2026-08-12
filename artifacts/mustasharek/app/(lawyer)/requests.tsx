@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData, type ConsultationStatus } from "@/contexts/DataContext";
 
 const C = colors.light;
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
 
 const FILTERS: { label: string; value: ConsultationStatus | "all" }[] = [
   { label: "الكل",    value: "all" },
@@ -31,7 +32,7 @@ const FILTERS: { label: string; value: ConsultationStatus | "all" }[] = [
 export default function LawyerRequests() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, getAuthToken } = useAuth();
   const { consultations, updateConsultationStatus, refreshData, cancelConsultation } = useData();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -55,7 +56,17 @@ export default function LawyerRequests() {
 
   async function handleAccept(id: string) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const token = await getAuthToken();
+    if (!token || !API_BASE) return;
+    const response = await fetch(`${API_BASE}/bookings/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ bookingId: id }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || body.error || "تعذر قبول الطلب");
     await updateConsultationStatus(id, "accepted");
+    await refreshData();
   }
 
   async function handleReject(id: string) {
@@ -97,8 +108,8 @@ export default function LawyerRequests() {
             consultation={item}
             viewAs="lawyer"
             onPress={() => router.push(`/consultation/${item.id}`)}
-            onAccept={() => handleAccept(item.id)}
-            onReject={() => handleReject(item.id)}
+            onAccept={() => void handleAccept(item.id)}
+            onReject={() => void handleReject(item.id)}
           />
         )}
         contentContainerStyle={[
