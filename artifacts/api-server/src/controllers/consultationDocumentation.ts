@@ -26,6 +26,29 @@ function canManageArchive(req: Request) {
   return req.authUser?.role === "admin" || req.authUser?.role === "lawyer";
 }
 
+function sanitizePrintMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const source = metadata as Record<string, unknown>;
+  const allowedKeys = [
+    "message",
+    "text",
+    "content",
+    "note",
+    "reason",
+    "status",
+    "location",
+    "fromStatus",
+    "toStatus",
+  ] as const;
+  const safe: Record<string, string | number | boolean> = {};
+  for (const key of allowedKeys) {
+    const value = source[key];
+    if (typeof value === "string") safe[key] = value.slice(0, 2000);
+    else if (typeof value === "number" || typeof value === "boolean") safe[key] = value;
+  }
+  return Object.keys(safe).length > 0 ? safe : null;
+}
+
 export async function listConsultationArchive(req: Request, res: Response) {
   const user = req.authUser!;
   const rows = await db
@@ -141,6 +164,12 @@ export async function getConsultationPrintData(req: Request, res: Response) {
     name: String(attachment.name).slice(0, 200),
     uri: String(attachment.uri).slice(0, 2000),
   }));
+  const safeEvents = events.map((event) => ({
+    id: event.id,
+    eventType: event.eventType,
+    metadata: sanitizePrintMetadata(event.metadata),
+    createdAt: event.createdAt,
+  }));
 
   await db.insert(consultationEventsTable).values({
     id: randomUUID(),
@@ -169,7 +198,7 @@ export async function getConsultationPrintData(req: Request, res: Response) {
         archivedAt: row.booking.archivedAt,
       },
       client: safeClient,
-      events,
+      events: safeEvents,
       generatedAt: new Date().toISOString(),
     },
   });
