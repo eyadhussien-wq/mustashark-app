@@ -76,7 +76,7 @@ export const bookingsTable = pgTable("bookings", {
   noShowReason: text("no_show_reason"),
   transferredFromBookingId: text("transferred_from_booking_id"),
   attachments: jsonb("attachments").$type<BookingAttachment[]>().default([]),
-  archivedAt: timestamp("archived_at"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   archivedBy: text("archived_by").references(() => usersTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -98,31 +98,3 @@ export const lawyerCommitmentScoresTable = pgTable("lawyer_commitment_scores", {
 export const notificationsTable = pgTable("notifications", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
-  bookingId: text("booking_id").references(() => bookingsTable.id, { onDelete: "set null" }),
-  title: text("title").notNull(),
-  body: text("body").notNull(),
-  kind: text("kind").notNull(),
-  urgent: boolean("urgent").notNull().default(false),
-  readAt: timestamp("read_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const bookingTransferRequestsTable = pgTable("booking_transfer_requests", {
-  id: text("id").primaryKey(),
-  originalBookingId: text("original_booking_id").notNull().references(() => bookingsTable.id, { onDelete: "cascade" }),
-  newBookingId: text("new_booking_id").references(() => bookingsTable.id, { onDelete: "set null" }),
-  clientId: text("client_id").notNull().references(() => usersTable.id),
-  originalLawyerId: text("original_lawyer_id").references(() => usersTable.id, { onDelete: "set null" }),
-  newLawyerId: text("new_lawyer_id").references(() => usersTable.id, { onDelete: "set null" }),
-  status: text("status").notNull().default("offered"),
-  reason: text("reason").notNull().default("lawyer_no_show"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  selectedAt: timestamp("selected_at"),
-});
-
-export const clientWalletsTable = pgTable("client_wallets", {
-  clientId: text("client_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
-  availableCredits: numeric("available_credits", { precision: 10, scale: 2 }).notNull().default("0"),
-  totalRefunded: numeric("total_refunded", { precision: 10, scale: 2 }).notNull().default("0"),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
