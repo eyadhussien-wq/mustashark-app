@@ -3,7 +3,7 @@ import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { bookingTimeBlocksTable, bookingsTable, notificationsTable, usersTable } from "@workspace/db/schema";
+import { bookingTimeBlocksTable, bookingsTable, lawyerAvailabilityTable, notificationsTable, usersTable } from "@workspace/db/schema";
 
 const schema = z.object({
   lawyerId: z.string().min(1),
@@ -56,9 +56,25 @@ export const createBookingSafely = async (req: Request, res: Response) => {
     if (!lawyer) return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
 
     const booking = await db.transaction(async (tx) => {
-      // Serialize every booking write for this lawyer/day so two clients cannot
-      // claim the same interval concurrently.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${lawyer.id}:${input.scheduledDate}`}))`);
+
+      const dayOfWeek = new Date(`${input.scheduledDate}T12:00:00Z`).getUTCDay();
+      let availability = await tx.select().from(lawyerAvailabilityTable)
+        .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
+
+      // Existing demo lawyers keep the current preview experience until a lawyer
+      // explicitly saves a custom weekly calendar.
+      if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
+      }
+
+      const matchingWindow = availability.find((window) => {
+        const windowStart = minutes(window.startTime);
+        const windowEnd = minutes(window.endTime);
+        const duration = window.slotDurationMinutes;
+        return start >= windowStart && end <= windowEnd && (start - windowStart) % duration === 0 && end - start === duration;
+      });
+      if (!matchingWindow) throw new Error("SLOT_OUTSIDE_AVAILABILITY");
 
       const occupied = await tx.select({ block: bookingTimeBlocksTable })
         .from(bookingTimeBlocksTable)
@@ -131,6 +147,9 @@ export const createBookingSafely = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error?.message === "SLOT_ALREADY_BOOKED") {
       return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
+    }
+    if (error?.message === "SLOT_OUTSIDE_AVAILABILITY") {
+      return res.status(409).json({ ok: false, error: "slot_not_available", message: "هذا الوقت خارج أوقات توفر المحامي." });
     }
     console.error("Create Booking Safely Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
