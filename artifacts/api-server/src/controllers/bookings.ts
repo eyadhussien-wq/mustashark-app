@@ -76,14 +76,33 @@ export const createBooking = async (req: Request, res: Response) => {
     const { lawyerId, subject, description, scheduledDate, scheduledTime, type, officeId } = parseResult.data;
     const authUser = req.authUser!;
 
-    const [lawyer] = await db
+    let [lawyer] = await db
       .select()
       .from(usersTable)
       .where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
       .limit(1);
 
+    // The mobile preview has stable demo ids while server auth may assign
+    // database ids. Resolve only the two known demo ids; real lawyer ids
+    // remain fully server-authoritative.
+    if (!lawyer && lawyerId === "lawyer-test") {
+      [lawyer] = await db
+        .select()
+        .from(usersTable)
+        .where(and(eq(usersTable.email, "lawyer@mustashark.com"), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+        .limit(1);
+    }
+    if (!lawyer && lawyerId === "lawyer-demo") {
+      [lawyer] = await db
+        .select()
+        .from(usersTable)
+        .where(and(eq(usersTable.email, "fatima@example.com"), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+        .limit(1);
+    }
+
     if (!lawyer) return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
 
+    const resolvedLawyerId = lawyer.id;
     const price = lawyer.hourlyRate ?? "0";
     const bookingId = crypto.randomUUID();
     const serialNumber = `BK-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
@@ -92,7 +111,7 @@ export const createBooking = async (req: Request, res: Response) => {
       id: bookingId,
       serialNumber,
       clientId: authUser.id,
-      lawyerId,
+      lawyerId: resolvedLawyerId,
       officeId: officeId || null,
       subject,
       description: description || null,
@@ -303,7 +322,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
-    if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_action" });
+    if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_access" });
     if (booking.status === "completed") return res.status(400).json({ ok: false, error: "cannot_cancel_completed_booking" });
 
     const cancelStatus = booking.clientId === authUser.id ? "cancelled_by_client" : "cancelled_by_lawyer";
