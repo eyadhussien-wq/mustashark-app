@@ -1,0 +1,86 @@
+name: temporary-mustasharek-fix
+
+on:
+  push:
+    branches:
+      - ux/2-02-t01-01-request-flow-main
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[mustasharek-auto-fix]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ux/2-02-t01-01-request-flow-main
+          fetch-depth: 0
+      - name: Apply fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('artifacts/mustasharek/contexts/AuthContext.tsx')
+          s = p.read_text()
+          old = 'body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) })'
+          new = 'body: JSON.stringify({ email, password, ...(localRecord ? { name: localRecord.name, phone: localRecord.phone, country: localRecord.country, specialization: localRecord.specialization, bio: localRecord.bio, hourlyRate: localRecord.hourlyRate } : {}), ...(expectedRole ? { role: expectedRole } : localRecord ? { role: localRecord.role } : {}) })'
+          if old not in s: raise SystemExit('Auth payload target not found')
+          s = s.replace(old, new, 1)
+          marker = '          }\n        }\n        if (!serverRes.ok) {'
+          replacement = '          } else {\n            throw new Error("تعذر إنشاء جلسة دخول آمنة. يرجى المحاولة مرة أخرى.");\n          }\n        }\n        if (!serverRes.ok) {'
+          if marker not in s: raise SystemExit('Auth JWT guard target not found')
+          s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          p = Path('artifacts/api-server/src/controllers/bookings.ts')
+          s = p.read_text()
+          s = s.replace('import { eq, and, isNull } from "drizzle-orm";', 'import { eq, and, isNull, or } from "drizzle-orm";')
+          if 'export const listMyBookings' not in s:
+            anchor = 'export const getBookingById = async (req: Request, res: Response) => {'
+            block = '''export const listMyBookings = async (req: Request, res: Response) => {\n  try {\n    const authUser = req.authUser!;\n    const rows = await db.select().from(bookingsTable).where(\n      authUser.role === "admin"\n        ? undefined\n        : or(eq(bookingsTable.clientId, authUser.id), eq(bookingsTable.lawyerId, authUser.id)),\n    );\n    const bookings = await Promise.all(rows.map(async (booking) => {\n      const [client] = booking.clientId ? await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, booking.clientId)).limit(1) : [];\n      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId)).limit(1) : [];\n      return { ...booking, clientName: client?.name ?? "العميل", lawyerName: lawyer?.name ?? "المحامي", lawyerSpecialization: lawyer?.specialization ?? "", lawyerCountry: lawyer?.country ?? null };\n    }));\n    bookings.sort((a, b) => `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`));\n    return res.json({ ok: true, bookings });\n  } catch (error) {\n    console.error("List My Bookings Error:", error);\n    return res.status(500).json({ ok: false, error: "internal_server_error" });\n  }\n};\n\n'''
+            if anchor not in s: raise SystemExit('Booking controller target not found')
+            s = s.replace(anchor, block + anchor, 1)
+          p.write_text(s)
+
+          p = Path('artifacts/api-server/src/routes/bookings.ts')
+          s = p.read_text()
+          s = s.replace('createBooking, confirmBooking, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking', 'createBooking, listMyBookings, confirmBooking, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking')
+          if 'bookingsRouter.get("/bookings", requireAuth' not in s:
+            anchor = 'bookingsRouter.post("/bookings", requireAuth, requireClient, createBooking);'
+            s = s.replace(anchor, anchor + '\nbookingsRouter.get("/bookings", requireAuth, requireClientLawyerOrAdmin, listMyBookings);', 1)
+          p.write_text(s)
+
+          p = Path('artifacts/mustasharek/app/lawyer/[id].tsx')
+          s = p.read_text()
+          s = s.replace('const { getLawyerById, getAvailableSlots } = useData();', 'const { getLawyerById, getAvailableSlots, bookConsultation } = useData();')
+          old = '''      const body = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");\n      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);'''
+          new = '''      const body = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");\n      const booking = body.booking;\n      if (booking) {\n        await bookConsultation({\n          id: booking.id, serialNumber: booking.serialNumber,\n          clientId: user.id, clientName: user.name,\n          lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,\n          subject: booking.subject, description: booking.description ?? description.trim(),\n          date: booking.scheduledDate, time: booking.scheduledTime, status: "pending",\n          type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),\n          paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,\n        });\n      }\n      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);'''
+          if old not in s: raise SystemExit('Request mirror target not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('artifacts/mustasharek/contexts/DataContext.tsx')
+          s = p.read_text()
+          helper_anchor = 'const RATINGS_KEY = "mustasharek_lawyer_ratings";'
+          helper = '''const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";\nconst JWT_KEY = "mustasharek_jwt_v1";\n\nfunction mapServerBookingToConsultation(booking: any): Consultation {\n  return {\n    id: booking.id, serialNumber: booking.serialNumber,\n    clientId: booking.clientId ?? "", clientName: booking.clientName ?? "العميل",\n    lawyerId: booking.lawyerId ?? "", lawyerName: booking.lawyerName ?? "المحامي",\n    lawyerSpecialization: booking.lawyerSpecialization ?? "",\n    lawyerCountry: booking.lawyerCountry === "jordan" ? "jordan" : booking.lawyerCountry === "qatar" ? "qatar" : undefined,\n    subject: booking.subject, description: booking.description ?? "",\n    date: booking.scheduledDate, time: booking.scheduledTime, status: booking.status, createdAt: booking.createdAt,\n    type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? 0),\n    paymentStatus: booking.paymentStatus === "paid" ? "paid" : booking.paymentStatus === "refunded" ? "refunded" : booking.paymentStatus === "forfeited" ? "forfeited" : "unpaid",\n    meetLink: booking.googleMeetLink ?? undefined, lawyerJoinedAt: booking.lawyerJoinedAt ?? undefined, clientJoinedAt: booking.clientJoinedAt ?? undefined,\n  };\n}\n\n'''
+          if 'function mapServerBookingToConsultation' not in s:
+            if helper_anchor not in s: raise SystemExit('DataContext helper anchor not found')
+            s = s.replace(helper_anchor, helper + helper_anchor, 1)
+          old = '''    const stored = await AsyncStorage.getItem("mustasharek_consultations");\n    if (stored) {\n      try {\n        setConsultations(JSON.parse(stored));\n      } catch {}\n    } else {\n      await AsyncStorage.setItem(\n        "mustasharek_consultations",\n        JSON.stringify(SAMPLE_CONSULTATIONS)\n      );\n    }'''
+          new = '''    const stored = await AsyncStorage.getItem("mustasharek_consultations");\n    let localConsultations = SAMPLE_CONSULTATIONS;\n    if (stored) {\n      try { localConsultations = JSON.parse(stored) as Consultation[]; } catch {}\n    } else {\n      await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(SAMPLE_CONSULTATIONS));\n    }\n    let mergedConsultations = localConsultations;\n    if (API_BASE) {\n      try {\n        const token = await AsyncStorage.getItem(JWT_KEY);\n        if (token) {\n          const response = await fetch(`${API_BASE}/bookings`, { headers: { Authorization: `Bearer ${token}` } });\n          if (response.ok) {\n            const body = await response.json() as { ok?: boolean; bookings?: any[] };\n            const serverConsultations = (body.bookings ?? []).map(mapServerBookingToConsultation);\n            const serverIds = new Set(serverConsultations.map((c) => c.id));\n            mergedConsultations = [...localConsultations.filter((c) => !serverIds.has(c.id)), ...serverConsultations];\n            await AsyncStorage.setItem("mustasharek_consultations", JSON.stringify(mergedConsultations));\n          }\n        }\n      } catch {}\n    }\n    setConsultations(mergedConsultations);'''
+          if old not in s: raise SystemExit('DataContext refresh target not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          pnpm --filter @workspace/mustasharek typecheck
+          pnpm --filter @workspace/api-server typecheck
+          git diff --check
+          git rm .github/workflows/temporary-mustasharek-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mustasharek/contexts/AuthContext.tsx artifacts/mustasharek/app/lawyer/'[id].tsx' artifacts/mustasharek/contexts/DataContext.tsx artifacts/api-server/src/controllers/bookings.ts artifacts/api-server/src/routes/bookings.ts
+          git commit -m "fix: sync auth and appointments [mustasharek-auto-fix]"
+          git push origin ux/2-02-t01-01-request-flow-main
