@@ -13,3 +13,4 @@ export * from "./lawyerBankAccounts";
 export * from "./userNotifications";
 export * from "./representationFinance";
 export * from "./documentHandovers";
+export * from "./paymentProofs";
