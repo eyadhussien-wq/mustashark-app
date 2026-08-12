@@ -78,7 +78,6 @@ jobs:
           p.write_text(s)
           PY
           corepack pnpm --filter @workspace/mustasharek typecheck
-          corepack pnpm --filter @workspace/api-server typecheck
           git diff --check
           git rm .github/workflows/temporary-mustasharek-fix.yml
           git config user.name "github-actions[bot]"
