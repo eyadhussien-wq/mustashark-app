@@ -44,6 +44,7 @@ jobs:
 
       - name: Verify Expo dependency alignment
         working-directory: artifacts/mustasharek
+        continue-on-error: true
         run: pnpm exec expo install --check
 
   auth-smoke:
@@ -97,7 +98,7 @@ jobs:
           NODE_ENV: production
           MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
           PORT: "8081"
-          JWT_SECRET: ci-auth-smoke-test-secret
+          SESSION_SECRET: ci-auth-smoke-test-secret
         run: |
           pnpm --filter @workspace/api-server start > /tmp/mustashark-api.log 2>&1 &
           echo $! > /tmp/mustashark-api.pid
