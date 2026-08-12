@@ -33,7 +33,7 @@ function currencyForCountry(country: string | null | undefined) {
   return null;
 }
 
-async function resolveBookingCurrency(tx: typeof db, booking: { lawyerId: string | null; officeId: string | null }) {
+async function resolveBookingCurrency(tx: Pick<typeof db, "select">, booking: { lawyerId: string | null; officeId: string | null }) {
   if (booking.officeId) {
     const [office] = await tx.select({ country: officesTable.country }).from(officesTable).where(eq(officesTable.id, booking.officeId)).limit(1);
     const officeCurrency = currencyForCountry(office?.country);
@@ -90,9 +90,7 @@ export const submitPaymentProof = async (req: Request, res: Response) => {
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) return { kind: "not_found" as const };
       if (booking.clientId !== authUser.id) return { kind: "forbidden" as const };
-      if (CLOSED_BOOKING_STATUSES.includes(booking.status as (typeof CLOSED_BOOKING_STATUSES)[number]) || booking.paymentStatus === "paid") {
-        return { kind: "closed" as const };
-      }
+      if (CLOSED_BOOKING_STATUSES.includes(booking.status as (typeof CLOSED_BOOKING_STATUSES)[number]) || booking.paymentStatus === "paid") return { kind: "closed" as const };
 
       const authoritativeCurrency = await resolveBookingCurrency(tx, booking);
       if (!authoritativeCurrency) return { kind: "currency_not_configured" as const };
@@ -108,17 +106,9 @@ export const submitPaymentProof = async (req: Request, res: Response) => {
       if (requested > remaining + 0.0001) return { kind: "exceeds_balance" as const, remaining };
 
       const [proof] = await tx.insert(paymentProofsTable).values({
-        id: crypto.randomUUID(),
-        bookingId,
-        clientId: authUser.id,
-        amount: requested.toFixed(2),
-        currency: authoritativeCurrency,
-        channel: "external",
-        method: parsed.data.method,
-        proofUri: parsed.data.proofUri,
-        reference: parsed.data.reference || null,
-        note: parsed.data.note || null,
-        status: "submitted",
+        id: crypto.randomUUID(), bookingId, clientId: authUser.id, amount: requested.toFixed(2), currency: authoritativeCurrency,
+        channel: "external", method: parsed.data.method, proofUri: parsed.data.proofUri,
+        reference: parsed.data.reference || null, note: parsed.data.note || null, status: "submitted",
       }).returning();
 
       return { kind: "ok" as const, proof, currency: authoritativeCurrency };
@@ -141,12 +131,11 @@ export const confirmPaymentProof = async (req: Request, res: Response) => {
   try {
     const authUser = req.authUser!;
     if (authUser.role !== "lawyer" && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "lawyer_or_admin_only" });
-
     const bookingId = String(req.params.id ?? "");
     const proofId = String(req.params.proofId ?? "");
+
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT id FROM bookings WHERE id = ${bookingId} FOR UPDATE`);
-
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) return { kind: "not_found" as const };
       if (authUser.role === "lawyer" && booking.lawyerId !== authUser.id) return { kind: "forbidden" as const };
@@ -155,25 +144,20 @@ export const confirmPaymentProof = async (req: Request, res: Response) => {
       const [proof] = await tx.select().from(paymentProofsTable).where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.bookingId, bookingId))).limit(1);
       if (!proof) return { kind: "proof_not_found" as const };
       if (proof.status !== "submitted") return { kind: "already_reviewed" as const };
-
       const authoritativeCurrency = await resolveBookingCurrency(tx, booking);
       if (!authoritativeCurrency) return { kind: "currency_not_configured" as const };
       if (proof.currency !== authoritativeCurrency) return { kind: "currency_mismatch" as const };
 
-      const [updatedProof] = await tx.update(paymentProofsTable)
-        .set({ status: "confirmed", reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.status, "submitted")))
-        .returning();
+      const [updatedProof] = await tx.update(paymentProofsTable).set({ status: "confirmed", reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.status, "submitted"))).returning();
       if (!updatedProof) return { kind: "already_reviewed" as const };
 
-      const [totals] = await tx.select({ confirmed: sql<string>`coalesce(sum(${paymentProofsTable.amount}), 0)` })
-        .from(paymentProofsTable)
+      const [totals] = await tx.select({ confirmed: sql<string>`coalesce(sum(${paymentProofsTable.amount}), 0)` }).from(paymentProofsTable)
         .where(and(eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "confirmed"), eq(paymentProofsTable.currency, authoritativeCurrency)));
       const fullyPaid = Number(totals?.confirmed ?? 0) >= Number(booking.price) - 0.0001;
       const [updatedBooking] = fullyPaid
         ? await tx.update(bookingsTable).set({ paymentStatus: "paid", updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.paymentStatus, "pending"))).returning()
         : [booking];
-
       return { kind: "ok" as const, proof: updatedProof, booking: updatedBooking ?? booking };
     });
 
@@ -184,7 +168,6 @@ export const confirmPaymentProof = async (req: Request, res: Response) => {
     if (result.kind === "already_reviewed") return res.status(409).json({ ok: false, error: "payment_proof_already_reviewed" });
     if (result.kind === "currency_not_configured") return res.status(409).json({ ok: false, error: "payment_currency_not_configured" });
     if (result.kind === "currency_mismatch") return res.status(409).json({ ok: false, error: "payment_currency_mismatch" });
-
     return res.json({ ok: true, proof: result.proof, booking: result.booking, message: "تم تأكيد استلام الدفعة." });
   } catch (error) {
     console.error("Confirm Payment Proof Error:", error);
@@ -196,32 +179,19 @@ export const rejectPaymentProof = async (req: Request, res: Response) => {
   try {
     const authUser = req.authUser!;
     if (authUser.role !== "lawyer" && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "lawyer_or_admin_only" });
-
     const parsed = rejectPaymentProofSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "rejection_reason_required" });
 
     const bookingId = String(req.params.id ?? "");
     const proofId = String(req.params.proofId ?? "");
-    const rejectionReason = parsed.data.reason;
-
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (authUser.role === "lawyer" && booking.lawyerId !== authUser.id) return res.status(403).json({ ok: false, error: "unauthorized_action" });
     if (CLOSED_BOOKING_STATUSES.includes(booking.status as (typeof CLOSED_BOOKING_STATUSES)[number]) || booking.paymentStatus === "paid") return res.status(409).json({ ok: false, error: "consultation_closed" });
 
-    const [updatedProof] = await db.update(paymentProofsTable).set({
-      status: "rejected",
-      rejectionReason,
-      reviewedBy: authUser.id,
-      reviewedAt: new Date(),
-      updatedAt: new Date(),
-    }).where(and(
-      eq(paymentProofsTable.id, proofId),
-      eq(paymentProofsTable.bookingId, bookingId),
-      eq(paymentProofsTable.status, "submitted"),
-    )).returning();
+    const [updatedProof] = await db.update(paymentProofsTable).set({ status: "rejected", rejectionReason: parsed.data.reason, reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "submitted"))).returning();
     if (!updatedProof) return res.status(404).json({ ok: false, error: "payment_proof_not_found_or_already_reviewed" });
-
     return res.json({ ok: true, proof: updatedProof, message: "تم رفض إثبات الدفع. يرجى مراجعة سبب الرفض مع العميل." });
   } catch (error) {
     console.error("Reject Payment Proof Error:", error);
