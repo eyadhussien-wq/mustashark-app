@@ -5,11 +5,14 @@ import { z } from "zod";
 import { db, bookingTimeBlocksTable, bookingsTable, lawyerAvailabilityTable, notificationsTable, usersTable } from "@workspace/db";
 
 const schema = z.object({
-  lawyerId: z.string().min(1), subject: z.string().min(1), description: z.string().optional(),
+  lawyerId: z.string().min(1).max(128),
+  subject: z.string().min(1).max(500),
+  description: z.string().max(10000).optional(),
   scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   scheduledTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   scheduledEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
-  type: z.enum(["video", "chat", "phone"]), officeId: z.string().optional(),
+  type: z.enum(["video", "chat", "phone"]),
+  officeId: z.string().max(128).optional(),
 });
 
 function minutes(value: string) { const [h, m] = value.split(":").map(Number); return h * 60 + m; }
@@ -47,7 +50,9 @@ export const createBookingSafely = async (req: Request, res: Response) => {
   try {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
-    const authUser = req.authUser!; const input = parsed.data;
+    const authUser = req.authUser!;
+    if (authUser.role !== "client") return res.status(403).json({ ok: false, error: "client_role_required" });
+    const input = parsed.data;
     if (!isValidCalendarDate(input.scheduledDate)) return res.status(400).json({ ok: false, error: "invalid_scheduled_date" });
 
     const start = minutes(input.scheduledTime); const requestedEnd = input.scheduledEndTime ? minutes(input.scheduledEndTime) : start + 60; const end = requestedEnd > start ? requestedEnd : start + 60;
