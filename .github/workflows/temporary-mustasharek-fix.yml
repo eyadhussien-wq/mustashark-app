@@ -1,0 +1,75 @@
+name: temporary-mustasharek-fix
+
+on:
+  push:
+    branches:
+      - ux/2-02-t01-01-request-flow-main
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[mustasharek-auto-fix]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ux/2-02-t01-01-request-flow-main
+          fetch-depth: 0
+      - name: Apply demo lawyer id compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('artifacts/api-server/src/controllers/bookings.ts')
+          s = p.read_text()
+          old = '''    const [lawyer] = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+      .limit(1);
+
+    if (!lawyer) return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
+
+    const price = lawyer.hourlyRate ?? "0";'''
+          new = '''    let [lawyer] = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+      .limit(1);
+
+    // The mobile preview has stable demo ids while server auth may assign
+    // database ids. Resolve only the two known demo ids; real lawyer ids
+    // remain fully server-authoritative.
+    if (!lawyer && lawyerId === "lawyer-test") {
+      [lawyer] = await db
+        .select()
+        .from(usersTable)
+        .where(and(eq(usersTable.email, "lawyer@mustashark.com"), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+        .limit(1);
+    }
+    if (!lawyer && lawyerId === "lawyer-demo") {
+      [lawyer] = await db
+        .select()
+        .from(usersTable)
+        .where(and(eq(usersTable.email, "fatima@example.com"), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"), isNull(usersTable.deletedAt)))
+        .limit(1);
+    }
+
+    if (!lawyer) return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
+
+    const resolvedLawyerId = lawyer.id;
+    const price = lawyer.hourlyRate ?? "0";'''
+          if old not in s: raise SystemExit('createBooking lawyer lookup target not found')
+          s = s.replace(old, new, 1)
+          s = s.replace('      lawyerId,\n', '      lawyerId: resolvedLawyerId,\n', 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git rm .github/workflows/temporary-mustasharek-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/controllers/bookings.ts
+          git commit -m "fix: resolve preview lawyer ids [mustasharek-auto-fix]"
+          git push origin ux/2-02-t01-01-request-flow-main
