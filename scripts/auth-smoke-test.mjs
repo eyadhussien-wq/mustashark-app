@@ -22,30 +22,32 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function assertJwtResponse(result, label, expectedRole) {
+  assert(result.status === 200, `${label} expected 200, got ${result.status}: ${JSON.stringify(result.body)}`);
+  assert(typeof result.body?.jwt === "string" && result.body.jwt.length > 20, `${label} did not return a JWT`);
+  assert(result.body?.user?.role === expectedRole, `${label} returned the wrong role`);
+}
+
 const client = await post("/api/auth/local-auth", {
   email: "client@mustashark.com",
   password: "test1234",
   role: "client",
 });
-assert(client.status === 200, `client login expected 200, got ${client.status}`);
-assert(typeof client.body?.token === "string" && client.body.token.length > 20, "client login did not return a JWT");
-assert(client.body?.user?.role === "client", "client login returned the wrong role");
+assertJwtResponse(client, "client login", "client");
 
 const lawyer = await post("/api/auth/local-auth", {
   email: "lawyer@mustashark.com",
   password: "test1234",
   role: "lawyer",
 });
-assert(lawyer.status === 200, `lawyer login expected 200, got ${lawyer.status}`);
-assert(typeof lawyer.body?.token === "string" && lawyer.body.token.length > 20, "lawyer login did not return a JWT");
-assert(lawyer.body?.user?.role === "lawyer", "lawyer login returned the wrong role");
+assertJwtResponse(lawyer, "lawyer login", "lawyer");
 
 const clientFromLawyerPortal = await post("/api/auth/local-auth", {
   email: "client@mustashark.com",
   password: "test1234",
   role: "lawyer",
 });
-assert(clientFromLawyerPortal.status === 403, `client through lawyer portal expected 403, got ${clientFromLawyerPortal.status}`);
+assert(clientFromLawyerPortal.status === 403, `client through lawyer portal expected 403, got ${clientFromLawyerPortal.status}: ${JSON.stringify(clientFromLawyerPortal.body)}`);
 assert(clientFromLawyerPortal.body?.error === "role_mismatch", "client through lawyer portal returned the wrong error");
 
 const lawyerFromClientPortal = await post("/api/auth/local-auth", {
@@ -53,7 +55,7 @@ const lawyerFromClientPortal = await post("/api/auth/local-auth", {
   password: "test1234",
   role: "client",
 });
-assert(lawyerFromClientPortal.status === 403, `lawyer through client portal expected 403, got ${lawyerFromClientPortal.status}`);
+assert(lawyerFromClientPortal.status === 403, `lawyer through client portal expected 403, got ${lawyerFromClientPortal.status}: ${JSON.stringify(lawyerFromClientPortal.body)}`);
 assert(lawyerFromClientPortal.body?.error === "role_mismatch", "lawyer through client portal returned the wrong error");
 
 console.log("AUTH SMOKE TESTS PASSED");
