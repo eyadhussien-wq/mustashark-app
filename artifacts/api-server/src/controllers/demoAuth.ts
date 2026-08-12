@@ -19,7 +19,10 @@ export async function demoAuth(req: Request, res: Response) {
     const demo = DEMO_USERS[parsed.data.role];
     let existing = (await db.select().from(usersTable).where(eq(usersTable.email, demo.email)).limit(1))[0] ?? null;
     if (!existing) {
-      await db.insert(usersTable).values({ id: demo.id, name: demo.name, email: demo.email, phone: demo.phone, phoneCountry: "qatar", country: demo.country, role: parsed.data.role, authProvider: "local", accountStatus: "active", ...(parsed.data.role === "lawyer" ? { specialization: demo.specialization, bio: demo.bio, hourlyRate: demo.hourlyRate } : {}), createdAt: new Date(), updatedAt: new Date() });
+      const lawyerFields = parsed.data.role === "lawyer"
+        ? { specialization: "specialization" in demo ? demo.specialization : null, bio: "bio" in demo ? demo.bio : null, hourlyRate: "hourlyRate" in demo ? demo.hourlyRate : null }
+        : {};
+      await db.insert(usersTable).values({ id: demo.id, name: demo.name, email: demo.email, phone: demo.phone, phoneCountry: "qatar", country: demo.country, role: parsed.data.role, authProvider: "local", accountStatus: "active", ...lawyerFields, createdAt: new Date(), updatedAt: new Date() });
       existing = (await db.select().from(usersTable).where(eq(usersTable.email, demo.email)).limit(1))[0] ?? null;
     } else if (existing.role !== parsed.data.role) return res.status(403).json({ ok: false, error: "role_mismatch" });
     if (!existing) return res.status(500).json({ ok: false, error: "user_creation_failed" });
