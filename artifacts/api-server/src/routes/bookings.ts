@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
 import { createBooking, listMyBookings, confirmBooking, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking } from "../controllers/bookings";
+import { createBookingSafely } from "../controllers/safeBooking";
 import { createEmailBooking } from "../controllers/emailBooking";
 import { claimLawyerNoShow, refundLawyerNoShow, getSmartTransferOptions, transferLawyerNoShowBooking } from "../controllers/lawyerNoShow";
 
@@ -15,7 +16,10 @@ const requireLawyerOrAdmin = requireRole("lawyer", "admin");
 const requireClientOrAdmin = requireRole("client", "admin");
 
 bookingsRouter.post("/bookings/email", requireAuth, requireClient, createEmailBooking);
-bookingsRouter.post("/bookings", requireAuth, requireClient, createBooking);
+// All normal client bookings go through the atomic slot guard. The legacy
+// controller remains available for older flows but is no longer the public
+// booking entry point.
+bookingsRouter.post("/bookings", requireAuth, requireClient, createBookingSafely);
 bookingsRouter.get("/bookings", requireAuth, requireClientLawyerOrAdmin, listMyBookings);
 bookingsRouter.get("/bookings/:id", requireAuth, requireClientLawyerOrAdmin, getBookingById);
 bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, confirmBooking);
