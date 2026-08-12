@@ -76,6 +76,8 @@ export const bookingsTable = pgTable("bookings", {
   noShowReason: text("no_show_reason"),
   transferredFromBookingId: text("transferred_from_booking_id"),
   attachments: jsonb("attachments").$type<BookingAttachment[]>().default([]),
+  archivedAt: timestamp("archived_at"),
+  archivedBy: text("archived_by").references(() => usersTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
