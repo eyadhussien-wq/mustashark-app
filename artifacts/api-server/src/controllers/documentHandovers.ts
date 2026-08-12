@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
+  caseMembershipsTable,
   documentHandoversTable,
   documentsTable,
   handoverTrackingEventsTable,
+  usersTable,
 } from "@workspace/db/schema";
 
 const HANDOVER_MODES = ["local", "office", "courier", "international"] as const;
@@ -69,6 +71,46 @@ async function canAccessHandover(userId: string, handoverId: string, admin: bool
   return row;
 }
 
+async function hasActiveCaseMembership(
+  queryDb: typeof db,
+  caseId: string,
+  userId: string,
+) {
+  const [membership] = await queryDb
+    .select({ id: caseMembershipsTable.id })
+    .from(caseMembershipsTable)
+    .innerJoin(usersTable, eq(caseMembershipsTable.userId, usersTable.id))
+    .where(and(
+      eq(caseMembershipsTable.caseId, caseId),
+      eq(caseMembershipsTable.userId, userId),
+      eq(caseMembershipsTable.status, "active"),
+      eq(usersTable.accountStatus, "active"),
+      isNull(usersTable.deletedAt),
+    ))
+    .limit(1);
+  return Boolean(membership);
+}
+
+async function hasActiveCaseMembershipInTransaction(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  caseId: string,
+  userId: string,
+) {
+  const [membership] = await tx
+    .select({ id: caseMembershipsTable.id })
+    .from(caseMembershipsTable)
+    .innerJoin(usersTable, eq(caseMembershipsTable.userId, usersTable.id))
+    .where(and(
+      eq(caseMembershipsTable.caseId, caseId),
+      eq(caseMembershipsTable.userId, userId),
+      eq(caseMembershipsTable.status, "active"),
+      eq(usersTable.accountStatus, "active"),
+      isNull(usersTable.deletedAt),
+    ))
+    .limit(1);
+  return Boolean(membership);
+}
+
 async function appendTrackingEvent(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   handoverId: string,
@@ -106,10 +148,17 @@ export async function createDocumentHandover(req: Request, res: Response) {
     if (!isAdmin(req) && document.ownerId !== authUser.id) return res.status(403).json({ ok: false, error: "forbidden" });
     if (document.caseId !== data.caseId) return res.status(409).json({ ok: false, error: "document_case_mismatch" });
 
+    if (!isAdmin(req) && !(await hasActiveCaseMembership(db, data.caseId, data.recipientId))) {
+      return res.status(403).json({ ok: false, error: "recipient_not_case_member" });
+    }
+
     const otp = String(randomInt(100000, 1000000));
     const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const handoverId = randomUUID();
     const handover = await db.transaction(async (tx) => {
+      if (!isAdmin(req) && !(await hasActiveCaseMembershipInTransaction(tx, data.caseId, data.recipientId))) {
+        return { kind: "recipient_not_case_member" as const };
+      }
       const [created] = await tx.insert(documentHandoversTable).values({
         id: handoverId, caseId: data.caseId, documentId: document.id, requestedBy: authUser.id,
         recipientId: data.recipientId, mode: data.mode,
@@ -126,10 +175,13 @@ export async function createDocumentHandover(req: Request, res: Response) {
       await appendTrackingEvent(tx, handoverId, {
         type: "status_change", status: "requested", note: "Handover requested", createdBy: authUser.id,
       });
-      return created;
+      return { kind: "ok" as const, handover: created };
     });
 
-    return res.status(201).json({ ok: true, handover, deliveryOtpIssued: true });
+    if (handover.kind === "recipient_not_case_member") {
+      return res.status(403).json({ ok: false, error: "recipient_not_case_member" });
+    }
+    return res.status(201).json({ ok: true, handover: handover.handover, deliveryOtpIssued: true });
   } catch (error) {
     console.error("Create Document Handover Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
@@ -227,6 +279,9 @@ export async function confirmDocumentHandoverDelivery(req: Request, res: Respons
         .where(eq(documentHandoversTable.id, id)).limit(1);
       if (!row) return { kind: "not_found" as const };
       if (row.handover.recipientId !== authUser.id && !isAdmin(req)) return { kind: "forbidden" as const };
+      if (!isAdmin(req) && !(await hasActiveCaseMembershipInTransaction(tx, row.handover.caseId, authUser.id))) {
+        return { kind: "forbidden" as const };
+      }
       if (!["ready_for_delivery", "dispatched", "in_transit"].includes(row.handover.status)) return { kind: "not_ready" as const };
       if (row.handover.deliveryOtpConsumedAt) return { kind: "otp_used" as const };
       if (!row.handover.deliveryOtpExpiresAt || row.handover.deliveryOtpExpiresAt.getTime() <= Date.now()) return { kind: "otp_expired" as const };
