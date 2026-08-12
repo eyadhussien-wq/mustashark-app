@@ -79,7 +79,9 @@ export default function PaymentProofScreen() {
     setLoading(true);
     try {
       const token = await getAuthToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: HeadersInit = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
       const [bookingRes, proofsRes] = await Promise.all([
         fetch(`${API_BASE}/bookings/${bookingId}`, { headers }),
         fetch(`${API_BASE}/bookings/${bookingId}/payment-proofs`, { headers }),
