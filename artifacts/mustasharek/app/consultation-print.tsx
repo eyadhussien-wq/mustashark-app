@@ -1,0 +1,135 @@
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import colors from "@/constants/colors";
+import { useAuth } from "@/contexts/AuthContext";
+
+const C = colors.light;
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+
+type PrintDocument = {
+  serialNumber: string;
+  booking: {
+    subject: string;
+    description: string | null;
+    scheduledDate: string;
+    scheduledTime: string;
+    status: string;
+    type: string;
+    price: string | number;
+    paymentStatus: string;
+    escrowStatus: string;
+    attachments: Array<{ name: string; uri: string }>;
+    archivedAt: string | null;
+  };
+  client: { name: string; email: string; phone: string } | null;
+  events: Array<{ eventType: string; createdAt: string; metadata: unknown }>;
+  generatedAt: string;
+};
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function buildHtml(document: PrintDocument) {
+  const attachments = document.booking.attachments.length
+    ? document.booking.attachments.map((item) => `<li>${escapeHtml(item.name)}</li>`).join("")
+    : "<li>لا توجد مرفقات</li>";
+  const events = document.events.length
+    ? document.events.map((event) => `<tr><td>${escapeHtml(new Date(event.createdAt).toLocaleString("ar-JO"))}</td><td>${escapeHtml(event.eventType)}</td></tr>`).join("")
+    : "<tr><td colspan=2>لا توجد أحداث مسجلة</td></tr>";
+
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;color:#1a2a4a;padding:32px;direction:rtl}h1{margin:0 0 4px}h2{margin:24px 0 8px;font-size:18px}.serial{color:#b38b2c;font-weight:700;margin-bottom:20px}.box{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px}.row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee}.row:last-child{border-bottom:0}table{width:100%;border-collapse:collapse}td{border-bottom:1px solid #eee;padding:7px}ul{margin:8px 0}.muted{color:#667085;font-size:12px}
+  </style></head><body>
+  <h1>مستشارك — وثيقة الاستشارة</h1><div class="serial">${escapeHtml(document.serialNumber)}</div>
+  <div class="box"><div class="row"><b>الموضوع</b><span>${escapeHtml(document.booking.subject)}</span></div><div class="row"><b>التاريخ</b><span>${escapeHtml(document.booking.scheduledDate)} — ${escapeHtml(document.booking.scheduledTime)}</span></div><div class="row"><b>الحالة</b><span>${escapeHtml(document.booking.status)}</span></div><div class="row"><b>الدفع</b><span>${escapeHtml(document.booking.paymentStatus)} — ${escapeHtml(document.booking.price)}</span></div><div class="row"><b>الحساب</b><span>${escapeHtml(document.booking.escrowStatus)}</span></div></div>
+  <h2>العميل</h2><div class="box"><div class="row"><b>الاسم</b><span>${escapeHtml(document.client?.name)}</span></div><div class="row"><b>البريد</b><span>${escapeHtml(document.client?.email)}</span></div><div class="row"><b>الهاتف</b><span>${escapeHtml(document.client?.phone)}</span></div></div>
+  <h2>التفاصيل</h2><div class="box">${escapeHtml(document.booking.description)}</div>
+  <h2>المرفقات</h2><div class="box"><ul>${attachments}</ul></div>
+  <h2>سجل الإجراءات</h2><div class="box"><table>${events}</table></div>
+  <p class="muted">تم إنشاء المستند من بيانات الخادم المصرح بها في ${escapeHtml(document.generatedAt)}.</p>
+  </body></html>`;
+}
+
+export default function ConsultationPrint() {
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { getAuthToken } = useAuth();
+  const [document, setDocument] = useState<PrintDocument | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAuthToken();
+        if (!API_BASE || !token) throw new Error("auth_unavailable");
+        const response = await fetch(`${API_BASE}/consultations/${encodeURIComponent(String(id))}/print-data`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error("print_data_unavailable");
+        const payload = await response.json() as { ok: boolean; document?: PrintDocument };
+        if (!payload.ok || !payload.document) throw new Error("invalid_print_data");
+        if (!cancelled) setDocument(payload.document);
+      } catch {
+        if (!cancelled) Alert.alert("تعذر تجهيز المستند", "لم يتم السماح بالوصول إلى بيانات الطباعة من الخادم.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getAuthToken, id]);
+
+  async function exportPdf() {
+    if (!document) return;
+    try {
+      const html = buildHtml(document);
+      if (Platform.OS === "web") {
+        const win = window.open("", "_blank");
+        if (!win) throw new Error("popup_blocked");
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        win.print();
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `استشارة ${document.serialNumber}` });
+      } else {
+        Alert.alert("تم إنشاء PDF", uri);
+      }
+    } catch {
+      Alert.alert("تعذر التصدير", "حدث خطأ أثناء إنشاء ملف PDF.");
+    }
+  }
+
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /><Text style={styles.muted}>جارٍ تجهيز الوثيقة من الخادم…</Text></View>;
+  if (!document) return <View style={styles.center}><Feather name="shield-off" size={42} color={C.destructive} /><Text style={styles.title}>تعذر الوصول إلى الوثيقة</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.link}>العودة</Text></TouchableOpacity></View>;
+
+  return <View style={styles.container}>
+    <View style={styles.header}><TouchableOpacity onPress={() => router.back()} style={styles.back}><Feather name="arrow-right" size={20} color="#fff" /></TouchableOpacity><View style={{ flex: 1, alignItems: "flex-end" }}><Text style={styles.eyebrow}>التوثيق الرسمي</Text><Text style={styles.titleWhite}>{document.serialNumber}</Text></View></View>
+    <View style={styles.card}><Feather name="file-text" size={34} color={C.primary} /><Text style={styles.title}>مستند الاستشارة جاهز</Text><Text style={styles.muted}>تمت قراءة البيانات من الخادم بعد التحقق من صلاحية الحساب. لا يتم الاعتماد على بيانات واجهة العميل لإنشاء المحتوى.</Text><TouchableOpacity style={styles.button} onPress={exportPdf}><Feather name="printer" size={18} color="#fff" /><Text style={styles.buttonText}>طباعة / تصدير PDF</Text></TouchableOpacity></View>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.background, padding: 18, paddingTop: 52 },
+  header: { backgroundColor: C.navy, borderRadius: 18, padding: 14, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "rgba(201,160,53,0.35)" },
+  back: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  eyebrow: { color: C.gold, fontSize: 10 }, titleWhite: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
+  card: { marginTop: 18, backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 22, alignItems: "center" },
+  title: { color: C.foreground, fontSize: 17, fontFamily: "Inter_700Bold", marginTop: 12, textAlign: "center" },
+  muted: { color: C.mutedForeground, fontSize: 11, lineHeight: 18, textAlign: "center", marginTop: 8 },
+  link: { color: C.primary, fontFamily: "Inter_700Bold", marginTop: 14 },
+  button: { marginTop: 20, minWidth: 210, paddingHorizontal: 18, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  buttonText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 12 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.background, padding: 24 },
+});
