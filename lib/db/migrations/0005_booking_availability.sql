@@ -19,8 +19,7 @@ CREATE TABLE IF NOT EXISTS booking_time_blocks (
   scheduled_date TEXT NOT NULL,
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  CONSTRAINT booking_time_blocks_exact_slot_uq UNIQUE (lawyer_id, scheduled_date, start_time, end_time)
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS booking_time_blocks_lawyer_date_idx
