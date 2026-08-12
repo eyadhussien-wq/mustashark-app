@@ -8,9 +8,12 @@ const app: Express = express();
 
 // 1. Secure CORS Configuration
 const allowedOrigins = [
-  "https://mustasharek.com", // استبدل بنطاق موقعك الإنتاجي الفعلي
+  "https://mustasharek.com",
   "https://admin.mustasharek.com",
-  /^http:\/\/localhost:\d+$/, // السماح للـ Localhost أثناء التطوير بكافة البورتات
+  /^https:\/\/[^/]+\.replit\.dev(?::\d+)?$/,
+  /^https:\/\/[^/]+\.replit\.app(?::\d+)?$/,
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
 ];
 
 app.use(
@@ -41,7 +44,7 @@ app.use(
 // 2. Simple & Robust In-Memory Rate Limiter Middleware
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const WINDOW_MS = 15 * 60 * 1000; // 15 دقيقة
-const MAX_REQUESTS = 300; // أقصى عدد طلبات لكل آبي خلال نافذة الوقت
+const MAX_REQUESTS = 300; // أقصى عدد طلبات لكل آي بي خلال نافذة الوقت
 
 app.use((req, res, next) => {
   // تخطي الـ Rate Limit لطلبات الفحص (Health Check)
