@@ -30,7 +30,7 @@ export default function LawyerDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { getLawyerById, getAvailableSlots, bookConsultation } = useData();
+  const { getLawyerById, bookConsultation, consultations } = useData();
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
   const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
@@ -58,7 +58,24 @@ export default function LawyerDetail() {
   const workingDays = lawyer?.availability?.workingDays ?? [1, 2, 3, 4, 5];
   const calendarDays = useMemo(() => buildCalendarDays(workingDays, lang, 21), [workingDays, lang]);
   const activeDate = selectedDate || calendarDays[0]?.date || "";
-  const slots = useMemo(() => (activeDate && lawyer ? getAvailableSlots(lawyer.id, activeDate) : []), [activeDate, lawyer, getAvailableSlots]);
+  const slots = useMemo(() => {
+    if (!lawyer || !activeDate) return [];
+    const availability = lawyer.availability ?? { workingDays: [1, 2, 3, 4, 5], startHour: "09:00", endHour: "17:00", slotDuration: 60 as const };
+    const dayOfWeek = new Date(`${activeDate}T00:00:00`).getDay();
+    if (!availability.workingDays.includes(dayOfWeek)) return [];
+    const [startH, startM] = availability.startHour.split(":").map(Number);
+    const [endH, endM] = availability.endHour.split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    const generated = [] as Array<{ time: string; available: boolean }>;
+    for (let minutes = startMinutes; minutes < endMinutes; minutes += availability.slotDuration) {
+      const h = Math.floor(minutes / 60); const m = minutes % 60;
+      const time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      const booked = consultations.some((c) => c.lawyerId === lawyer.id && c.date === activeDate && c.time === time && !["rejected", "cancelled_by_client", "cancelled_by_lawyer"].includes(c.status));
+      generated.push({ time, available: !booked });
+    }
+    return generated;
+  }, [activeDate, lawyer, consultations]);
 
   if (!lawyer) return <View style={styles.notFound}><Text style={styles.notFoundText}>{t("noLawyersFound")}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>{t("back")}</Text></TouchableOpacity></View>;
 
