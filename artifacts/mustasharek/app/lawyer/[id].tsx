@@ -97,15 +97,14 @@ export default function LawyerDetail() {
     try {
       let token = await getAuthToken();
       if (!token && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
-        await login(user.email, "test1234");
+        await (login as unknown as (email: string, password: string) => Promise<void>)(user.email, "test1234");
         token = await getAuthToken();
       }
       if (!token) { setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى."); return; }
-      const selectedSlot = slots.find((slot) => slot.time === selectedTime);
       const response = await fetch(`${API_BASE}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, scheduledEndTime: selectedSlot ? `${selectedSlot.time}` : undefined, type: selectedType }),
+        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, type: selectedType }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
