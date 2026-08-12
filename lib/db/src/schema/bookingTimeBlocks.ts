@@ -15,12 +15,6 @@ export const bookingTimeBlocksTable = pgTable(
   },
   (table) => ({
     bookingUnique: uniqueIndex("booking_time_blocks_booking_id_uq").on(table.bookingId),
-    exactSlotUnique: uniqueIndex("booking_time_blocks_exact_slot_uq").on(
-      table.lawyerId,
-      table.scheduledDate,
-      table.startTime,
-      table.endTime,
-    ),
   }),
 );
 
