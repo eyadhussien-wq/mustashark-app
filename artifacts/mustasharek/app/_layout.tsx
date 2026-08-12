@@ -47,6 +47,14 @@ function RootLayoutNav() {
         options={{ headerShown: false, presentation: "card" }}
       />
       <Stack.Screen
+        name="payment-proof"
+        options={{ headerShown: false, presentation: "card" }}
+      />
+      <Stack.Screen
+        name="payment-proof-review"
+        options={{ headerShown: false, presentation: "card" }}
+      />
+      <Stack.Screen
         name="language-splash"
         options={{ headerShown: false, presentation: "fullScreenModal" }}
       />
