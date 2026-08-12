@@ -57,7 +57,8 @@ export default function PaymentProofReviewScreen() {
   useEffect(() => { void load(); }, [load]);
 
   async function review(proofId: string, action: "confirm" | "reject") {
-    if (action === "reject" && !reason.trim()) {
+    if (action === "reject" && (rejectionFor !== proofId || !reason.trim())) {
+      if (rejectionFor !== proofId) setReason("");
       setRejectionFor(proofId);
       Alert.alert("سبب الرفض مطلوب", "اكتب سببًا واضحًا حتى يعرف العميل ما الذي يحتاج إلى تصحيحه.");
       return;
