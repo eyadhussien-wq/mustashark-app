@@ -21,9 +21,16 @@ export function formatPrice(
 
 /**
  * Short rate label used in cards and stats.
- * e.g. "qatar"  → "ر.ق / ساعة"
- *      "jordan" → "د.أ / ساعة"
+ * Supports both the original one-argument form and the detailed
+ * amount/country/lang form used by the lawyer booking screen.
  */
-export function rateLabel(country: "qatar" | "jordan"): string {
-  return country === "jordan" ? "د.أ / ساعة" : "ر.ق / ساعة";
+export function rateLabel(
+  amountOrCountry: number | "qatar" | "jordan",
+  country?: "qatar" | "jordan",
+  _lang?: "ar" | "en",
+): string {
+  if (typeof amountOrCountry === "number") {
+    return formatPrice(amountOrCountry, country ?? "qatar");
+  }
+  return amountOrCountry === "jordan" ? "د.أ / ساعة" : "ر.ق / ساعة";
 }

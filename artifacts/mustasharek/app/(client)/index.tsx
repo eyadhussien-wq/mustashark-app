@@ -63,9 +63,12 @@ export default function ClientHome() {
   );
 
   const hasActiveSearch = Boolean(search.trim()) || country !== "الكل" || spec !== "الكل";
-  const visibleLawyers = hasActiveSearch || showAllLawyers
-    ? filtered
-    : filtered.slice(0, RECOMMENDED_LIMIT);
+    const visibleLawyers = hasActiveSearch || showAllLawyers
+      ? filtered
+      : [
+          ...filtered.filter((l) => l.id !== "lawyer-test").slice(0, RECOMMENDED_LIMIT - 1),
+          ...filtered.filter((l) => l.id === "lawyer-test"),
+        ].slice(0, RECOMMENDED_LIMIT);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

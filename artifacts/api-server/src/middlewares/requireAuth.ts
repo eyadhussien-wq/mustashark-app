@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { verifyToken } from "../lib/jwt";
 
 declare global {
   namespace Express {
@@ -9,10 +9,6 @@ declare global {
       authUser?: typeof usersTable.$inferSelect & { userId: string };
     }
   }
-}
-
-interface JwtPayload {
-  userId: string;
 }
 
 export const requireAuth = async (
@@ -29,25 +25,14 @@ export const requireAuth = async (
       });
     }
 
-    const token = authHeader.split(" ")[1];
-    const secret = process.env.JWT_SECRET;
-
-    if (!secret) {
-      console.error(
-        "CRITICAL: JWT_SECRET is not configured in environment variables.",
-      );
-      return res.status(500).json({
-        ok: false,
-        error: "authentication_configuration_error",
-      });
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (!token) {
+      return res.status(401).json({ ok: false, error: "missing_or_invalid_authorization_header" });
     }
 
-    const payload = jwt.verify(token, secret) as JwtPayload;
-
-    if (!payload || !payload.userId) {
-      return res
-        .status(401)
-        .json({ ok: false, error: "invalid_token_payload" });
+    const payload = verifyToken(token);
+    if (!payload?.userId) {
+      return res.status(401).json({ ok: false, error: "invalid_token_payload" });
     }
 
     try {
@@ -58,9 +43,10 @@ export const requireAuth = async (
         .limit(1);
 
       if (!user || user.deletedAt || user.accountStatus !== "active") {
-        return res
-          .status(403)
-          .json({ ok: false, error: "unauthorized_or_suspended" });
+        return res.status(403).json({
+          ok: false,
+          error: "unauthorized_or_suspended",
+        });
       }
 
       req.authUser = { ...user, userId: user.id };
@@ -73,10 +59,11 @@ export const requireAuth = async (
       });
     }
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
+    const errorName = error instanceof Error ? error.name : "";
+    if (errorName === "TokenExpiredError") {
       return res.status(401).json({ ok: false, error: "token_expired" });
     }
-    if (error instanceof jwt.JsonWebTokenError) {
+    if (errorName === "JsonWebTokenError") {
       return res.status(401).json({ ok: false, error: "invalid_token" });
     }
     console.error("Authentication Error:", error);
