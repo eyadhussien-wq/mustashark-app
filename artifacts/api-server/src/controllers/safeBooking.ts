@@ -3,7 +3,9 @@ import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { bookingTimeBlocksTable, bookingsTable, lawyerAvailabilityTable, notificationsTable, usersTable } from "@workspace/db/schema";
+import { bookingsTable, notificationsTable, usersTable } from "@workspace/db/schema";
+import { lawyerAvailabilityTable } from "@workspace/db/schema/lawyerAvailability";
+import { bookingTimeBlocksTable } from "@workspace/db/schema/bookingTimeBlocks";
 
 const schema = z.object({
   lawyerId: z.string().min(1), subject: z.string().min(1), description: z.string().optional(),
