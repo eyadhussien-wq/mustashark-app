@@ -87,6 +87,16 @@ export default function ConsultationPrint() {
     return () => { cancelled = true; };
   }, [getAuthToken, id]);
 
+  async function recordPrintExport() {
+    const token = await getAuthToken();
+    if (!API_BASE || !token) throw new Error("auth_unavailable");
+    const response = await fetch(`${API_BASE}/consultations/${encodeURIComponent(String(id))}/print-export`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("print_export_audit_failed");
+  }
+
   async function exportPdf() {
     if (!document) return;
     try {
@@ -98,9 +108,11 @@ export default function ConsultationPrint() {
         win.document.close();
         win.focus();
         win.print();
+        await recordPrintExport();
         return;
       }
       const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await recordPrintExport();
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `استشارة ${document.serialNumber}` });
       } else {
