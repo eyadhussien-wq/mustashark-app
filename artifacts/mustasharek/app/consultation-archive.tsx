@@ -9,12 +9,13 @@ import { useData } from "@/contexts/DataContext";
 const C = colors.light;
 const TERMINAL = new Set(["completed", "rejected", "cancelled_by_lawyer", "cancelled_by_client", "no_show_lawyer", "no_show_client", "refunded_absent"]);
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+type ArchiveItem = { id: string; serialNumber: string; subject: string; scheduledDate: string; scheduledTime: string; status: string };
 
 export default function ConsultationArchive() {
   const router = useRouter();
   const { getAuthToken } = useAuth();
   const { consultations, refreshData } = useData();
-  const [serverArchive, setServerArchive] = useState<Array<{ id: string; serialNumber: string; subject: string; scheduledDate: string; scheduledTime: string; status: string; paymentStatus: string; archivedAt: string | null }>>([]);
+  const [serverArchive, setServerArchive] = useState<ArchiveItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -25,7 +26,7 @@ export default function ConsultationArchive() {
       if (API_BASE && token) {
         const response = await fetch(`${API_BASE}/consultations/archive`, { headers: { Authorization: `Bearer ${token}` } });
         if (response.ok) {
-          const data = await response.json() as { ok: boolean; archive?: typeof serverArchive };
+          const data = await response.json() as { ok: boolean; archive?: ArchiveItem[] };
           setServerArchive(data.archive ?? []);
           return;
         }
@@ -40,8 +41,8 @@ export default function ConsultationArchive() {
 
   useEffect(() => { void loadArchive(); }, [loadArchive]);
 
-  const fallback = useMemo(() => consultations.filter((c) => TERMINAL.has(c.status)), [consultations]);
-  const items = serverArchive.length > 0 ? serverArchive : fallback;
+  const fallback = useMemo<ArchiveItem[]>(() => consultations.filter((c) => TERMINAL.has(c.status)).map((c) => ({ id: c.id, serialNumber: c.serialNumber, subject: c.subject, scheduledDate: c.date, scheduledTime: c.time, status: c.status })), [consultations]);
+  const items: ArchiveItem[] = serverArchive.length > 0 ? serverArchive : fallback;
 
   async function handleRefresh() {
     setRefreshing(true);
