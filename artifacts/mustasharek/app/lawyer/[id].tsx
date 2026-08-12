@@ -97,14 +97,15 @@ export default function LawyerDetail() {
     try {
       let token = await getAuthToken();
       if (!token && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
-        await login(user.email, "test1234", user.role === "lawyer" ? "lawyer" : "client");
+        await login(user.email, "test1234");
         token = await getAuthToken();
       }
       if (!token) { setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى."); return; }
+      const selectedSlot = slots.find((slot) => slot.time === selectedTime);
       const response = await fetch(`${API_BASE}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, type: selectedType }),
+        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, scheduledEndTime: selectedSlot ? `${selectedSlot.time}` : undefined, type: selectedType }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
@@ -171,8 +172,8 @@ export default function LawyerDetail() {
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر الوقت" : "Choose time"}</Text>
             <View style={styles.slotsRow}>
               {slots.map((slot) => (
-                <TouchableOpacity key={slot} style={[styles.slotBtn, selectedTime === slot && styles.slotBtnActive]} onPress={() => setSelectedTime(slot)}>
-                  <Text style={[styles.slotText, selectedTime === slot && styles.slotTextActive]}>{slot}</Text>
+                <TouchableOpacity key={slot.time} style={[styles.slotBtn, selectedTime === slot.time && styles.slotBtnActive]} onPress={() => setSelectedTime(slot.time)}>
+                  <Text style={[styles.slotText, selectedTime === slot.time && styles.slotTextActive]}>{slot.time}</Text>
                 </TouchableOpacity>
               ))}
               {selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
