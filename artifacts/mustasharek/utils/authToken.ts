@@ -4,9 +4,13 @@ import type { User } from "@/contexts/AuthContext";
 const JWT_KEY = "mustasharek_jwt_v1";
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
 
-export async function getUsableAuthToken(user: User | null): Promise<string | null> {
-  const stored = await AsyncStorage.getItem(JWT_KEY).catch(() => null);
-  if (stored) return stored;
+export async function getUsableAuthToken(user: User | null, forceRefresh = false): Promise<string | null> {
+  if (!forceRefresh) {
+    const stored = await AsyncStorage.getItem(JWT_KEY).catch(() => null);
+    if (stored) return stored;
+  } else {
+    await AsyncStorage.removeItem(JWT_KEY).catch(() => {});
+  }
 
   const email = user?.email?.trim().toLowerCase();
   const role = user?.role === "lawyer" ? "lawyer" : user?.role === "client" ? "client" : null;
