@@ -7,6 +7,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { rateLabel } from "@/utils/currency";
+import { ProfessionalCalendar, buildCalendarDays } from "@/components/ProfessionalCalendar";
 
 const C = colors.light;
 
@@ -14,8 +15,9 @@ export default function LawyerDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, updateUser } = useAuth();
-  const { consultations, refreshData } = useData();
+  const { consultations, refreshData, getLawyerById } = useData();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("");
 
   const myConsults = useMemo(() => consultations.filter((c) => c.lawyerId === user?.id), [consultations, user?.id]);
   const pending = myConsults.filter((c) => c.status === "pending").length;
@@ -23,6 +25,10 @@ export default function LawyerDashboard() {
   const completed = myConsults.filter((c) => c.status === "completed").length;
   const totalEarnings = myConsults.filter((c) => c.status === "completed").reduce((sum, c) => sum + c.price, 0);
   const upcoming = useMemo(() => myConsults.filter((c) => c.status === "accepted").sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).slice(0, 5), [myConsults]);
+  const lawyer = user?.id ? getLawyerById(user.id) : undefined;
+  const workingDays = lawyer?.availability?.workingDays ?? [1, 2, 3, 4, 5];
+  const calendarDays = useMemo(() => buildCalendarDays(workingDays, "ar", 21), [workingDays]);
+  const activeDate = selectedDate || calendarDays[0]?.date || "";
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -69,6 +75,18 @@ export default function LawyerDashboard() {
         <StatCard icon="calendar" label="استشارات قادمة" value={accepted.toString()} tone="primary" onPress={() => goFiltered("accepted")} />
         <StatCard icon="check-circle" label="استشارات مكتملة" value={completed.toString()} tone="success" onPress={() => goFiltered("completed")} />
         <StatCard icon="trending-up" label={`الإيرادات (${user?.country ? rateLabel(user.country) : "ر.ق"})`} value={totalEarnings.toString()} tone="gold" onPress={() => goFiltered("completed")} />
+      </View>
+
+      <View style={styles.calendarSection}>
+        <ProfessionalCalendar
+          lang="ar"
+          selectedDate={activeDate}
+          onDateChange={setSelectedDate}
+          days={calendarDays}
+          mode="agenda"
+          consultations={myConsults.filter((c) => c.status === "accepted" || c.status === "pending")}
+          title="تقويم العمل"
+        />
       </View>
 
       <View style={styles.section}>
@@ -126,6 +144,7 @@ const styles = StyleSheet.create({
   licenseTitle: { fontSize: 12, color: C.success, fontFamily: "Inter_600SemiBold" },
   licenseText: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 2 },
   section: { marginBottom: 20 },
+  calendarSection: { marginBottom: 22 },
   sectionHeader: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.foreground, textAlign: "right" },
   sectionSubtitle: { fontSize: 10, color: C.mutedForeground, fontFamily: "Inter_400Regular", marginTop: 2, textAlign: "right" },
