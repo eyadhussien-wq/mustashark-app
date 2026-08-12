@@ -35,3 +35,13 @@ jobs:
 
       - name: Typecheck workspace
         run: pnpm run typecheck
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Build admin dashboard
+        run: pnpm --filter @workspace/admin-dashboard build
+
+      - name: Verify Expo dependency alignment
+        working-directory: artifacts/mustasharek
+        run: pnpm exec expo install --check
