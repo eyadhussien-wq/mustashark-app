@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookingTimeBlocksTable, bookingsTable, usersTable, lawyerAvailabilityTable } from "@workspace/db/schema";
+import { bookingsTable, usersTable } from "@workspace/db/schema";
+import { lawyerAvailabilityTable } from "@workspace/db/schema/lawyerAvailability";
+import { bookingTimeBlocksTable } from "@workspace/db/schema/bookingTimeBlocks";
 import crypto from "crypto";
 import { z } from "zod";
 
@@ -75,7 +77,6 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
       .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyerId), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)))
       .orderBy(asc(lawyerAvailabilityTable.startTime));
 
-    // Keep existing demo accounts usable until the lawyer saves a custom calendar.
     if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
       availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
     }
