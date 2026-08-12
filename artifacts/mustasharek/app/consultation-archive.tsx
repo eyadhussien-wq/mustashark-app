@@ -1,20 +1,19 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 
 const C = colors.light;
-const TERMINAL = new Set(["completed", "rejected", "cancelled_by_lawyer", "cancelled_by_client", "no_show_lawyer", "no_show_client", "refunded_absent"]);
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
 type ArchiveItem = { id: string; serialNumber: string; subject: string; scheduledDate: string; scheduledTime: string; status: string };
 
 export default function ConsultationArchive() {
   const router = useRouter();
   const { getAuthToken } = useAuth();
-  const { consultations, refreshData } = useData();
+  const { refreshData } = useData();
   const [serverArchive, setServerArchive] = useState<ArchiveItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,15 +22,17 @@ export default function ConsultationArchive() {
     setLoading(true);
     try {
       const token = await getAuthToken();
-      if (API_BASE && token) {
-        const response = await fetch(`${API_BASE}/consultations/archive`, { headers: { Authorization: `Bearer ${token}` } });
-        if (response.ok) {
-          const data = await response.json() as { ok: boolean; archive?: ArchiveItem[] };
-          setServerArchive(data.archive ?? []);
-          return;
-        }
+      if (!API_BASE || !token) {
+        setServerArchive([]);
+        return;
       }
-      setServerArchive([]);
+      const response = await fetch(`${API_BASE}/consultations/archive`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        setServerArchive([]);
+        return;
+      }
+      const data = await response.json() as { ok: boolean; archive?: ArchiveItem[] };
+      setServerArchive(data.ok ? (data.archive ?? []) : []);
     } catch {
       setServerArchive([]);
     } finally {
@@ -40,9 +41,6 @@ export default function ConsultationArchive() {
   }, [getAuthToken]);
 
   useEffect(() => { void loadArchive(); }, [loadArchive]);
-
-  const fallback = useMemo<ArchiveItem[]>(() => consultations.filter((c) => TERMINAL.has(c.status)).map((c) => ({ id: c.id, serialNumber: c.serialNumber, subject: c.subject, scheduledDate: c.date, scheduledTime: c.time, status: c.status })), [consultations]);
-  const items: ArchiveItem[] = serverArchive.length > 0 ? serverArchive : fallback;
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -54,12 +52,12 @@ export default function ConsultationArchive() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.back}><Feather name="arrow-right" size={20} color="#fff" /></TouchableOpacity>
-        <View style={styles.headerCopy}><Text style={styles.eyebrow}>التوثيق والسجل</Text><Text style={styles.title}>أرشيف الاستشارات</Text><Text style={styles.subtitle}>السجلات المنتهية محفوظة للرجوع والطباعة وفق صلاحيات الحساب.</Text></View>
+        <View style={styles.headerCopy}><Text style={styles.eyebrow}>التوثيق والسجل</Text><Text style={styles.title}>أرشيف الاستشارات</Text><Text style={styles.subtitle}>السجلات المؤرشفة محفوظة للرجوع والطباعة وفق صلاحيات الحساب.</Text></View>
         <View style={styles.icon}><Feather name="archive" size={21} color={C.gold} /></View>
       </View>
-      {loading ? <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} /> : items.length === 0 ? (
-        <View style={styles.empty}><Feather name="archive" size={42} color={C.border} /><Text style={styles.emptyTitle}>لا توجد استشارات مؤرشفة</Text><Text style={styles.emptyText}>ستظهر هنا الاستشارات المنتهية بعد أرشفتها.</Text></View>
-      ) : items.map((item) => (
+      {loading ? <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} /> : serverArchive.length === 0 ? (
+        <View style={styles.empty}><Feather name="archive" size={42} color={C.border} /><Text style={styles.emptyTitle}>لا توجد استشارات مؤرشفة</Text><Text style={styles.emptyText}>ستظهر هنا الاستشارات بعد أن يؤكد الخادم أرشفتها.</Text></View>
+      ) : serverArchive.map((item) => (
         <TouchableOpacity key={item.id} style={styles.card} onPress={() => router.push(`/consultation/${item.id}`)} activeOpacity={0.85}>
           <View style={styles.cardTop}><View style={styles.badge}><Text style={styles.badgeText}>{item.serialNumber}</Text></View><View style={styles.cardIcon}><Feather name="file-text" size={17} color={C.primary} /></View></View>
           <Text style={styles.subject}>{item.subject}</Text><Text style={styles.meta}>{item.scheduledDate} • {item.scheduledTime}</Text>
