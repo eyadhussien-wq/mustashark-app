@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -15,9 +15,7 @@ const terminalStatuses = [
   "refunded_absent",
 ] as const;
 
-const archiveSchema = z.object({
-  reason: z.string().trim().max(500).optional(),
-});
+const archiveSchema = z.object({ reason: z.string().trim().max(500).optional() });
 
 function canAccessBooking(req: Request, booking: { clientId: string | null; lawyerId: string | null }) {
   const user = req.authUser!;
@@ -48,13 +46,13 @@ export async function listConsultationArchive(req: Request, res: Response) {
     .from(bookingsTable)
     .where(
       and(
-        eq(bookingsTable.archivedAt, bookingsTable.archivedAt),
+        isNotNull(bookingsTable.archivedAt),
+        inArray(bookingsTable.status, [...terminalStatuses]),
         user.role === "admin"
-          ? inArray(bookingsTable.status, [...terminalStatuses])
-          : and(
-              inArray(bookingsTable.status, [...terminalStatuses]),
-              user.role === "lawyer" ? eq(bookingsTable.lawyerId, user.id) : eq(bookingsTable.clientId, user.id),
-            ),
+          ? undefined
+          : user.role === "lawyer"
+            ? eq(bookingsTable.lawyerId, user.id)
+            : eq(bookingsTable.clientId, user.id),
       ),
     )
     .orderBy(asc(bookingsTable.scheduledDate), asc(bookingsTable.scheduledTime));
@@ -82,6 +80,14 @@ export async function archiveConsultation(req: Request, res: Response) {
       .where(eq(bookingsTable.id, bookingId))
       .returning();
 
+    await tx.insert(consultationEventsTable).values({
+      id: randomUUID(),
+      bookingId,
+      eventType: "consultation.archived",
+      actorId: req.authUser!.id,
+      metadata: { reason: parsed.data.reason ?? null },
+    });
+
     if (req.authUser!.role === "admin") {
       await tx.insert(adminAuditLogsTable).values({
         id: randomUUID(),
@@ -108,10 +114,7 @@ export async function archiveConsultation(req: Request, res: Response) {
 export async function getConsultationPrintData(req: Request, res: Response) {
   const bookingId = String(req.params.id ?? "");
   const [row] = await db
-    .select({
-      booking: bookingsTable,
-      client: usersTable,
-    })
+    .select({ booking: bookingsTable, client: usersTable })
     .from(bookingsTable)
     .leftJoin(usersTable, eq(bookingsTable.clientId, usersTable.id))
     .where(eq(bookingsTable.id, bookingId))
@@ -134,6 +137,18 @@ export async function getConsultationPrintData(req: Request, res: Response) {
   const safeClient = row.client
     ? { id: row.client.id, name: row.client.name, email: row.client.email, phone: row.client.phone }
     : null;
+  const safeAttachments = (row.booking.attachments ?? []).map((attachment) => ({
+    name: String(attachment.name).slice(0, 200),
+    uri: String(attachment.uri).slice(0, 2000),
+  }));
+
+  await db.insert(consultationEventsTable).values({
+    id: randomUUID(),
+    bookingId,
+    eventType: "document.printed",
+    actorId: req.authUser!.id,
+    metadata: { format: "pdf", purpose: "consultation_documentation" },
+  });
 
   return res.json({
     ok: true,
@@ -150,7 +165,7 @@ export async function getConsultationPrintData(req: Request, res: Response) {
         price: row.booking.price,
         paymentStatus: row.booking.paymentStatus,
         escrowStatus: row.booking.escrowStatus,
-        attachments: row.booking.attachments ?? [],
+        attachments: safeAttachments,
         archivedAt: row.booking.archivedAt,
       },
       client: safeClient,
