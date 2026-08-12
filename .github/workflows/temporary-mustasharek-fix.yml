@@ -20,6 +20,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          corepack enable
+          corepack pnpm install --frozen-lockfile
           python3 - <<'PY'
           from pathlib import Path
 
@@ -75,8 +77,8 @@ jobs:
           s = s.replace(old, new, 1)
           p.write_text(s)
           PY
-          pnpm --filter @workspace/mustasharek typecheck
-          pnpm --filter @workspace/api-server typecheck
+          corepack pnpm --filter @workspace/mustasharek typecheck
+          corepack pnpm --filter @workspace/api-server typecheck
           git diff --check
           git rm .github/workflows/temporary-mustasharek-fix.yml
           git config user.name "github-actions[bot]"
