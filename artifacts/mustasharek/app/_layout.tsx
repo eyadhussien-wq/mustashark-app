@@ -67,6 +67,11 @@ export default function RootLayout() {
       Tajawal_500Medium,
       Tajawal_700Bold,
       Tajawal_800ExtraBold,
+      // Compatibility aliases for existing Inter_* consumers during migration.
+      Inter_400Regular: Tajawal_400Regular,
+      Inter_500Medium: Tajawal_500Medium,
+      Inter_600SemiBold: Tajawal_700Bold,
+      Inter_700Bold: Tajawal_700Bold,
     })
       .catch(() => {
         // Font loading failed (e.g. timeout or offline) — continue with system fonts
