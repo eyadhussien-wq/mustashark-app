@@ -7,9 +7,10 @@ set -euo pipefail
 # prevents that setup from being redirected to a production-named database.
 scan_roots=(.github/workflows scripts artifacts lib)
 
-# This is intentionally a literal regex string; no shell interpolation is desired.
+# Keep this guard portable: the GitHub runner guarantees POSIX grep, while ripgrep
+# is not guaranteed to be installed. This pattern is intentionally literal.
 # shellcheck disable=SC2016
-mutation_pattern='(drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+[^;]+[[:space:]]+DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+)'
+mutation_pattern='drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+.*DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+'
 
 mutation_out=$(mktemp)
 mutation_err=$(mktemp)
@@ -18,13 +19,12 @@ url_err=$(mktemp)
 trap 'rm -f "$mutation_out" "$mutation_err" "$url_out" "$url_err"' EXIT
 
 set +e
-rg -n -i -U \
-  --hidden \
-  --glob '!node_modules/**' \
-  --glob '!dist/**' \
-  --glob '!.git/**' \
-  --glob '!scripts/security/forbid-production-db-mutations.sh' \
-  "$mutation_pattern" "${scan_roots[@]}" \
+grep -RniE \
+  --exclude-dir=node_modules \
+  --exclude-dir=dist \
+  --exclude-dir=.git \
+  --exclude='forbid-production-db-mutations.sh' \
+  -e "$mutation_pattern" "${scan_roots[@]}" \
   >"$mutation_out" 2>"$mutation_err"
 mutation_status=$?
 set -e
@@ -48,8 +48,6 @@ esac
 # Production DATABASE_URL must never be hard-coded or inherited through a
 # production-named secret/variable in CI/security scripts. Test database
 # mutation jobs must use an explicitly isolated test-only variable at the job boundary.
-# Keep these patterns deliberately simple: the shell script should parse them safely,
-# while grep handles the case-insensitive textual matching.
 production_url_names='PRODUCTION_DATABASE_URL|DATABASE_URL_PRODUCTION|DB_URL_PRODUCTION'
 production_url_assignment='(DATABASE_URL|DB_URL)[[:space:]]*[:=][[:space:]]*([^[:space:]]*[[:space:]]*)?(prod|production|heliumdb)'
 
