@@ -8,6 +8,7 @@ import profileRouter from "./profile";
 import reviewsRouter from "./reviews";
 import notificationsRouter from "./notifications";
 import documentHandoversRouter from "./documentHandovers";
+import paymentProofsRouter from "./paymentProofs";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(availabilityRouter);
 router.use(reviewsRouter);
 router.use(notificationsRouter);
 router.use(documentHandoversRouter);
+router.use(paymentProofsRouter);
 
 export default router;

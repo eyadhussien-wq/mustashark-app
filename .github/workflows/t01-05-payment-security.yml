@@ -1,0 +1,87 @@
+name: T01-05 Payment Security
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  payment-proof-contract:
+    name: Payment proof security contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run contract test
+        run: node scripts/payment-proof-contract-test.mjs
+
+  payment-proof-migration:
+    name: T01-05 migration rehearsal (isolated PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_payment_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_payment_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision isolated schema from main
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_payment_migration_test
+        run: |
+          git fetch origin main --depth=1
+          git checkout FETCH_HEAD
+          pnpm --filter @workspace/db push
+
+      - name: Restore branch checkout
+        run: git checkout --detach "$GITHUB_SHA"
+
+      - name: Apply T01-05 migration SQL
+        run: |
+          PGPASSWORD=postgres psql "postgresql://postgres:postgres@localhost:5432/mustashark_payment_migration_test" \
+            -v ON_ERROR_STOP=1 \
+            -f lib/db/migrations/0005_consultation_payment_proofs.sql
+
+      - name: Verify payment_proofs schema
+        run: |
+          PGPASSWORD=postgres psql "postgresql://postgres:postgres@localhost:5432/mustashark_payment_migration_test" \
+            -v ON_ERROR_STOP=1 \
+            -c "SELECT 1 FROM payment_proofs LIMIT 0;" \
+            -c "SELECT 1 FROM pg_type WHERE typname IN ('payment_proof_status','payment_proof_method','payment_proof_channel') ORDER BY typname;"
