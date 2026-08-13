@@ -1,9 +1,9 @@
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from "@expo-google-fonts/inter";
+  Tajawal_400Regular,
+  Tajawal_500Medium,
+  Tajawal_700Bold,
+  Tajawal_800ExtraBold,
+} from "@expo-google-fonts/tajawal";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Font from "expo-font";
 import { Stack } from "expo-router";
@@ -63,10 +63,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     Font.loadAsync({
-      Inter_400Regular,
-      Inter_500Medium,
-      Inter_600SemiBold,
-      Inter_700Bold,
+      Tajawal_400Regular,
+      Tajawal_500Medium,
+      Tajawal_700Bold,
+      Tajawal_800ExtraBold,
     })
       .catch(() => {
         // Font loading failed (e.g. timeout or offline) — continue with system fonts
