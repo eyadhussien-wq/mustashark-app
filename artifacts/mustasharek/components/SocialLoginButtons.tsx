@@ -68,8 +68,8 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
     setError(null);
     try {
       let profile;
-      if (p.id === "google") profile = await loginWithGoogle();
-      else profile = await loginWithFacebook();
+      if (p.id === "google") profile = await loginWithGoogle(role);
+      else profile = await loginWithFacebook(role);
       await loginWithSocial(profile, role);
       onSuccess?.();
     } catch (e: any) {
@@ -83,7 +83,7 @@ export function SocialLoginButtons({ role, onSuccess }: Props) {
   async function handleAppleNative() {
     setError(null);
     try {
-      const profile = await loginWithApple();
+      const profile = await loginWithApple(role);
       await loginWithSocial(profile, role);
       onSuccess?.();
     } catch (e: any) {
