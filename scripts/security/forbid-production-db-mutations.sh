@@ -46,7 +46,10 @@ esac
 # Production DATABASE_URL must never be hard-coded or inherited through a
 # production-named secret/variable in CI/security scripts. Test database
 # mutation jobs must use an explicitly isolated test-only variable at the job boundary.
-production_url_pattern='(PRODUCTION_DATABASE_URL|DATABASE_URL_PRODUCTION|DB_URL_PRODUCTION|(DATABASE_URL|DB_URL)[[:space:]]*[:=][[:space:]]*["'"']?[^[:space:]"'"']*(prod|production|heliumdb))'
+# Keep this pattern deliberately simple: the shell script should parse it safely,
+# while grep handles the case-insensitive textual matching.
+production_url_names='PRODUCTION_DATABASE_URL|DATABASE_URL_PRODUCTION|DB_URL_PRODUCTION'
+production_url_assignment='(DATABASE_URL|DB_URL)[[:space:]]*[:=][[:space:]]*([^[:space:]]*[[:space:]]*)?(prod|production|heliumdb)'
 
 set +e
 grep -RniE \
@@ -54,7 +57,9 @@ grep -RniE \
   --exclude-dir=dist \
   --exclude-dir=.git \
   --exclude='forbid-production-db-mutations.sh' \
-  "$production_url_pattern" .github/workflows scripts \
+  -e "$production_url_names" \
+  -e "$production_url_assignment" \
+  .github/workflows scripts \
   >"$url_out" 2>"$url_err"
 grep_status=$?
 set -e
