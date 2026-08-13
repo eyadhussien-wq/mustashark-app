@@ -159,3 +159,29 @@ Before Production migration:
 - review migration SQL manually;
 - verify retention/anonymization jobs and permitted reader roles;
 - only then prepare a separately reviewed Production migration.
+
+## Security addendum — normative implementation boundaries
+
+### Legacy remediation role and append-only exception
+
+The normal application audit writer and ordinary admin roles remain insert-only. A separately scoped `audit_legacy_remediation` maintenance role is the **only** role permitted to update an existing `admin_audit_logs` payload for an approved legacy-redaction case. It may update only the specific row identified by `admin_audit_logs.id`, only the approved `before_data`/`after_data` payload fields, and only within a rehearsed maintenance job. It may not delete rows, change row identity, alter unrelated fields, or perform general-purpose updates. Every remediation action must emit a protected operational event containing the original row ID, reason/ticket, actor/service identity, timestamp, redaction result, and resulting redaction marker. This is an explicit, narrowly scoped exception to append-only preservation and must be verified as a distinct database privilege in the isolated privilege test.
+
+### Lossless legacy identity mapping
+
+A future consolidation must add `legacy_source_store` and `legacy_source_id` to `security_audit_events` (or an equivalently constrained mapping table). For migrated `admin_audit_logs`, `legacy_source_store = 'admin_audit_logs'` and `legacy_source_id = admin_audit_logs.id`; the original source ID is never discarded. The UUID `security_audit_events.id` is a new event identity, not a replacement for the historical ID.
+
+Because current `users.id` and `admin_audit_logs.admin_id` are text values, `admin_id` may populate `actor_user_id` only when it is a valid, authoritative UUID that resolves to an existing user. Provider-prefixed, local, malformed, or otherwise unmapped IDs remain losslessly represented in `legacy_source_id`/metadata and produce a documented `unmapped_actor` migration status; they must never be coerced into a fabricated UUID. A valid UUID that does not resolve to a current user is preserved as the legacy actor value and leaves `actor_user_id` null. The consolidation report must include counts for mapped, unmapped, and invalid identities and require explicit review of the unmapped set before completion.
+
+### Canonical metadata allowlist and recursive validation
+
+`metadata` is an allowlist, not a denylist. The canonical top-level keys are: `request_id`, `source`, `entity_type`, `entity_id`, `description_code`, `ip_hash`, `operation_id`, `idempotency_key`, `booking_id`, `account_id`, `refund_id`, `existing_refund_id`, `original_operation_id`, `commission_id`, `amount`, `old_amount`, `new_amount`, and `currency`. Event-specific required keys listed above are permitted only for their corresponding event types. Unknown keys are rejected; case variants are rejected rather than normalized into an allowed key.
+
+Values must be scalar strings/numbers/booleans or explicitly defined bounded objects for event-specific structured data. Nested objects and arrays are recursively validated against the same allowlist; arbitrary `request`, `response`, `headers`, `cookies`, `authorization`, credentials, tokens, secrets, payment data, or free-form payload objects are rejected at any depth. `ip_address` and `user_agent` are never accepted in metadata under any spelling/case variant. `before_data` and `after_data` use an equally explicit allowlist and the same recursive validation/redaction rules. The implementation gate must include unknown-key, case-variant, and nested-secret rejection tests.
+
+### Financial uniqueness scope
+
+For retryable financial operations, the database uniqueness key is the tuple `(account_id, operation_type, target_resource_id, idempotency_key)`, where `target_resource_id` is the booking/refund/commission target when applicable and is nullable only for operation types that have no target resource. `operation_type` is a controlled value such as `refund.create` or `commission.change`. This scope prevents cross-account collisions while guaranteeing that concurrent retries for the same account, operation, target, and idempotency key resolve to one operation record. `financial.refund.duplicate_blocked` stores the resulting `operation_id` and original `refund_id` when available. The concurrency test must issue simultaneous retries and assert exactly one financial mutation and one linked audit operation.
+
+### Non-transactional durability and failure-injection test
+
+When a shared database transaction cannot cover the business mutation and audit store, the business service must first persist a durable outbox/operation record containing the operation identity, business mutation reference, audit event type, canonical metadata, and reconciliation status. A success response is forbidden until that durable obligation exists. Failure-injection testing must force the downstream audit write to fail after the business mutation request is accepted, assert that no success is returned without the durable obligation, then run reconciliation and verify that the recorded audit obligation is replayed exactly once. Reconciliation itself must be idempotent by `operation_id`.
