@@ -8,6 +8,7 @@ import OAUTH from "@/constants/oauth";
 WebBrowser.maybeCompleteAuthSession();
 
 export type SocialProvider = "google" | "facebook" | "apple";
+export type PortalRole = "client" | "lawyer";
 
 export interface SocialProfile {
   provider: SocialProvider;
@@ -61,7 +62,7 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
 async function callBackendAuth(
   provider: SocialProvider,
   token: string,
-  opts?: { role?: string; displayName?: string; storedEmail?: string },
+  opts?: { role?: PortalRole; displayName?: string; storedEmail?: string },
 ): Promise<{ jwt: string; user: Record<string, unknown> } | null> {
   if (!API_BASE) return null; // No server configured — demo/offline mode
 
@@ -112,7 +113,7 @@ export function useSocialAuth() {
   const [loading, setLoading] = useState<SocialProvider | null>(null);
 
   // ── Google ────────────────────────────────────────────────────────────────
-  const loginWithGoogle = useCallback(async (): Promise<SocialProfile> => {
+  const loginWithGoogle = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
     if (!OAUTH.google.clientId) {
       throw new Error(
         "لم يتم ضبط Google Client ID بعد.\nأضف EXPO_PUBLIC_GOOGLE_CLIENT_ID في متغيرات البيئة.",
@@ -148,8 +149,8 @@ export function useSocialAuth() {
         email: info.email ?? "",
       };
 
-      // Verify with backend → get JWT
-      const backend = await callBackendAuth("google", accessToken);
+      // Verify with backend → get JWT and enforce the selected portal role
+      const backend = await callBackendAuth("google", accessToken, { role });
       if (backend?.jwt) profile.jwt = backend.jwt;
 
       return profile;
@@ -159,7 +160,7 @@ export function useSocialAuth() {
   }, []);
 
   // ── Facebook ──────────────────────────────────────────────────────────────
-  const loginWithFacebook = useCallback(async (): Promise<SocialProfile> => {
+  const loginWithFacebook = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
     if (!OAUTH.facebook.appId) {
       throw new Error(
         "لم يتم ضبط Facebook App ID بعد.\nأضف EXPO_PUBLIC_FACEBOOK_APP_ID في متغيرات البيئة.",
@@ -195,8 +196,8 @@ export function useSocialAuth() {
         email: info.email ?? "",
       };
 
-      // Verify with backend → get JWT
-      const backend = await callBackendAuth("facebook", accessToken);
+      // Verify with backend → get JWT and enforce the selected portal role
+      const backend = await callBackendAuth("facebook", accessToken, { role });
       if (backend?.jwt) profile.jwt = backend.jwt;
 
       return profile;
@@ -206,7 +207,7 @@ export function useSocialAuth() {
   }, []);
 
   // ── Apple ─────────────────────────────────────────────────────────────────
-  const loginWithApple = useCallback(async (): Promise<SocialProfile> => {
+  const loginWithApple = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
     if (Platform.OS !== "ios") {
       throw new Error("تسجيل الدخول بـ Apple متاح على أجهزة iOS فقط");
     }
@@ -249,8 +250,9 @@ export function useSocialAuth() {
         email: resolvedEmail,
       };
 
-      // Verify identityToken with backend → get JWT
+      // Verify identityToken with backend → get JWT and enforce the selected portal role
       const backend = await callBackendAuth("apple", identityToken, {
+        role,
         displayName: profile.name,
         storedEmail: resolvedEmail,
       });
