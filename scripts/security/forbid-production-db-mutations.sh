@@ -7,8 +7,9 @@ set -euo pipefail
 # prevents that setup from being redirected to a production-named database.
 scan_roots=(.github/workflows scripts artifacts lib)
 
-# Keep this guard portable: the GitHub runner guarantees POSIX grep, while ripgrep
-# is not guaranteed to be installed. This pattern is intentionally literal.
+# Keep this guard portable: the GitHub runner guarantees POSIX grep. Match SQL
+# keywords case-sensitively so ordinary UI/code identifiers such as "truncate"
+# do not become destructive-operation findings.
 # shellcheck disable=SC2016
 mutation_pattern='drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+.*DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+'
 
@@ -19,7 +20,7 @@ url_err=$(mktemp)
 trap 'rm -f "$mutation_out" "$mutation_err" "$url_out" "$url_err"' EXIT
 
 set +e
-grep -RniE \
+grep -REn \
   --exclude-dir=node_modules \
   --exclude-dir=dist \
   --exclude-dir=.git \
