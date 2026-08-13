@@ -40,6 +40,21 @@ jobs:
         continue-on-error: true
         run: pnpm exec expo install --check
 
+  security-db-guard:
+    name: Production DB guard (bash + ShellCheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate Bash syntax
+        run: bash -n scripts/security/forbid-production-db-mutations.sh
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run ShellCheck
+        run: shellcheck scripts/security/forbid-production-db-mutations.sh
+      - name: Run production DB mutation guard
+        run: bash scripts/security/forbid-production-db-mutations.sh
+
   auth-smoke:
     name: Auth smoke tests (isolated PostgreSQL)
     runs-on: ubuntu-latest
