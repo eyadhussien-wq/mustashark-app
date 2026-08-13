@@ -158,14 +158,24 @@ export const rejectPaymentProof = async (req: Request, res: Response) => {
     if (!parsed.success) return res.status(400).json({ ok: false, error: "rejection_reason_required" });
     const bookingId = String(req.params.id ?? "");
     const proofId = String(req.params.proofId ?? "");
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
-    if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
-    if (authUser.role === "lawyer" && booking.lawyerId !== authUser.id) return res.status(403).json({ ok: false, error: "unauthorized_action" });
-    if (CLOSED_BOOKING_STATUSES.includes(booking.status as (typeof CLOSED_BOOKING_STATUSES)[number]) || booking.paymentStatus === "paid") return res.status(409).json({ ok: false, error: "consultation_closed" });
-    const [updatedProof] = await db.update(paymentProofsTable).set({ status: "rejected", rejectionReason: parsed.data.reason, reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "submitted"))).returning();
-    if (!updatedProof) return res.status(404).json({ ok: false, error: "payment_proof_not_found_or_already_reviewed" });
-    return res.json({ ok: true, proof: updatedProof, message: "تم رفض إثبات الدفع. يرجى مراجعة سبب الرفض مع العميل." });
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM bookings WHERE id = ${bookingId} FOR UPDATE`);
+      const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+      if (!booking) return { kind: "not_found" as const };
+      if (authUser.role === "lawyer" && booking.lawyerId !== authUser.id) return { kind: "forbidden" as const };
+      if (CLOSED_BOOKING_STATUSES.includes(booking.status as (typeof CLOSED_BOOKING_STATUSES)[number]) || booking.paymentStatus === "paid") return { kind: "closed" as const };
+      const [updatedProof] = await tx.update(paymentProofsTable).set({ status: "rejected", rejectionReason: parsed.data.reason, reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "submitted"))).returning();
+      if (!updatedProof) return { kind: "proof_not_found_or_already_reviewed" as const };
+      return { kind: "ok" as const, proof: updatedProof };
+    });
+
+    if (result.kind === "not_found") return res.status(404).json({ ok: false, error: "booking_not_found" });
+    if (result.kind === "forbidden") return res.status(403).json({ ok: false, error: "unauthorized_action" });
+    if (result.kind === "closed") return res.status(409).json({ ok: false, error: "consultation_closed" });
+    if (result.kind === "proof_not_found_or_already_reviewed") return res.status(404).json({ ok: false, error: "payment_proof_not_found_or_already_reviewed" });
+    return res.json({ ok: true, proof: result.proof, message: "تم رفض إثبات الدفع. يرجى مراجعة سبب الرفض مع العميل." });
   } catch (error) {
     console.error("Reject Payment Proof Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
