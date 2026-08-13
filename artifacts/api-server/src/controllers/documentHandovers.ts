@@ -1,11 +1,14 @@
 import { Request, Response } from "express";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { createHash, randomInt, randomUUID } from "node:crypto";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import {
+  caseMembershipsTable,
   documentHandoversTable,
   documentsTable,
   handoverTrackingEventsTable,
+  usersTable,
 } from "@workspace/db/schema";
 
 const HANDOVER_MODES = ["local", "office", "courier", "international"] as const;
@@ -28,6 +31,30 @@ const TRANSITIONS: Record<HandoverStatus, readonly HandoverStatus[]> = {
   cancelled: [],
 };
 
+const createHandoverSchema = z.object({
+  documentId: z.string().trim().min(1).max(128),
+  caseId: z.string().trim().min(1).max(128),
+  recipientId: z.string().trim().min(1).max(128),
+  mode: z.enum(HANDOVER_MODES),
+  originCountry: z.string().trim().max(100).optional(),
+  destinationCountry: z.string().trim().max(100).optional(),
+  originAddress: z.string().trim().max(1000).optional(),
+  destinationAddress: z.string().trim().max(1000).optional(),
+  carrier: z.string().trim().max(200).optional(),
+});
+
+const trackingEventSchema = z.object({
+  type: z.enum(["status_change", "location_update", "customs", "delivery_attempt", "note"]),
+  status: z.enum(HANDOVER_STATUSES).nullable().optional(),
+  location: z.string().trim().max(300).nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
+});
+
+const deliveryConfirmationSchema = z.object({
+  otp: z.string().regex(/^\d{6}$/),
+  recipientName: z.string().trim().min(1).max(200),
+});
+
 const isAdmin = (req: Request) => req.authUser?.role === "admin";
 
 async function canAccessHandover(userId: string, handoverId: string, admin: boolean) {
@@ -42,6 +69,46 @@ async function canAccessHandover(userId: string, handoverId: string, admin: bool
   if (admin) return row;
   if (row.documentOwnerId !== userId && row.handover.requestedBy !== userId && row.handover.recipientId !== userId) return null;
   return row;
+}
+
+async function hasActiveCaseMembership(
+  queryDb: typeof db,
+  caseId: string,
+  userId: string,
+) {
+  const [membership] = await queryDb
+    .select({ id: caseMembershipsTable.id })
+    .from(caseMembershipsTable)
+    .innerJoin(usersTable, eq(caseMembershipsTable.userId, usersTable.id))
+    .where(and(
+      eq(caseMembershipsTable.caseId, caseId),
+      eq(caseMembershipsTable.userId, userId),
+      eq(caseMembershipsTable.status, "active"),
+      eq(usersTable.accountStatus, "active"),
+      isNull(usersTable.deletedAt),
+    ))
+    .limit(1);
+  return Boolean(membership);
+}
+
+async function hasActiveCaseMembershipInTransaction(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  caseId: string,
+  userId: string,
+) {
+  const [membership] = await tx
+    .select({ id: caseMembershipsTable.id })
+    .from(caseMembershipsTable)
+    .innerJoin(usersTable, eq(caseMembershipsTable.userId, usersTable.id))
+    .where(and(
+      eq(caseMembershipsTable.caseId, caseId),
+      eq(caseMembershipsTable.userId, userId),
+      eq(caseMembershipsTable.status, "active"),
+      eq(usersTable.accountStatus, "active"),
+      isNull(usersTable.deletedAt),
+    ))
+    .limit(1);
+  return Boolean(membership);
 }
 
 async function appendTrackingEvent(
@@ -72,28 +139,35 @@ async function appendTrackingEvent(
 export async function createDocumentHandover(req: Request, res: Response) {
   try {
     const authUser = req.authUser!;
-    const { documentId, caseId, recipientId, mode, originCountry, destinationCountry, originAddress, destinationAddress, carrier } = req.body ?? {};
-    if (!documentId || !caseId || !HANDOVER_MODES.includes(mode)) {
-      return res.status(400).json({ ok: false, error: "invalid_handover_request" });
-    }
-    const [document] = await db.select().from(documentsTable).where(eq(documentsTable.id, String(documentId))).limit(1);
+    const parsed = createHandoverSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_handover_request" });
+    const data = parsed.data;
+
+    const [document] = await db.select().from(documentsTable).where(eq(documentsTable.id, data.documentId)).limit(1);
     if (!document) return res.status(404).json({ ok: false, error: "document_not_found" });
     if (!isAdmin(req) && document.ownerId !== authUser.id) return res.status(403).json({ ok: false, error: "forbidden" });
-    if (document.caseId !== String(caseId)) return res.status(409).json({ ok: false, error: "document_case_mismatch" });
+    if (document.caseId !== data.caseId) return res.status(409).json({ ok: false, error: "document_case_mismatch" });
+
+    if (!isAdmin(req) && !(await hasActiveCaseMembership(db, data.caseId, data.recipientId))) {
+      return res.status(403).json({ ok: false, error: "recipient_not_case_member" });
+    }
 
     const otp = String(randomInt(100000, 1000000));
     const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const handoverId = randomUUID();
     const handover = await db.transaction(async (tx) => {
+      if (!isAdmin(req) && !(await hasActiveCaseMembershipInTransaction(tx, data.caseId, data.recipientId))) {
+        return { kind: "recipient_not_case_member" as const };
+      }
       const [created] = await tx.insert(documentHandoversTable).values({
-        id: handoverId, caseId: String(caseId), documentId: document.id, requestedBy: authUser.id,
-        recipientId: recipientId ? String(recipientId) : null, mode,
-        originCountry: originCountry ? String(originCountry) : null,
-        destinationCountry: destinationCountry ? String(destinationCountry) : null,
-        originAddress: originAddress ? String(originAddress) : null,
-        destinationAddress: destinationAddress ? String(destinationAddress) : null,
-        carrier: carrier ? String(carrier) : null,
-        trackingNumber: mode === "office" ? null : `MSH-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`,
+        id: handoverId, caseId: data.caseId, documentId: document.id, requestedBy: authUser.id,
+        recipientId: data.recipientId, mode: data.mode,
+        originCountry: data.originCountry || null,
+        destinationCountry: data.destinationCountry || null,
+        originAddress: data.originAddress || null,
+        destinationAddress: data.destinationAddress || null,
+        carrier: data.carrier || null,
+        trackingNumber: data.mode === "office" ? null : `MSH-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`,
         deliveryOtpHash: createHash("sha256").update(otp).digest("hex"),
         deliveryOtpExpiresAt: otpExpiresAt,
         deliveryOtpAttempts: 0,
@@ -101,11 +175,13 @@ export async function createDocumentHandover(req: Request, res: Response) {
       await appendTrackingEvent(tx, handoverId, {
         type: "status_change", status: "requested", note: "Handover requested", createdBy: authUser.id,
       });
-      return created;
+      return { kind: "ok" as const, handover: created };
     });
 
-    // The raw OTP is never persisted or returned after this response. It must be delivered through a dedicated notification channel.
-    return res.status(201).json({ ok: true, handover, deliveryOtpIssued: Boolean(otp) });
+    if (handover.kind === "recipient_not_case_member") {
+      return res.status(403).json({ ok: false, error: "recipient_not_case_member" });
+    }
+    return res.status(201).json({ ok: true, handover: handover.handover, deliveryOtpIssued: true });
   } catch (error) {
     console.error("Create Document Handover Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
@@ -134,7 +210,9 @@ export async function updateDocumentHandoverStatus(req: Request, res: Response) 
     if (!isAdmin(req)) return res.status(403).json({ ok: false, error: "handover_operator_required" });
     const id = String(req.params.id ?? "");
     const nextStatus = String(req.body?.status ?? "") as HandoverStatus;
-    if (!HANDOVER_STATUSES.includes(nextStatus)) return res.status(400).json({ ok: false, error: "invalid_status" });
+    if (!HANDOVER_STATUSES.includes(nextStatus) || nextStatus === "delivered") {
+      return res.status(400).json({ ok: false, error: "invalid_status" });
+    }
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${id}))`);
@@ -150,9 +228,6 @@ export async function updateDocumentHandoverStatus(req: Request, res: Response) 
       await appendTrackingEvent(tx, id, {
         type: "status_change", status: nextStatus, note: `Status changed from ${current} to ${nextStatus}`, createdBy: authUser.id,
       });
-      if (nextStatus === "delivered") {
-        await tx.update(documentsTable).set({ status: "handed_over", updatedAt: new Date() }).where(eq(documentsTable.id, currentRow.documentId));
-      }
       return { kind: "ok" as const, handover: updated };
     });
 
@@ -173,14 +248,12 @@ export async function addDocumentHandoverTrackingEvent(req: Request, res: Respon
     const id = String(req.params.id ?? "");
     const row = await canAccessHandover(authUser.id, id, true);
     if (!row) return res.status(404).json({ ok: false, error: "handover_not_found" });
-    const type = req.body?.type;
-    if (!["status_change", "location_update", "customs", "delivery_attempt", "note"].includes(type)) {
-      return res.status(400).json({ ok: false, error: "invalid_tracking_event" });
-    }
+    const parsed = trackingEventSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_tracking_event" });
+    const data = parsed.data;
     const event = await db.transaction((tx) => appendTrackingEvent(tx, id, {
-      type, status: req.body?.status ?? null,
-      location: req.body?.location ? String(req.body.location) : null,
-      note: req.body?.note ? String(req.body.note) : null,
+      type: data.type, status: data.status ?? null,
+      location: data.location || null, note: data.note || null,
       createdBy: authUser.id,
     }));
     return res.status(201).json({ ok: true, event });
@@ -194,9 +267,9 @@ export async function confirmDocumentHandoverDelivery(req: Request, res: Respons
   try {
     const authUser = req.authUser!;
     const id = String(req.params.id ?? "");
-    const otp = String(req.body?.otp ?? "");
-    const recipientName = String(req.body?.recipientName ?? "").trim();
-    if (!/^\d{6}$/.test(otp) || !recipientName) return res.status(400).json({ ok: false, error: "invalid_delivery_confirmation" });
+    const parsed = deliveryConfirmationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_delivery_confirmation" });
+    const { otp, recipientName } = parsed.data;
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${id}))`);
@@ -205,7 +278,10 @@ export async function confirmDocumentHandoverDelivery(req: Request, res: Respons
         .innerJoin(documentsTable, eq(documentHandoversTable.documentId, documentsTable.id))
         .where(eq(documentHandoversTable.id, id)).limit(1);
       if (!row) return { kind: "not_found" as const };
-      if (!isAdmin(req) && row.handover.recipientId && row.handover.recipientId !== authUser.id) return { kind: "forbidden" as const };
+      if (row.handover.recipientId !== authUser.id && !isAdmin(req)) return { kind: "forbidden" as const };
+      if (!isAdmin(req) && !(await hasActiveCaseMembershipInTransaction(tx, row.handover.caseId, authUser.id))) {
+        return { kind: "forbidden" as const };
+      }
       if (!["ready_for_delivery", "dispatched", "in_transit"].includes(row.handover.status)) return { kind: "not_ready" as const };
       if (row.handover.deliveryOtpConsumedAt) return { kind: "otp_used" as const };
       if (!row.handover.deliveryOtpExpiresAt || row.handover.deliveryOtpExpiresAt.getTime() <= Date.now()) return { kind: "otp_expired" as const };
