@@ -9,6 +9,7 @@ import reviewsRouter from "./reviews";
 import notificationsRouter from "./notifications";
 import documentHandoversRouter from "./documentHandovers";
 import paymentProofsRouter from "./paymentProofs";
+import consultationDocumentationRouter from "./consultationDocumentation";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(reviewsRouter);
 router.use(notificationsRouter);
 router.use(documentHandoversRouter);
 router.use(paymentProofsRouter);
+router.use(consultationDocumentationRouter);
 
 export default router;
