@@ -7,6 +7,8 @@ set -euo pipefail
 # prevents that setup from being redirected to a production-named database.
 scan_roots=(.github/workflows scripts artifacts lib)
 
+# This is intentionally a literal regex string; no shell interpolation is desired.
+# shellcheck disable=SC2016
 mutation_pattern='(drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+[^;]+[[:space:]]+DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+)'
 
 mutation_out=$(mktemp)
@@ -46,7 +48,7 @@ esac
 # Production DATABASE_URL must never be hard-coded or inherited through a
 # production-named secret/variable in CI/security scripts. Test database
 # mutation jobs must use an explicitly isolated test-only variable at the job boundary.
-# Keep this pattern deliberately simple: the shell script should parse it safely,
+# Keep these patterns deliberately simple: the shell script should parse them safely,
 # while grep handles the case-insensitive textual matching.
 production_url_names='PRODUCTION_DATABASE_URL|DATABASE_URL_PRODUCTION|DB_URL_PRODUCTION'
 production_url_assignment='(DATABASE_URL|DB_URL)[[:space:]]*[:=][[:space:]]*([^[:space:]]*[[:space:]]*)?(prod|production|heliumdb)'
