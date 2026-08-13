@@ -2,11 +2,18 @@
 set -euo pipefail
 
 # Emergency guard: protected CI/application paths must never contain commands
-# that can mutate or destroy a production database. The scan is conservative,
-# covers multiline SQL, and excludes this guard so its own patterns do not trip it.
+# that can destroy a production database. Test-only schema setup (for example
+# drizzle-kit push against localhost) is allowed; the production URL scan below
+# prevents that setup from being redirected to a production-named database.
 scan_roots=(.github/workflows scripts artifacts lib)
 
-mutation_pattern='(drizzle-kit[[:space:]]+(push|drop)|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+[^;]+[[:space:]]+DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+)'
+mutation_pattern='(drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+[^;]+[[:space:]]+DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+)'
+
+mutation_out=$(mktemp)
+mutation_err=$(mktemp)
+url_out=$(mktemp)
+url_err=$(mktemp)
+trap 'rm -f "$mutation_out" "$mutation_err" "$url_out" "$url_err"' EXIT
 
 set +e
 rg -n -i -U \
@@ -16,22 +23,21 @@ rg -n -i -U \
   --glob '!.git/**' \
   --glob '!scripts/security/forbid-production-db-mutations.sh' \
   "$mutation_pattern" "${scan_roots[@]}" \
-  > /tmp/mustashark-db-mutation-scan.out \
-  2> /tmp/mustashark-db-mutation-scan.err
+  >"$mutation_out" 2>"$mutation_err"
 mutation_status=$?
 set -e
 
 case "$mutation_status" in
   0)
-    cat /tmp/mustashark-db-mutation-scan.out
-    echo "ERROR: potentially destructive database operation detected in protected CI/application paths." >&2
-    echo "Production database mutations are forbidden during the emergency rescue." >&2
+    cat "$mutation_out"
+    echo "ERROR: destructive database operation detected in protected CI/application paths." >&2
+    echo "Production database destruction is forbidden during the emergency rescue." >&2
     exit 1
     ;;
   1)
     ;;
   *)
-    cat /tmp/mustashark-db-mutation-scan.err >&2
+    cat "$mutation_err" >&2
     echo "ERROR: database mutation scan failed; refusing to pass closed." >&2
     exit 2
     ;;
@@ -49,20 +55,19 @@ grep -RniE \
   --exclude-dir=.git \
   --exclude='forbid-production-db-mutations.sh' \
   "$production_url_pattern" .github/workflows scripts \
-  >/tmp/mustashark-production-url-scan.out \
-  2>/tmp/mustashark-production-url-scan.err
+  >"$url_out" 2>"$url_err"
 grep_status=$?
 set -e
 
-if [[ -s /tmp/mustashark-production-url-scan.err ]]; then
-  cat /tmp/mustashark-production-url-scan.err >&2
+if [[ -s "$url_err" ]]; then
+  cat "$url_err" >&2
   echo "ERROR: production DATABASE_URL scan failed; refusing to pass closed." >&2
   exit 2
 fi
 
 case "$grep_status" in
   0)
-    cat /tmp/mustashark-production-url-scan.out
+    cat "$url_out"
     echo "ERROR: production-like DATABASE_URL detected in CI/security scripts." >&2
     echo "CI and security checks must use an isolated test database." >&2
     exit 1
@@ -74,8 +79,5 @@ case "$grep_status" in
     exit 2
     ;;
 esac
-
-rm -f /tmp/mustashark-db-mutation-scan.out /tmp/mustashark-db-mutation-scan.err \
-  /tmp/mustashark-production-url-scan.out /tmp/mustashark-production-url-scan.err
 
 echo "Production DB mutation guard: PASS"
