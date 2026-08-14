@@ -47,9 +47,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#B42318",
+    backgroundColor: C.destructive,
     borderWidth: 2,
     borderColor: C.navy,
   },
-  badgeText: { color: "#fff", fontSize: 9, fontFamily: "Inter_700Bold" },
+  badgeText: { color: C.destructiveForeground, fontSize: 9, fontFamily: "Inter_700Bold" },
 });
