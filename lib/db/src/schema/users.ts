@@ -30,6 +30,9 @@ export const usersTable = pgTable("users", {
   deletedAt: timestamp("deleted_at"),
   deletionScheduledAt: timestamp("deletion_scheduled_at"),
   deletionRejectionNote: text("deletion_rejection_note"),
+  passwordResetCodeHash: text("password_reset_code_hash"),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at"),
+  passwordResetRequestedAt: timestamp("password_reset_requested_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
