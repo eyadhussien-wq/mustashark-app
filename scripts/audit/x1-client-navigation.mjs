@@ -4,20 +4,36 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const clientLayout = path.join(root, "artifacts/mustasharek/app/(client)/_layout.tsx");
-const dashboard = path.join(root, "artifacts/mustasharek/app/(client)/index.tsx");
+const clientApp = path.join(root, "artifacts/mustasharek/app/(client)");
+const clientLayout = path.join(clientApp, "_layout.tsx");
+const dashboard = path.join(clientApp, "index.tsx");
+const services = path.join(clientApp, "services.tsx");
+const consultations = path.join(clientApp, "consultations.tsx");
+const offers = path.join(clientApp, "offers.tsx");
+const offer = path.join(clientApp, "offer.tsx");
+const memo = path.join(clientApp, "memo.tsx");
+const activeCase = path.join(clientApp, "active-case.tsx");
+const documentCenter = path.join(clientApp, "document-center.tsx");
 const notificationBell = path.join(root, "artifacts/mustasharek/components/NotificationBell.tsx");
-const notificationsRoute = path.join(root, "artifacts/mustasharek/app/notifications.tsx");
+const notificationsRoute = path.join(clientApp, "notifications.tsx");
 const colors = path.join(root, "artifacts/mustasharek/constants/colors.ts");
 
-const [layout, home, bell, notifications, colorTokens] = await Promise.all([
+const files = await Promise.all([
   readFile(clientLayout, "utf8"),
   readFile(dashboard, "utf8"),
+  readFile(services, "utf8"),
+  readFile(consultations, "utf8"),
+  readFile(offers, "utf8"),
+  readFile(offer, "utf8"),
+  readFile(memo, "utf8"),
+  readFile(activeCase, "utf8"),
+  readFile(documentCenter, "utf8"),
   readFile(notificationBell, "utf8"),
   readFile(notificationsRoute, "utf8"),
   readFile(colors, "utf8"),
 ]);
 
+const [layout, home, servicesScreen, consultationsScreen, offersScreen, offerScreen, memoScreen, activeCaseScreen, documentCenterScreen, bell, notifications, colorTokens] = files;
 const failures = [];
 const check = (condition, message) => {
   if (!condition) failures.push(message);
@@ -50,7 +66,27 @@ check(bell.includes("C.gold"), "NotificationBell must use the D02 gold semantic 
 check(bell.includes("C.navy"), "NotificationBell must use the D02 navy semantic token.");
 check(bell.includes("C.destructive"), "NotificationBell badge must use the D02 destructive semantic token.");
 
-// X/1.4 + D02 — Navigation and visual semantics must stay coupled to the shared design tokens.
+// X/1.4 — Every client route must have an explicit navigation decision.
+// Known entry paths are asserted here so an accidental orphan route cannot silently survive.
+check(servicesScreen.includes('router.push("/(client)/offers")'), "Services must expose the client's offers destination.");
+check(servicesScreen.includes('router.push("/(client)/memo")'), "Services must expose the memo service destination.");
+check(consultationsScreen.length > 0, "Client consultations route must exist and be non-empty.");
+check(offersScreen.includes('router.push("/(client)/active-case")'), "Accepted representation offers must expose the active-case destination.");
+check(offersScreen.includes('pathname: "/(client)/offer"'), "Offers must expose the offer-detail destination.");
+check(offerScreen.includes("useLocalSearchParams"), "Offer detail must receive a route offer id.");
+check(memoScreen.includes("export default function ClientMemo"), "Memo route must have a concrete client service screen.");
+check(activeCaseScreen.includes('role="client"'), "Active Case route must render the client workspace role.");
+check(documentCenterScreen.includes('export { default } from "../document-center";'), "Client document-center route must resolve to the shared document center.");
+
+// X/1.4 decision gate: document-center currently has no verified client entry point in the audited navigation.
+// Per the Master Audit Map it must remain a Needs Decision item rather than being silently deleted or guessed into a tab.
+const unresolvedRoutes = ["/(client)/document-center"];
+for (const route of unresolvedRoutes) {
+  console.error(`X/1 NEEDS DECISION — unresolved client route: ${route}`);
+  failures.push(`Unresolved client route requires an explicit entry point/ownership decision before X/1 can close: ${route}`);
+}
+
+// D02 — Navigation and visual semantics must stay coupled to the shared design tokens.
 check(layout.includes('import { useColors } from "@/hooks/useColors";'),
   "Classic client navigation must consume the shared D02 color hook.");
 check(layout.includes("tabBarActiveTintColor: colors.primary"),
@@ -72,5 +108,6 @@ if (failures.length) {
   console.log("- X/1.1 dashboard entry/context: PASS");
   console.log("- X/1.2 primary bottom tabs: PASS");
   console.log("- X/1.3 notifications top-Bell path: PASS");
-  console.log("- X/1.4 navigation/D02 contract: PASS");
+  console.log("- X/1.4 route inventory/entry decisions: PASS");
+  console.log("- D02 navigation contract: PASS");
 }
