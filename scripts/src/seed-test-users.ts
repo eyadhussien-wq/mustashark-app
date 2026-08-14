@@ -1,16 +1,15 @@
-import { randomBytes, scryptSync } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { db, pool, usersTable } from "@workspace/db";
 
 /**
  * Seed deterministic development accounts for end-to-end lifecycle testing.
  * These accounts are intended for the isolated Codespaces database only.
+ *
+ * IMPORTANT: the API local-auth controller verifies passwords with bcryptjs,
+ * so test accounts must use the same password-hash format as real accounts.
  */
 
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${hash}`;
-}
+const TEST_PASSWORD = "test1234";
 
 const TEST_USERS = [
   {
@@ -35,10 +34,12 @@ const TEST_USERS = [
 ];
 
 async function main() {
+  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+
   for (const user of TEST_USERS) {
     const values = {
       ...user,
-      passwordHash: hashPassword("test1234"),
+      passwordHash,
       authProvider: "local" as const,
     };
 
