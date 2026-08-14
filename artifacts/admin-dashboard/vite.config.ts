@@ -51,6 +51,11 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     proxy: {
+      "/admin/api": {
+        target: "http://127.0.0.1:8081",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/admin/, ""),
+      },
       "/api": {
         target: "http://127.0.0.1:8081",
         changeOrigin: true,
@@ -65,6 +70,11 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     proxy: {
+      "/admin/api": {
+        target: "http://127.0.0.1:8081",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/admin/, ""),
+      },
       "/api": {
         target: "http://127.0.0.1:8081",
         changeOrigin: true,
