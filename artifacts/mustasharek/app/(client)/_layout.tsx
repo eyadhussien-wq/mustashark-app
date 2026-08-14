@@ -15,7 +15,6 @@ function NativeTabLayout() {
     <NativeTabs.Trigger name="index"><Icon sf={{ default: "house", selected: "house.fill" }} /><Label>الرئيسية</Label></NativeTabs.Trigger>
     <NativeTabs.Trigger name="services"><Icon sf={{ default: "briefcase", selected: "briefcase.fill" }} /><Label>الخدمات</Label></NativeTabs.Trigger>
     <NativeTabs.Trigger name="consultations"><Icon sf={{ default: "calendar", selected: "calendar.circle.fill" }} /><Label>استشاراتي</Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="notifications"><Icon sf={{ default: "bell", selected: "bell.fill" }} /><Label>التنبيهات</Label></NativeTabs.Trigger>
     <NativeTabs.Trigger name="profile"><Icon sf={{ default: "person", selected: "person.fill" }} /><Label>حسابي</Label></NativeTabs.Trigger>
   </NativeTabs>;
 }
@@ -25,7 +24,6 @@ function ClassicTabLayout() {
     <Tabs.Screen name="index" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} /> }} />
     <Tabs.Screen name="services" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="briefcase" tintColor={color} size={24} /> : <Feather name="briefcase" size={22} color={color} /> }} />
     <Tabs.Screen name="consultations" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="calendar" tintColor={color} size={24} /> : <Feather name="calendar" size={22} color={color} /> }} />
-    <Tabs.Screen name="notifications" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="bell" tintColor={color} size={24} /> : <Feather name="bell" size={22} color={color} /> }} />
     <Tabs.Screen name="profile" options={{ title: "", tabBarIcon: ({ color }) => isIOS ? <SymbolView name="person" tintColor={color} size={24} /> : <Feather name="user" size={22} color={color} /> }} />
   </Tabs>;
 }
