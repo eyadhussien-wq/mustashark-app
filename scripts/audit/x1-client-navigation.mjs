@@ -67,7 +67,6 @@ check(bell.includes("C.navy"), "NotificationBell must use the D02 navy semantic 
 check(bell.includes("C.destructive"), "NotificationBell badge must use the D02 destructive semantic token.");
 
 // X/1.4 — Every client route must have an explicit navigation decision.
-// Known entry paths are asserted here so an accidental orphan route cannot silently survive.
 check(servicesScreen.includes('router.push("/(client)/offers")'), "Services must expose the client's offers destination.");
 check(servicesScreen.includes('router.push("/(client)/memo")'), "Services must expose the memo service destination.");
 check(consultationsScreen.length > 0, "Client consultations route must exist and be non-empty.");
@@ -76,15 +75,14 @@ check(offersScreen.includes('pathname: "/(client)/offer"'), "Offers must expose 
 check(offerScreen.includes("useLocalSearchParams"), "Offer detail must receive a route offer id.");
 check(memoScreen.includes("export default function ClientMemo"), "Memo route must have a concrete client service screen.");
 check(activeCaseScreen.includes('role="client"'), "Active Case route must render the client workspace role.");
+check(activeCaseScreen.includes('router.push("/(client)/document-center")'),
+  "Active Case must expose the approved contextual entry to Client Document Center.");
+check(activeCaseScreen.includes('accessibilityLabel="مركز المستندات"'),
+  "Document Center entry must expose an accessible semantic label.");
 check(documentCenterScreen.includes('export { default } from "../document-center";'), "Client document-center route must resolve to the shared document center.");
 
-// X/1.4 decision gate: document-center currently has no verified client entry point in the audited navigation.
-// Per the Master Audit Map it must remain a Needs Decision item rather than being silently deleted or guessed into a tab.
-const unresolvedRoutes = ["/(client)/document-center"];
-for (const route of unresolvedRoutes) {
-  console.error(`X/1 NEEDS DECISION — unresolved client route: ${route}`);
-  failures.push(`Unresolved client route requires an explicit entry point/ownership decision before X/1 can close: ${route}`);
-}
+// Approved X/1.4 decision: Document Center is contextual/shared, not primary navigation.
+check(!bottomTabNames.includes("document-center"), "Document Center must not become a primary bottom tab.");
 
 // D02 — Navigation and visual semantics must stay coupled to the shared design tokens.
 check(layout.includes('import { useColors } from "@/hooks/useColors";'),
@@ -93,6 +91,7 @@ check(layout.includes("tabBarActiveTintColor: colors.primary"),
   "Classic client navigation must use the D02 primary semantic token.");
 check(layout.includes("tabBarInactiveTintColor: colors.mutedForeground"),
   "Classic client navigation must use the D02 mutedForeground semantic token.");
+check(activeCaseScreen.includes("C.gold"), "Contextual document action must use the D02 gold semantic token.");
 check(colorTokens.includes("primary:"), "D02 color contract must expose a primary token.");
 check(colorTokens.includes("mutedForeground:"), "D02 color contract must expose a mutedForeground token.");
 check(colorTokens.includes("gold:"), "D02 color contract must expose a gold token.");
