@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Lawyers from "./pages/lawyers";
@@ -17,6 +17,12 @@ import Reviews from "./pages/reviews";
 
 // Set token getter for API client
 setAuthTokenGetter(() => localStorage.getItem("admin_token"));
+
+// The dashboard is served under /admin/. Route API calls through that same
+// public base path so Vite's /admin/api proxy can forward them to the API server.
+// This keeps the generated API client paths (/api/...) unchanged and avoids
+// hard-coding a host/port in the browser.
+setBaseUrl(import.meta.env.BASE_URL.replace(/\/$/, ""));
 
 const queryClient = new QueryClient();
 
