@@ -1,0 +1,21 @@
+name: Audit X1 Client Navigation
+
+on:
+  push:
+    branches:
+      - codex/audit-x-1-client-navigation
+  pull_request:
+    branches:
+      - main
+      - codex/design-system-foundation-d02
+
+jobs:
+  x1-client-navigation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run X/1 client navigation audit
+        run: node scripts/audit/x1-client-navigation.mjs
