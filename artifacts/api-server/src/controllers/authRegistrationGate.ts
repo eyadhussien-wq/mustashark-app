@@ -23,7 +23,6 @@ async function runWithPendingLawyerGate(
   let statusCode = 200;
   let payload: any;
   const originalStatus = res.status.bind(res);
-  const originalJson = res.json.bind(res);
 
   const captureRes = Object.create(res) as Response;
   captureRes.status = ((code: number) => {
