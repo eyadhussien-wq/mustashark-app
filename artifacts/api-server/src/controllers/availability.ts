@@ -92,13 +92,9 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
     if (!lawyer || lawyer.role !== "lawyer" || lawyer.accountStatus !== "active") return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
 
     const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay();
-    let availability = await db.select().from(lawyerAvailabilityTable)
+    const availability = await db.select().from(lawyerAvailabilityTable)
       .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyerId), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)))
       .orderBy(asc(lawyerAvailabilityTable.startTime));
-
-    if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
-      availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
-    }
 
     const blocks = await db.select({ block: bookingTimeBlocksTable })
       .from(bookingTimeBlocksTable)
