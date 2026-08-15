@@ -75,7 +75,19 @@ try {
 
   const second = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
   assert(second.status === 200, `second idempotent request failed: ${JSON.stringify(second)}`);
-  assert(JSON.stringify(first.body) === JSON.stringify(second.body), "idempotent responses did not match");
+
+  const firstSerialized = JSON.stringify(first.body);
+  const secondSerialized = JSON.stringify(second.body);
+  if (firstSerialized !== secondSerialized) {
+    console.error("S01-03 IDEMPOTENCY RESPONSE DIFF");
+    console.error(`first.status=${first.status}`);
+    console.error(`second.status=${second.status}`);
+    console.error(`first.body=${firstSerialized}`);
+    console.error(`second.body=${secondSerialized}`);
+    console.error(`first.keys=${JSON.stringify(first.body && typeof first.body === "object" ? Object.keys(first.body as Record<string, unknown>) : [])}`);
+    console.error(`second.keys=${JSON.stringify(second.body && typeof second.body === "object" ? Object.keys(second.body as Record<string, unknown>) : [])}`);
+  }
+  assert(firstSerialized === secondSerialized, "idempotent responses did not match");
 
   const state = psql(`SELECT status || '|' || version FROM bookings WHERE id = ${sqlLiteral(bookingId)};`);
   assert(state === "cancelled_by_client|2", `unexpected final booking state/version: ${state}`);
