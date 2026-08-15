@@ -10,6 +10,7 @@
     "test-concurrency": "tsx ./src/test-concurrency.ts",
     "s01-02-availability-test": "tsx ./src/s01-02-availability-test.ts",
     "s01-03-idempotency-test": "tsx ./src/s01-03-idempotency-test.ts",
+    "s01-03-transition-concurrency-test": "tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
