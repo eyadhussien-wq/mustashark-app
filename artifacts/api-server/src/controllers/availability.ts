@@ -32,6 +32,33 @@ function formatTime(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
+function wallClockToUtc(date: string, time: string) {
+  const normalizedDate = normalizeDate(date);
+  if (!normalizedDate) return null;
+  const [year, month, day] = normalizedDate.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  const requested = Date.UTC(year, month - 1, day, hour, minute);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Qatar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(requested));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const zoneWallClock = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+  );
+  return new Date(requested - (zoneWallClock - requested)).toISOString();
+}
+
 export const getLawyerAvailability = async (req: Request, res: Response) => {
   try {
     const lawyerId = String(req.params.lawyerId ?? "");
@@ -111,7 +138,7 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
       .orderBy(asc(bookingTimeBlocksTable.startTime));
 
     const occupied = blocks.map(({ block }) => ({ start: minutes(block.startTime), end: minutes(block.endTime) }));
-    const slots: Array<{ startTime: string; endTime: string }> = [];
+    const slots: Array<{ startTime: string; endTime: string; startAtUtc: string; endAtUtc: string }> = [];
     for (const window of availability) {
       const start = minutes(window.startTime);
       const end = minutes(window.endTime);
@@ -120,10 +147,16 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
         const slotStart = cursor;
         const slotEnd = cursor + duration;
         const isBooked = occupied.some((block) => slotStart < block.end && slotEnd > block.start);
-        if (!isBooked) slots.push({ startTime: formatTime(slotStart), endTime: formatTime(slotEnd) });
+        if (!isBooked) {
+          const startTime = formatTime(slotStart);
+          const endTime = formatTime(slotEnd);
+          const startAtUtc = wallClockToUtc(date, startTime);
+          const endAtUtc = wallClockToUtc(date, endTime);
+          if (startAtUtc && endAtUtc) slots.push({ startTime, endTime, startAtUtc, endAtUtc });
+        }
       }
     }
-    return res.json({ ok: true, date, slots });
+    return res.json({ ok: true, date, timezone: "Asia/Qatar", slots });
   } catch (error) {
     console.error("Get Available Slots Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
