@@ -1,0 +1,1 @@
+S01-03 remains isolated. CI must pass Typecheck, idempotency smoke, migration rehearsal, and build before review and merge.
