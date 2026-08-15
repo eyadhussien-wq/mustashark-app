@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { bookingsTable } from "./bookings";
 
@@ -15,6 +15,17 @@ export const bookingTimeBlocksTable = pgTable(
   },
   (table) => ({
     bookingUnique: uniqueIndex("booking_time_blocks_booking_id_uq").on(table.bookingId),
+    exactSlotUnique: uniqueIndex("booking_time_blocks_exact_slot_uq").on(
+      table.lawyerId,
+      table.scheduledDate,
+      table.startTime,
+      table.endTime,
+    ),
+    lawyerDateStartIdx: index("booking_time_blocks_lawyer_date_idx").on(
+      table.lawyerId,
+      table.scheduledDate,
+      table.startTime,
+    ),
   }),
 );
 
