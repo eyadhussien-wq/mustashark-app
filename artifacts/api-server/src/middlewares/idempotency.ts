@@ -55,31 +55,35 @@ export async function requireIdempotencyKey(req: Request, res: Response, next: N
 
   const originalJson = res.json.bind(res);
   const originalSend = res.send.bind(res);
-  let captured: unknown = null;
+  let responsePersisted = false;
 
   const persist = async (status: number, body: unknown) => {
-    captured = body;
+    if (responsePersisted) return;
     try {
-      await db.update(idempotencyKeysTable).set({ responseStatus: status, responseBody: body as any, completedAt: new Date() }).where(and(
+      await db.update(idempotencyKeysTable).set({
+        responseStatus: status,
+        responseBody: body as any,
+        completedAt: new Date(),
+      }).where(and(
         eq(idempotencyKeysTable.userId, userId),
         eq(idempotencyKeysTable.key, key),
         eq(idempotencyKeysTable.route, route),
         eq(idempotencyKeysTable.method, method),
       ));
+      responsePersisted = true;
     } catch (error) {
       console.error("Idempotency response persistence failed:", error);
     }
   };
 
   res.json = ((body: unknown) => {
-    void persist(res.statusCode, body);
-    return originalJson(body);
+    void persist(res.statusCode, body).then(() => originalJson(body));
+    return res;
   }) as Response["json"];
   res.send = ((body?: any) => {
-    void persist(res.statusCode, body);
-    return originalSend(body);
+    void persist(res.statusCode, body).then(() => originalSend(body));
+    return res;
   }) as Response["send"];
 
-  void captured;
   return next();
 }
