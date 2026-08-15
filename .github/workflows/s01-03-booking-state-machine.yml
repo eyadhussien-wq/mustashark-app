@@ -1,0 +1,119 @@
+name: S01-03 Booking State Machine Gate
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm --filter @workspace/api-server build
+
+  idempotency-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s01_03_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_03_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Provision isolated schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
+        run: pnpm --filter @workspace/db push
+      - name: Build API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          PORT: "8081"
+          SESSION_SECRET: s01-03-idempotency-test-secret
+        run: pnpm --filter @workspace/api-server start >/tmp/s01-03-api.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/s01-03-api.log
+          exit 1
+      - name: Run idempotency smoke test
+        env:
+          S01_03_BASE_URL: http://127.0.0.1:8081
+        run: pnpm --filter @workspace/scripts s01-03-idempotency-test
+
+  migration-rehearsal:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s01_03_migration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_03_migration"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Provision baseline schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
+        run: pnpm --filter @workspace/db push
+      - name: Apply S01-03 migration explicitly
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0009_s01_03_idempotency_and_booking_version.sql
+      - name: Verify S01-03 schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
+        run: |
+          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='version';" | grep -qx '1'
+          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM information_schema.tables WHERE table_name='idempotency_keys';" | grep -qx '1'
