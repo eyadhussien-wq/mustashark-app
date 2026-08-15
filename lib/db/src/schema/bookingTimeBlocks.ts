@@ -1,4 +1,5 @@
-import { index, pgTable, sql, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { bookingsTable } from "./bookings";
 
