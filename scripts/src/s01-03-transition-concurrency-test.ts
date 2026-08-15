@@ -42,13 +42,28 @@ const clientToken = (clientLogin.body as { jwt?: string }).jwt;
 const clientId = (clientLogin.body as { user?: { id?: string } }).user?.id;
 assert(typeof clientToken === "string" && typeof clientId === "string", "client login did not return auth data");
 
-const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
-const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
-const lawyerId = existingLawyerId || psql(`
-  INSERT INTO users (email, password_hash, role, name)
-  VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
-  RETURNING id;
-`);
+// --- Safely find or create the test lawyer through psql ---
+let lawyerId: string | undefined;
+
+try {
+  const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
+  if (existingLawyerId) {
+    lawyerId = existingLawyerId.trim();
+  }
+} catch {
+  // If the lookup fails temporarily, fall through to the controlled creation path.
+}
+
+if (!lawyerId) {
+  const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
+  const insertResult = psql(`
+    INSERT INTO users (email, password_hash, role, name)
+    VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
+    RETURNING id;
+  `);
+  lawyerId = insertResult.trim();
+}
+
 assert(lawyerId, "test lawyer could not be created or found");
 
 const bookingId = crypto.randomUUID();
