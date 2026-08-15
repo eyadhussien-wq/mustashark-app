@@ -14,6 +14,8 @@ import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMac
 
 const createBookingSchema = z.object({ lawyerId: z.string().min(1), subject: z.string().min(1), description: z.string().optional(), scheduledDate: z.string().min(1), scheduledTime: z.string().min(1), type: z.enum(["video", "chat", "phone"]), officeId: z.string().optional() });
 const checkAbsenceSchema = z.object({ bookingId: z.string().min(1) });
+const cancellationSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(1000) });
+const disputeSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(2000) });
 const APPOINTMENT_EARLY_ACCESS_MS = 5 * 60 * 1000;
 const APPOINTMENT_DURATION_MS = 30 * 60 * 1000;
 const BOOKING_TIME_ZONE = "Asia/Qatar";
@@ -133,7 +135,7 @@ export const checkLawyerAbsence = async (req: Request, res: Response) => {
       const [updated] = await tx.update(bookingsTable).set({ status: "refunded_absent", paymentStatus: "refunded", escrowStatus: "refunded", updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "accepted"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held"), isNull(bookingsTable.lawyerJoinedAt))).returning();
       if (!updated) throw new Error("ALREADY_PROCESSED");
       await tx.update(platformDuesTable).set({ status: "waived", updatedAt: new Date() }).where(eq(platformDuesTable.bookingId, bookingId));
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_NO_SHOW_REFUND", actorId: authUser.id, metadata: { financialGate: true, refund: "full" } });
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_NO_SHOW_REFUND", actorId: authUser.id, metadata: { financialGate: true, refund: "full", reason: "Lawyer did not join within the permitted absence window." } });
       return updated;
     });
     return res.json({ ok: true, message: "lawyer_absent_refund_processed_successfully", booking: updatedBooking });
@@ -195,8 +197,9 @@ export const completeBooking = async (req: Request, res: Response) => {
 
 export const disputeBooking = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.body;
-    if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
+    const parsed = disputeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
+    const { bookingId, reason } = parsed.data;
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
@@ -206,7 +209,7 @@ export const disputeBooking = async (req: Request, res: Response) => {
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx.update(bookingsTable).set({ status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, booking.status))).returning();
       if (!row) throw new Error("ALREADY_PROCESSED");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", financialFreeze: booking.escrowStatus === "held" } });
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held" } });
       return row;
     });
     return res.json({ ok: true, booking: updated });
@@ -218,8 +221,9 @@ export const disputeBooking = async (req: Request, res: Response) => {
 
 export const cancelBooking = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.body;
-    if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
+    const parsed = cancellationSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
+    const { bookingId, reason } = parsed.data;
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
@@ -230,7 +234,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx.update(bookingsTable).set({ status: cancelStatus, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, booking.status))).returning();
       if (!row) throw new Error("ALREADY_PROCESSED");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CANCELLED", actorId: authUser.id, metadata: { fromState: state, toState: "CANCELLED", financialEffectPendingPolicy: booking.paymentStatus === "paid" } });
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CANCELLED", actorId: authUser.id, metadata: { fromState: state, toState: "CANCELLED", reason, financialEffectPendingPolicy: booking.paymentStatus === "paid" } });
       return row;
     });
     return res.json({ ok: true, booking: updated });
