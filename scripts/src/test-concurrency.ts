@@ -203,7 +203,7 @@ try {
   console.log(`- slot: ${scheduledDate} ${scheduledTime}-${scheduledEndTime} (${lawyerId})`);
 } finally {
   if (seededAvailability && lawyerId) {
-    psql(`DELETE FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND day_of_week = 1 AND start_time = '09:00' AND end_time = '17:00';`);
+    psql(`UPDATE lawyer_availability SET active = false WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND day_of_week = 1 AND start_time = '09:00' AND end_time = '17:00';`);
   }
   clearTimeout(globalTimer);
 }
