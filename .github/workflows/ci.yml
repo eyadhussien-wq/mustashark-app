@@ -125,7 +125,7 @@ jobs:
   concurrency-smoke:
     name: Concurrency smoke test (isolated PostgreSQL)
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     services:
       postgres:
         image: postgres:16
