@@ -42,23 +42,21 @@ const clientToken = (clientLogin.body as { jwt?: string }).jwt;
 const clientId = (clientLogin.body as { user?: { id?: string } }).user?.id;
 assert(typeof clientToken === "string" && typeof clientId === "string", "client login did not return auth data");
 
-// --- Safely find or create the test lawyer through psql ---
 let lawyerId: string | undefined;
 
 try {
   const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
-  if (existingLawyerId) {
-    lawyerId = existingLawyerId.trim();
-  }
+  if (existingLawyerId) lawyerId = existingLawyerId.trim();
 } catch {
-  // If the lookup fails temporarily, fall through to the controlled creation path.
+  // Fall through to controlled test-user creation.
 }
 
 if (!lawyerId) {
+  const lawyerIdValue = crypto.randomUUID();
   const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
   const insertResult = psql(`
-    INSERT INTO users (email, password_hash, role, name)
-    VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
+    INSERT INTO users (id, email, password_hash, role, name)
+    VALUES (${sqlLiteral(lawyerIdValue)}, ${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
     RETURNING id;
   `);
   lawyerId = insertResult.trim();
@@ -98,6 +96,5 @@ try {
   console.log("- final state/version: cancelled_by_client/2");
   console.log("- cancellation audit events: 1");
 } finally {
-  // This workflow uses a fresh ephemeral PostgreSQL database per run.
-  // Do not issue destructive DELETE statements here; the database is discarded by CI.
+  // Fresh ephemeral CI database; no destructive cleanup is required.
 }
