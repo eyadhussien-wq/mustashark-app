@@ -77,7 +77,6 @@ try {
   console.log("- final state/version: cancelled_by_client/2");
   console.log("- cancellation audit events: 1");
 } finally {
-  psql(`DELETE FROM consultation_events WHERE booking_id = ${sqlLiteral(bookingId)};`);
-  psql(`DELETE FROM idempotency_keys WHERE key IN (${sqlLiteral(keyA)}, ${sqlLiteral(keyB)});`);
-  psql(`DELETE FROM bookings WHERE id = ${sqlLiteral(bookingId)};`);
+  // This workflow uses a fresh ephemeral PostgreSQL database per run.
+  // Do not issue destructive DELETE statements here; the database is discarded by CI.
 }
