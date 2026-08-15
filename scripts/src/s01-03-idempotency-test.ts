@@ -34,17 +34,18 @@ const missing = await request("/api/bookings/cancel", {
 assert(missing.status === 400 && missing.body?.error === "idempotency_key_required", `missing key was not rejected: ${JSON.stringify(missing)}`);
 
 const key = `s01-03-${Date.now()}`;
+const requestBody = { bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 };
 const first = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
+  body: JSON.stringify(requestBody),
 });
 assert(first.status === 404 && first.body?.error === "booking_not_found", `first idempotent request failed: ${JSON.stringify(first)}`);
 
 const replay = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
+  body: JSON.stringify(requestBody),
 });
 assert(replay.status === first.status && JSON.stringify(replay.body) === JSON.stringify(first.body), `replay did not return cached response: first=${JSON.stringify(first)} replay=${JSON.stringify(replay)}`);
 
