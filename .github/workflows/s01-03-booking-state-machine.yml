@@ -76,7 +76,8 @@ jobs:
           exit 1
       - name: Run idempotency smoke test
         env:
-          S01_03_BASE_URL: http://127.0.0.1:8081
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
+          CONCURRENCY_BASE_URL: http://127.0.0.1:8081
         run: pnpm --filter @workspace/scripts s01-03-idempotency-test
 
   migration-rehearsal:
