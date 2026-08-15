@@ -1,0 +1,84 @@
+name: S01-03 transition concurrency
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  transition-concurrency:
+    name: S01-03 optimistic-lock transition clash
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+      - name: Build API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          PORT: "8081"
+          SESSION_SECRET: ci-s01-03-transition-secret
+        run: |
+          pnpm --filter @workspace/api-server start > /tmp/mustashark-s01-03.log 2>&1 &
+          echo $! > /tmp/mustashark-s01-03.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mustashark-s01-03.log
+          exit 1
+      - name: Run transition concurrency test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          CONCURRENCY_BASE_URL: http://127.0.0.1:8081
+          CONCURRENCY_CLIENT_EMAIL: client@mustashark.com
+          CONCURRENCY_CLIENT_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts s01-03-transition-concurrency-test
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/mustashark-s01-03.log
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/mustashark-s01-03.pid ]; then kill "$(cat /tmp/mustashark-s01-03.pid)" || true; fi
