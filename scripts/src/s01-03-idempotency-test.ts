@@ -1,3 +1,5 @@
+export {};
+
 const baseUrl = process.env.S01_03_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.S01_03_CLIENT_EMAIL ?? "client@mustashark.com";
 const clientPassword = process.env.S01_03_CLIENT_PASSWORD ?? "test1234";
