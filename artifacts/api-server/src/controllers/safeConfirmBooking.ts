@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import { bookingsTable, consultationEventsTable, notificationsTable, platformDuesTable, PLATFORM_COMMISSION_RATE } from "@workspace/db/schema";
@@ -9,7 +9,6 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
   try {
     const bookingId = typeof req.body?.bookingId === "string" ? req.body.bookingId : "";
     if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
-
     const authUser = req.authUser!;
     const updatedBooking = await db.transaction(async (tx) => {
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
@@ -17,36 +16,20 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
       if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
       if (booking.status !== "pending" || booking.paymentStatus !== "paid" || booking.escrowStatus !== "held") throw new Error("INVALID_FINANCIAL_STATE");
       assertT01Transition(getT01State(booking), "SCHEDULED");
-
       const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
       const [updated] = await tx.update(bookingsTable)
         .set({ status: "accepted", googleMeetLink, updatedAt: new Date() })
-        .where(eq(bookingsTable.id, bookingId))
+        .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "pending"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held")))
         .returning();
       if (!updated) throw new Error("ALREADY_PROCESSED");
-
       const grossAmount = booking.price;
       const commissionRate = PLATFORM_COMMISSION_RATE;
       const commissionAmount = String((Number(grossAmount) * Number(commissionRate)).toFixed(2));
-      await tx.insert(platformDuesTable).values({
-        id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId,
-        grossAmount, commissionRate, commissionAmount, status: "pending",
-      }).onConflictDoNothing();
-
-      await tx.insert(notificationsTable).values({
-        id: crypto.randomUUID(), userId: booking.clientId!, bookingId,
-        title: "تم تأكيد موعد الاستشارة",
-        body: `وافق المحامي على طلبك. الموعد المؤكد هو ${booking.scheduledDate} الساعة ${booking.scheduledTime}.`,
-        kind: "success", urgent: true,
-      });
-
-      await tx.insert(consultationEventsTable).values({
-        id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id,
-        metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true },
-      });
+      await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId, grossAmount, commissionRate, commissionAmount, status: "pending" }).onConflictDoNothing();
+      await tx.insert(notificationsTable).values({ id: crypto.randomUUID(), userId: booking.clientId!, bookingId, title: "تم تأكيد موعد الاستشارة", body: `وافق المحامي على طلبك. الموعد المؤكد هو ${booking.scheduledDate} الساعة ${booking.scheduledTime}.`, kind: "success", urgent: true });
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id, metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true } });
       return updated;
     });
-
     return res.json({ ok: true, booking: updatedBooking });
   } catch (error: any) {
     if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
