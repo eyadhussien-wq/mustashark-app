@@ -62,6 +62,14 @@ function wallClockToUtc(date: string, time: string) {
 export const getLawyerAvailability = async (req: Request, res: Response) => {
   try {
     const lawyerId = String(req.params.lawyerId ?? "");
+    const [lawyer] = await db.select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
+      .from(usersTable)
+      .where(eq(usersTable.id, lawyerId))
+      .limit(1);
+    if (!lawyer || lawyer.role !== "lawyer" || lawyer.accountStatus !== "active") {
+      return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
+    }
+
     const rows = await db.select().from(lawyerAvailabilityTable)
       .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyerId), eq(lawyerAvailabilityTable.active, true)))
       .orderBy(asc(lawyerAvailabilityTable.dayOfWeek), asc(lawyerAvailabilityTable.startTime));
@@ -78,11 +86,18 @@ export const updateMyAvailability = async (req: Request, res: Response) => {
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_availability", details: parsed.error.errors });
     const lawyerId = req.authUser!.id;
 
+    const seen = new Set<string>();
     const byDay = new Map<number, Array<{ start: number; end: number }>>();
     for (const slot of parsed.data.slots) {
       const start = minutes(slot.startTime);
       const end = minutes(slot.endTime);
       if (end <= start) return res.status(400).json({ ok: false, error: "availability_end_must_be_after_start" });
+      if (end - start < slot.slotDurationMinutes) {
+        return res.status(400).json({ ok: false, error: "availability_window_shorter_than_slot_duration" });
+      }
+      const key = `${slot.dayOfWeek}|${slot.startTime}|${slot.endTime}`;
+      if (seen.has(key)) return res.status(400).json({ ok: false, error: "availability_duplicate_window" });
+      seen.add(key);
       const day = byDay.get(slot.dayOfWeek) ?? [];
       day.push({ start, end });
       byDay.set(slot.dayOfWeek, day);
@@ -108,6 +123,17 @@ export const updateMyAvailability = async (req: Request, res: Response) => {
   }
 };
 
+export const deleteMyAvailability = async (req: Request, res: Response) => {
+  try {
+    const lawyerId = req.authUser!.id;
+    const result = await db.delete(lawyerAvailabilityTable).where(eq(lawyerAvailabilityTable.lawyerId, lawyerId));
+    return res.json({ ok: true, deleted: Number(result.rowCount ?? 0) });
+  } catch (error) {
+    console.error("Delete Lawyer Availability Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
+  }
+};
+
 export const getAvailableSlots = async (req: Request, res: Response) => {
   try {
     const lawyerId = String(req.params.lawyerId ?? "");
@@ -119,13 +145,9 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
     if (!lawyer || lawyer.role !== "lawyer" || lawyer.accountStatus !== "active") return res.status(404).json({ ok: false, error: "lawyer_not_found_or_inactive" });
 
     const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay();
-    let availability = await db.select().from(lawyerAvailabilityTable)
+    const availability = await db.select().from(lawyerAvailabilityTable)
       .where(and(eq(lawyerAvailabilityTable.lawyerId, lawyerId), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)))
       .orderBy(asc(lawyerAvailabilityTable.startTime));
-
-    if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
-      availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
-    }
 
     const blocks = await db.select({ block: bookingTimeBlocksTable })
       .from(bookingTimeBlocksTable)

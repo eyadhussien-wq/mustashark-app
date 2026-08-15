@@ -1,0 +1,97 @@
+name: S01-02 Availability Completion Gate
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: {version: 10.26.1, run_install: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+  runtime-rules:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: mustashark_s01_02_test}
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_02_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: {version: 10.26.1, run_install: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Provision database
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
+        run: pnpm --filter @workspace/db push
+      - name: Apply S01-02 migration
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
+      - name: Build API
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          PORT: "8081"
+          SESSION_SECRET: s01-02-ci-test-secret
+        run: pnpm --filter @workspace/api-server start >/tmp/s01-02-api.log 2>&1 &
+      - name: Wait for API
+        run: for i in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null && exit 0; sleep 1; done; cat /tmp/s01-02-api.log; exit 1
+      - name: Verify S01-02
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test
+          S01_02_BASE_URL: http://127.0.0.1:8081
+          S01_02_LAWYER_EMAIL: lawyer@mustashark.com
+          S01_02_LAWYER_PASSWORD: test1234
+          S01_02_CLIENT_EMAIL: client@mustashark.com
+          S01_02_CLIENT_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts s01-02-availability-test
+  migration-rehearsal:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: mustashark_s01_02_migration}
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_02_migration"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 57252484f834ce536644909d46a8c30480041f4a}
+      - uses: pnpm/action-setup@v4
+        with: {version: 10.26.1, run_install: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Provision baseline
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
+        run: pnpm --filter @workspace/db push
+      - uses: actions/checkout@v4
+        with: {ref: ${{ github.sha }}}
+      - name: Apply migration
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
+      - name: Verify migration
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='released_at';" | grep -qx '1'

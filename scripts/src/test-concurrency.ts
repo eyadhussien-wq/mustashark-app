@@ -72,6 +72,9 @@ const globalTimer = setTimeout(() => {
 
 globalTimer.unref();
 
+let seededAvailability = false;
+let lawyerId = "";
+
 try {
   const clientLogin = await post("/api/auth/local-auth", {
     email: CLIENT_EMAIL,
@@ -90,11 +93,21 @@ try {
   assert(lawyerLogin.status === 200, `lawyer login failed: ${lawyerLogin.status}`);
   const lawyerUser = (lawyerLogin.body as { user?: { id?: string } }).user;
   assert(typeof lawyerUser?.id === "string", "lawyer login did not return user id");
-  const lawyerId = lawyerUser.id;
+  lawyerId = lawyerUser.id;
 
-  const availabilityRows = psql(
+  let availabilityRows = psql(
     `SELECT day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND active = true ORDER BY day_of_week, start_time;`,
   );
+
+  if (!availabilityRows) {
+    psql(
+      `INSERT INTO lawyer_availability (id, lawyer_id, day_of_week, start_time, end_time, slot_duration_minutes, active) VALUES (${sqlLiteral(`ci-concurrency-${lawyerId}`)}, ${sqlLiteral(lawyerId)}, 1, '09:00', '17:00', 60, true) ON CONFLICT (lawyer_id, day_of_week, start_time, end_time) DO UPDATE SET active = true, slot_duration_minutes = 60;`,
+    );
+    seededAvailability = true;
+    availabilityRows = psql(
+      `SELECT day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND active = true ORDER BY day_of_week, start_time;`,
+    );
+  }
 
   function dateForDayOfWeek(targetDay: number) {
     const date = new Date();
@@ -189,5 +202,8 @@ try {
   console.log(`- notifications for winner: ${notificationCount}`);
   console.log(`- slot: ${scheduledDate} ${scheduledTime}-${scheduledEndTime} (${lawyerId})`);
 } finally {
+  if (seededAvailability && lawyerId) {
+    psql(`UPDATE lawyer_availability SET active = false WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND day_of_week = 1 AND start_time = '09:00' AND end_time = '17:00';`);
+  }
   clearTimeout(globalTimer);
 }

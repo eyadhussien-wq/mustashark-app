@@ -31,35 +31,20 @@ export const createBookingSafely = async (req: Request, res: Response) => {
     const booking = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${lawyer.id}:${input.scheduledDate}`}))`);
       const dayOfWeek = new Date(`${input.scheduledDate}T12:00:00Z`).getUTCDay();
-      let availability = await tx.select().from(lawyerAvailabilityTable).where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
-      if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
+      const availability = await tx.select().from(lawyerAvailabilityTable).where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
       const matchingWindow = availability.find((window) => { const windowStart = minutes(window.startTime); const windowEnd = minutes(window.endTime); const duration = window.slotDurationMinutes; return start >= windowStart && end <= windowEnd && (start - windowStart) % duration === 0 && end - start === duration; });
       if (!matchingWindow) throw new Error("SLOT_OUTSIDE_AVAILABILITY");
-
-      // A cancelled/refunded booking no longer owns its slot. Release any stale block
-      // before the new insert so the composite UNIQUE constraint does not strand the slot.
-      await tx.execute(sql`
-        delete from booking_time_blocks
-        where lawyer_id = ${lawyer.id}
-          and scheduled_date = ${input.scheduledDate}
-          and start_time = ${input.scheduledTime}
-          and end_time = ${formatTime(end)}
-          and booking_id in (
-            select id from bookings
-            where status in ('rejected', 'cancelled_by_lawyer', 'cancelled_by_client', 'refunded_absent')
-          )
-      `);
 
       const occupied = await tx.select({ block: bookingTimeBlocksTable }).from(bookingTimeBlocksTable).innerJoin(bookingsTable, eq(bookingTimeBlocksTable.bookingId, bookingsTable.id)).where(and(eq(bookingTimeBlocksTable.lawyerId, lawyer.id), eq(bookingTimeBlocksTable.scheduledDate, input.scheduledDate), notInArray(bookingsTable.status, ["rejected", "cancelled_by_lawyer", "cancelled_by_client", "refunded_absent"])));
       if (occupied.some(({ block }) => start < minutes(block.endTime) && end > minutes(block.startTime))) throw new Error("SLOT_ALREADY_BOOKED");
       const bookingId = crypto.randomUUID(); const serialNumber = `BK-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
       const [created] = await tx.insert(bookingsTable).values({ id: bookingId, serialNumber, clientId: authUser.id, lawyerId: lawyer.id, officeId: input.officeId || null, subject: input.subject, description: input.description || null, scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime, status: "pending", type: input.type, price: lawyer.hourlyRate ?? "0", paymentStatus: "pending" }).returning();
       await tx.insert(bookingTimeBlocksTable).values({ id: crypto.randomUUID(), bookingId, lawyerId: lawyer.id, scheduledDate: input.scheduledDate, startTime: input.scheduledTime, endTime: formatTime(end) });
-      await tx.insert(notificationsTable).values([{ id: crypto.randomUUID(), userId: lawyer.id, bookingId, title: "طلب استشارة جديد", body: `طلب جديد من ${authUser.name} يوم ${input.scheduledDate} من ${input.scheduledTime} إلى ${formatTime(end)}. يرجى مراجعة الطلب وإرسال العرض.`, kind: "info", urgent: true }, { id: crypto.randomUUID(), userId: authUser.id, bookingId, title: "تم إرسال طلب الاستشارة", body: `تم إرسال طلبك إلى ${lawyer.name} يوم ${input.scheduledDate} من ${input.scheduledTime} إلى ${formatTime(end)}.`, kind: "success", urgent: false }]);
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CREATED", actorId: authUser.id, metadata: { initialState: "PAYMENT_PENDING", price: lawyer.hourlyRate ?? "0", type: input.type, scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime } });
+      await tx.insert(notificationsTable).values([{ id: crypto.randomUUID(), userId: lawyer.id, bookingId, title: "طلب استشارة جديد", body: `طلب جديد من ${authUser.name} مرجع ${serialNumber} يوم ${input.scheduledDate} من ${input.scheduledTime} إلى ${formatTime(end)}. يرجى مراجعة الطلب وإرسال العرض.`, kind: "info", urgent: true }, { id: crypto.randomUUID(), userId: authUser.id, bookingId, title: "تم إرسال طلب الاستشارة", body: `تم إرسال طلبك ${serialNumber} إلى ${lawyer.name} يوم ${input.scheduledDate} من ${input.scheduledTime} إلى ${formatTime(end)}.`, kind: "success", urgent: false }]);
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CREATED", actorId: authUser.id, metadata: { initialState: "PAYMENT_PENDING", serialNumber, reference: serialNumber, price: lawyer.hourlyRate ?? "0", type: input.type, scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime } });
       return created;
     });
-    return res.status(201).json({ ok: true, booking: { ...booking, timezone: "Asia/Qatar", scheduledEndTime: formatTime(end), scheduledStartAtUtc: scheduledStart.toISOString(), scheduledEndAtUtc: scheduledEnd.toISOString() } });
+    return res.status(201).json({ ok: true, booking: { ...booking, reference: booking.serialNumber, timezone: "Asia/Qatar", scheduledEndTime: formatTime(end), scheduledStartAtUtc: scheduledStart.toISOString(), scheduledEndAtUtc: scheduledEnd.toISOString() } });
   } catch (error: any) {
     if (error?.message === "SLOT_ALREADY_BOOKED") return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
     if (error?.message === "SLOT_OUTSIDE_AVAILABILITY") return res.status(409).json({ ok: false, error: "slot_not_available", message: "هذا الوقت خارج أوقات توفر المحامي." });
