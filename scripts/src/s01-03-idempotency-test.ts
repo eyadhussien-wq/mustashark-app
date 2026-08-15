@@ -29,7 +29,7 @@ const token = login.body.jwt;
 const missing = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test" }),
+  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
 });
 assert(missing.status === 400 && missing.body?.error === "idempotency_key_required", `missing key was not rejected: ${JSON.stringify(missing)}`);
 
@@ -37,21 +37,21 @@ const key = `s01-03-${Date.now()}`;
 const first = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test" }),
+  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
 });
 assert(first.status === 404 && first.body?.error === "booking_not_found", `first idempotent request failed: ${JSON.stringify(first)}`);
 
 const replay = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test" }),
+  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
 });
 assert(replay.status === first.status && JSON.stringify(replay.body) === JSON.stringify(first.body), `replay did not return cached response: first=${JSON.stringify(first)} replay=${JSON.stringify(replay)}`);
 
 const mismatch = await request("/api/bookings/cancel", {
   method: "POST",
   headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "different-booking", reason: "different request" }),
+  body: JSON.stringify({ bookingId: "different-booking", reason: "different request", expectedVersion: 1 }),
 });
 assert(mismatch.status === 409 && mismatch.body?.error === "idempotency_key_reused_with_different_request", `mismatched replay was not rejected: ${JSON.stringify(mismatch)}`);
 
