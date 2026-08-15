@@ -52,9 +52,10 @@ try {
 
 if (!lawyerId) {
   const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
+  const generatedLawyerId = crypto.randomUUID();
   lawyerId = psql(`
-    INSERT INTO users (email, password_hash, role, name)
-    VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
+    INSERT INTO users (id, email, password_hash, role, name)
+    VALUES (${sqlLiteral(generatedLawyerId)}, ${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
     RETURNING id;
   `).trim();
 }
