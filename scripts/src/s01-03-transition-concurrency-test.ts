@@ -42,8 +42,14 @@ const clientToken = (clientLogin.body as { jwt?: string }).jwt;
 const clientId = (clientLogin.body as { user?: { id?: string } }).user?.id;
 assert(typeof clientToken === "string" && typeof clientId === "string", "client login did not return auth data");
 
-const lawyerId = psql(`SELECT id FROM users WHERE email = 'lawyer@mustashark.com' LIMIT 1;`);
-assert(lawyerId, "test lawyer was not found");
+const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
+const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
+const lawyerId = existingLawyerId || psql(`
+  INSERT INTO users (email, password_hash, role, name)
+  VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
+  RETURNING id;
+`);
+assert(lawyerId, "test lawyer could not be created or found");
 
 const bookingId = crypto.randomUUID();
 const serialNumber = `S0103-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
