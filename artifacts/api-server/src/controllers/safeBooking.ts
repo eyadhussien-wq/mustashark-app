@@ -35,6 +35,21 @@ export const createBookingSafely = async (req: Request, res: Response) => {
       if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
       const matchingWindow = availability.find((window) => { const windowStart = minutes(window.startTime); const windowEnd = minutes(window.endTime); const duration = window.slotDurationMinutes; return start >= windowStart && end <= windowEnd && (start - windowStart) % duration === 0 && end - start === duration; });
       if (!matchingWindow) throw new Error("SLOT_OUTSIDE_AVAILABILITY");
+
+      // A cancelled/refunded booking no longer owns its slot. Release any stale block
+      // before the new insert so the composite UNIQUE constraint does not strand the slot.
+      await tx.execute(sql`
+        delete from booking_time_blocks
+        where lawyer_id = ${lawyer.id}
+          and scheduled_date = ${input.scheduledDate}
+          and start_time = ${input.scheduledTime}
+          and end_time = ${formatTime(end)}
+          and booking_id in (
+            select id from bookings
+            where status in ('rejected', 'cancelled_by_lawyer', 'cancelled_by_client', 'refunded_absent')
+          )
+      `);
+
       const occupied = await tx.select({ block: bookingTimeBlocksTable }).from(bookingTimeBlocksTable).innerJoin(bookingsTable, eq(bookingTimeBlocksTable.bookingId, bookingsTable.id)).where(and(eq(bookingTimeBlocksTable.lawyerId, lawyer.id), eq(bookingTimeBlocksTable.scheduledDate, input.scheduledDate), notInArray(bookingsTable.status, ["rejected", "cancelled_by_lawyer", "cancelled_by_client", "refunded_absent"])));
       if (occupied.some(({ block }) => start < minutes(block.endTime) && end > minutes(block.startTime))) throw new Error("SLOT_ALREADY_BOOKED");
       const bookingId = crypto.randomUUID(); const serialNumber = `BK-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;

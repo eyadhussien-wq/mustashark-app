@@ -27,13 +27,27 @@ function parseWallClockDate(date: string) {
   return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 }
 
+function getQatarToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: QATAR_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function normalizeSelectedDate(date: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : getQatarToday();
+}
+
 function formatDateLabel(date: string, lang: "ar" | "en") {
+  const safeDate = normalizeSelectedDate(date);
   return new Intl.DateTimeFormat(lang === "ar" ? "ar-QA" : "en-US", {
     timeZone: QATAR_TZ,
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(parseWallClockDate(date));
+  }).format(parseWallClockDate(safeDate));
 }
 
 function timeLabel(time: string, lang: "ar" | "en" = "ar") {
@@ -56,9 +70,10 @@ export function ProfessionalCalendar({
   title,
 }: ProfessionalCalendarProps) {
   const isArabic = lang === "ar";
+  const safeSelectedDate = normalizeSelectedDate(selectedDate);
   const dayEvents = useMemo(
-    () => consultations.filter((c) => c.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)),
-    [consultations, selectedDate],
+    () => consultations.filter((c) => c.date === safeSelectedDate).sort((a, b) => a.time.localeCompare(b.time)),
+    [consultations, safeSelectedDate],
   );
   const availableCount = slots.filter((s) => s.available).length;
 
@@ -70,7 +85,7 @@ export function ProfessionalCalendar({
         </View>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>{title ?? (isArabic ? "المواعيد" : "Schedule")}</Text>
-          <Text style={styles.subtitle}>{formatDateLabel(selectedDate, lang)}</Text>
+          <Text style={styles.subtitle}>{formatDateLabel(safeSelectedDate, lang)}</Text>
         </View>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
@@ -80,7 +95,7 @@ export function ProfessionalCalendar({
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysContent}>
         {days.map((day) => {
-          const active = day.date === selectedDate;
+          const active = day.date === safeSelectedDate;
           return (
             <TouchableOpacity key={day.date} style={[styles.dayCard, active && styles.dayCardActive]} onPress={() => onDateChange(day.date)} activeOpacity={0.86}>
               {day.isToday && <Text style={[styles.todayLabel, active && styles.todayLabelActive]}>{isArabic ? "اليوم" : "Today"}</Text>}
@@ -190,7 +205,7 @@ export function buildCalendarDays(workingDays: number[], lang: "ar" | "en", hori
     const weekday = d.getUTCDay();
     if (!workingDays.includes(weekday)) continue;
     const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-    result.push({ date, dayNum: d.getUTCDate(), monthLabel: lang === "ar" ? monthAR[d.getUTCMonth()] : monthEN[d.getUTCMonth()], weekdayLabel: lang === "ar" ? weekdayAR[weekday] : weekdayEN[weekday], isToday: i === 0 });
+    result.push({ date, dayNum: d.getUTCDate(), monthLabel: lang === "ar" ? monthAR[d.getUTCMonth()] : monthEN[d.getUTCMonth()], weekdayLabel: lang === "ar" ? weekdayAR[weekday] : weekdayEN[weekday], isToday: date === getQatarToday() });
   }
   return result;
 }

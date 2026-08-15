@@ -2,8 +2,13 @@ import { execFileSync } from "node:child_process";
 
 const baseUrl = process.env.CONCURRENCY_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
+const CLIENT_EMAIL = process.env.CONCURRENCY_CLIENT_EMAIL ?? "client@mustashark.com";
+const CLIENT_PASSWORD = process.env.CONCURRENCY_CLIENT_PASSWORD ?? "test1234";
+const LAWYER_EMAIL = process.env.CONCURRENCY_LAWYER_EMAIL ?? "lawyer@mustashark.com";
+const LAWYER_PASSWORD = process.env.CONCURRENCY_LAWYER_PASSWORD ?? "test1234";
 const SCRIPT_TIMEOUT_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 5_000;
+const PSQL_TIMEOUT_MS = 2_000;
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
@@ -46,13 +51,13 @@ async function post(path: string, body: unknown, token: string) {
     } finally {
       clearTimeout(timer);
     }
-  })(), REQUEST_TIMEOUT_MS + 1_000, `POST ${path}`);
+  })(), REQUEST_TIMEOUT_MS + 500, `POST ${path}`);
 }
 
 function psql(query: string) {
   return execFileSync("psql", [databaseUrl!, "-At", "-c", query], {
     encoding: "utf8",
-    timeout: REQUEST_TIMEOUT_MS,
+    timeout: PSQL_TIMEOUT_MS,
   }).trim();
 }
 
@@ -69,8 +74,8 @@ globalTimer.unref();
 
 try {
   const clientLogin = await post("/api/auth/local-auth", {
-    email: "client@mustashark.com",
-    password: "test1234",
+    email: CLIENT_EMAIL,
+    password: CLIENT_PASSWORD,
     role: "client",
   }, "");
   assert(clientLogin.status === 200, `client login failed: ${clientLogin.status}`);
@@ -78,8 +83,8 @@ try {
   assert(typeof clientToken === "string" && clientToken.length > 20, "client login did not return JWT");
 
   const lawyerLogin = await post("/api/auth/local-auth", {
-    email: "lawyer@mustashark.com",
-    password: "test1234",
+    email: LAWYER_EMAIL,
+    password: LAWYER_PASSWORD,
     role: "lawyer",
   }, "");
   assert(lawyerLogin.status === 200, `lawyer login failed: ${lawyerLogin.status}`);
@@ -140,6 +145,11 @@ try {
     scheduledEndTime,
     type: "chat",
   };
+
+  const activeBlockCount = Number(psql(
+    `SELECT count(*) FROM booking_time_blocks btb INNER JOIN bookings b ON b.id = btb.booking_id WHERE btb.lawyer_id = ${sqlLiteral(lawyerId)} AND btb.scheduled_date = ${sqlLiteral(scheduledDate)} AND btb.start_time = ${sqlLiteral(scheduledTime)} AND btb.end_time = ${sqlLiteral(scheduledEndTime)} AND b.status NOT IN ('rejected', 'cancelled_by_lawyer', 'cancelled_by_client', 'refunded_absent');`,
+  ));
+  assert(activeBlockCount === 0, `selected test slot is already occupied: ${activeBlockCount} active block(s)`);
 
   const [requestA, requestB] = await withTimeout(Promise.all([
     post("/api/bookings", bookingPayload, clientToken),
