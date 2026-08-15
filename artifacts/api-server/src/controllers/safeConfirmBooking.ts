@@ -1,9 +1,10 @@
-import { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import crypto from "crypto";
+import type { Request, Response } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, consultationEventsTable, notificationsTable, platformDuesTable, PLATFORM_COMMISSION_RATE } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
+import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
 
 export const confirmBookingSafely = async (req: Request, res: Response) => {
   try {
@@ -20,11 +21,17 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
       if (booking.status !== "pending" || booking.paymentStatus !== "paid" || booking.escrowStatus !== "held") throw new Error("INVALID_FINANCIAL_STATE");
       assertT01Transition(getT01State(booking), "SCHEDULED");
       const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
-      const [updated] = await tx.update(bookingsTable)
-        .set({ status: "accepted", googleMeetLink, version: expectedVersion + 1, updatedAt: new Date() })
-        .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.version, expectedVersion), eq(bookingsTable.status, "pending"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held")))
-        .returning();
-      if (!updated) throw new Error("VERSION_CONFLICT");
+      const updated = await updateBookingWithOptimisticLock(
+        tx,
+        bookingId,
+        expectedVersion,
+        { status: "accepted", googleMeetLink },
+        [
+          eq(bookingsTable.status, "pending"),
+          eq(bookingsTable.paymentStatus, "paid"),
+          eq(bookingsTable.escrowStatus, "held"),
+        ],
+      );
       const grossAmount = booking.price;
       const commissionRate = PLATFORM_COMMISSION_RATE;
       const commissionAmount = String((Number(grossAmount) * Number(commissionRate)).toFixed(2));
