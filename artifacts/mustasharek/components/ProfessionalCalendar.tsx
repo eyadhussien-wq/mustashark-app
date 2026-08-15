@@ -5,6 +5,7 @@ import colors from "@/constants/colors";
 import type { Consultation, SlotInfo } from "@/contexts/DataContext";
 
 const C = colors.light;
+const QATAR_TZ = "Asia/Qatar";
 
 type CalendarMode = "booking" | "agenda";
 
@@ -21,20 +22,25 @@ interface ProfessionalCalendarProps {
   title?: string;
 }
 
+function parseWallClockDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+}
+
 function formatDateLabel(date: string, lang: "ar" | "en") {
-  const d = new Date(`${date}T00:00:00`);
   return new Intl.DateTimeFormat(lang === "ar" ? "ar-QA" : "en-US", {
+    timeZone: QATAR_TZ,
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(d);
+  }).format(parseWallClockDate(date));
 }
 
-function timeLabel(time: string) {
+function timeLabel(time: string, lang: "ar" = "ar") {
   const [h, m] = time.split(":").map(Number);
-  const suffix = h >= 12 ? "م" : "ص";
   const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+  if (lang === "ar") return `${hour}:${String(m).padStart(2, "0")} ${h >= 12 ? "م" : "ص"}`;
+  return `${hour}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 export function ProfessionalCalendar({
@@ -114,7 +120,7 @@ export function ProfessionalCalendar({
                     activeOpacity={0.82}
                   >
                     <Feather name="clock" size={15} color={active ? "#fff" : slot.available ? C.navy : C.mutedForeground} />
-                    <Text style={[styles.timeText, !slot.available && styles.timeTextDisabled, active && styles.timeTextActive]}>{timeLabel(slot.time)}</Text>
+                    <Text style={[styles.timeText, !slot.available && styles.timeTextDisabled, active && styles.timeTextActive]}>{timeLabel(slot.time, lang)}</Text>
                     {!slot.available && <Text style={styles.busyText}>{isArabic ? "محجوز" : "Booked"}</Text>}
                   </TouchableOpacity>
                 );
@@ -139,11 +145,11 @@ export function ProfessionalCalendar({
             return (
               <View key={event.id} style={styles.eventCard}>
                 <View style={[styles.eventTime, pending && styles.eventTimePending]}>
-                  <Text style={[styles.eventHour, pending && styles.eventPendingText]}>{timeLabel(event.time)}</Text>
+                  <Text style={[styles.eventHour, pending && styles.eventPendingText]}>{timeLabel(event.time, lang)}</Text>
                   <Text style={[styles.eventType, pending && styles.eventPendingText]}>{event.type === "video" ? (isArabic ? "فيديو" : "Video") : event.type === "phone" ? (isArabic ? "هاتف" : "Phone") : (isArabic ? "محادثة" : "Chat")}</Text>
                 </View>
                 <View style={styles.eventCopy}>
-                  <Text style={styles.eventName}>{isArabic ? event.clientName : event.clientName}</Text>
+                  <Text style={styles.eventName}>{event.clientName}</Text>
                   <Text style={styles.eventSubject} numberOfLines={1}>{event.subject}</Text>
                   <View style={styles.eventMeta}>
                     <View style={[styles.statusPill, pending ? styles.pendingPill : styles.acceptedPill]}>
@@ -164,17 +170,27 @@ export function ProfessionalCalendar({
 
 export function buildCalendarDays(workingDays: number[], lang: "ar" | "en", horizon = 21) {
   const result: Array<{ date: string; dayNum: number; monthLabel: string; weekdayLabel: string; isToday?: boolean }> = [];
-  const now = new Date();
+  const qatarFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: QATAR_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const todayParts = qatarFormatter.formatToParts(new Date());
+  const year = Number(todayParts.find((part) => part.type === "year")?.value);
+  const month = Number(todayParts.find((part) => part.type === "month")?.value);
+  const day = Number(todayParts.find((part) => part.type === "day")?.value);
+  const now = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   const weekdayAR = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
   const weekdayEN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const monthAR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
   const monthEN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   for (let i = 0; i < horizon; i++) {
-    const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(now.getDate() + i);
-    const weekday = d.getDay();
+    const d = new Date(now.getTime() + i * 86_400_000);
+    const weekday = d.getUTCDay();
     if (!workingDays.includes(weekday)) continue;
-    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    result.push({ date, dayNum: d.getDate(), monthLabel: lang === "ar" ? monthAR[d.getMonth()] : monthEN[d.getMonth()], weekdayLabel: lang === "ar" ? weekdayAR[weekday] : weekdayEN[weekday], isToday: i === 0 });
+    const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    result.push({ date, dayNum: d.getUTCDate(), monthLabel: lang === "ar" ? monthAR[d.getUTCMonth()] : monthEN[d.getUTCMonth()], weekdayLabel: lang === "ar" ? weekdayAR[weekday] : weekdayEN[weekday], isToday: i === 0 });
   }
   return result;
 }
