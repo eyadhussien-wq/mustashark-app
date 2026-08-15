@@ -74,13 +74,25 @@ try {
   const lawyerToken = lawyerLogin.jwt;
   const clientToken = clientLogin.jwt;
 
+  // Role boundary: a client may read availability but may not mutate it.
+  let result = await request("/api/availability/lawyers/me", {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` },
+    body: JSON.stringify({ slots: [] }),
+  });
+  assert(result.status === 403, `client availability mutation was not rejected: ${JSON.stringify(result)}`);
+  result = await request("/api/availability/lawyers/me", {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${clientToken}` },
+  });
+  assert(result.status === 403, `client availability deletion was not rejected: ${JSON.stringify(result)}`);
+
   const original = psql(
     `SELECT id || '|' || day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes || '|' || active FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} ORDER BY day_of_week, start_time;`,
   );
   if (original) originalAvailability.push(...original.split("\n"));
 
   const monday = nextDateForDay(1);
-  const wednesday = nextDateForDay(3);
   const initial = {
     slots: [
       { dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 },
@@ -94,8 +106,23 @@ try {
     ],
   };
 
+  // Validation rules on the Availability API itself.
+  result = await request("/api/availability/lawyers/me", {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
+    body: JSON.stringify({ slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 1, startTime: "11:00", endTime: "13:00", slotDurationMinutes: 60 }] }),
+  });
+  assert(result.status === 400 && result.body?.error === "availability_slots_overlap", `availability overlap validation failed: ${JSON.stringify(result)}`);
+
+  result = await request("/api/availability/lawyers/me", {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
+    body: JSON.stringify({ slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "10:30", slotDurationMinutes: 60 }] }),
+  });
+  assert(result.status === 400 && result.body?.error === "availability_window_shorter_than_slot_duration", `availability duration validation failed: ${JSON.stringify(result)}`);
+
   // 1. Create availability.
-  let result = await request("/api/availability/lawyers/me", {
+  result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
     body: JSON.stringify(initial),
@@ -189,11 +216,13 @@ try {
   assert(blockCount === 1, `booking_time_blocks exact-slot invariant failed: expected 1, got ${blockCount}`);
 
   console.log("S01-02 AVAILABILITY + BOOKING RULES PASSED");
-  console.log(`- availability CRUD: PASS`);
-  console.log(`- strict no-fallback slots: PASS`);
-  console.log(`- outside availability: PASS (409 slot_not_available)`);
-  console.log(`- overlap: PASS (409 slot_already_booked)`);
-  console.log(`- concurrency: PASS (1 success / 1 conflict)`);
+  console.log("- authorization boundary: PASS");
+  console.log("- availability validation: PASS");
+  console.log("- availability CRUD: PASS");
+  console.log("- strict no-fallback slots: PASS");
+  console.log("- outside availability: PASS (409 slot_not_available)");
+  console.log("- overlap: PASS (409 slot_already_booked)");
+  console.log("- concurrency: PASS (1 success / 1 conflict)");
   console.log(`- booking_time_blocks exact slot: PASS (${blockCount} row)`);
 } finally {
   if (lawyerId) {
