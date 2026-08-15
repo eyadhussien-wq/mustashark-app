@@ -74,43 +74,37 @@ try {
   const lawyerToken = lawyerLogin.jwt;
   const clientToken = clientLogin.jwt;
 
-  // Role boundary: a client may read availability but may not mutate it.
+  // Role boundary: a client may not mutate lawyer availability.
   let result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` },
     body: JSON.stringify({ slots: [] }),
   });
   assert(result.status === 403, `client availability mutation was not rejected: ${JSON.stringify(result)}`);
-  result = await request("/api/availability/lawyers/me", {
-    method: "DELETE",
-    headers: { authorization: `Bearer ${clientToken}` },
-  });
+  result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${clientToken}` } });
   assert(result.status === 403, `client availability deletion was not rejected: ${JSON.stringify(result)}`);
 
-  const original = psql(
-    `SELECT id || '|' || day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes || '|' || active FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} ORDER BY day_of_week, start_time;`,
-  );
+  const original = psql(`SELECT id || '|' || day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes || '|' || active FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} ORDER BY day_of_week, start_time;`);
   if (original) originalAvailability.push(...original.split("\n"));
 
   const monday = nextDateForDay(1);
-  const initial = {
-    slots: [
-      { dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 },
-      { dayOfWeek: 3, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 },
-    ],
-  };
-  const modified = {
-    slots: [
-      { dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 },
-      { dayOfWeek: 3, startTime: "15:00", endTime: "17:00", slotDurationMinutes: 60 },
-    ],
-  };
+  const initial = { slots: [
+    { dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 },
+    { dayOfWeek: 3, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 },
+  ] };
+  const modified = { slots: [
+    { dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 },
+    { dayOfWeek: 3, startTime: "15:00", endTime: "17:00", slotDurationMinutes: 60 },
+  ] };
 
-  // Validation rules on the Availability API itself.
+  // Availability validation rules.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
-    body: JSON.stringify({ slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 1, startTime: "11:00", endTime: "13:00", slotDurationMinutes: 60 }] }),
+    body: JSON.stringify({ slots: [
+      { dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 },
+      { dayOfWeek: 1, startTime: "11:00", endTime: "13:00", slotDurationMinutes: 60 },
+    ] }),
   });
   assert(result.status === 400 && result.body?.error === "availability_slots_overlap", `availability overlap validation failed: ${JSON.stringify(result)}`);
 
@@ -154,10 +148,7 @@ try {
   assert(JSON.stringify(result.body.slots.map((x: any) => [x.startTime, x.endTime])) === JSON.stringify([["10:00", "11:00"], ["11:00", "12:00"]]), "slot generation does not match persisted availability");
 
   // 6. Delete availability through the dedicated DELETE API.
-  result = await request("/api/availability/lawyers/me", {
-    method: "DELETE",
-    headers: { authorization: `Bearer ${lawyerToken}` },
-  });
+  result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200 && Number(result.body.deleted) === 2, `availability delete failed: ${JSON.stringify(result)}`);
 
   // 7. Verify it disappeared and no weekday fallback remains.
@@ -166,7 +157,7 @@ try {
   result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200 && result.body.slots.length === 0, `strict availability failed: slots appeared without persisted availability: ${JSON.stringify(result.body)}`);
 
-  // Restore a controlled availability window for booking-rule verification.
+  // Restore controlled availability for booking-rule verification.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
