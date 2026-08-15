@@ -64,15 +64,17 @@ function nextDateForDay(targetDay: number) {
 
 const originalAvailability: string[] = [];
 let lawyerId = "";
+let lawyerToken = "";
+let clientToken = "";
 const createdBookingIds: string[] = [];
 
 try {
   const lawyerLogin = await login(lawyerEmail, lawyerPassword, "lawyer");
   lawyerId = lawyerLogin.userId || lawyerLogin.user?.id || "";
+  lawyerToken = lawyerLogin.jwt;
   assert(lawyerId, "lawyer login did not return user id");
   const clientLogin = await login(clientEmail, clientPassword, "client");
-  const lawyerToken = lawyerLogin.jwt;
-  const clientToken = clientLogin.jwt;
+  clientToken = clientLogin.jwt;
 
   let result = await request("/api/availability/lawyers/me", {
     method: "PUT",
@@ -203,14 +205,26 @@ try {
   console.log("- concurrency: PASS (1 success / 1 conflict)");
   console.log(`- booking_time_blocks exact slot: PASS (${blockCount} row)`);
 } finally {
-  if (lawyerId) {
+  // Cleanup stays inside the normal authenticated API contract; this test never contains
+  // destructive SQL so the production DB mutation guard remains effective.
+  if (clientToken) {
     for (const bookingId of createdBookingIds) {
-      psql(`DELETE FROM consultation_events WHERE booking_id=${sqlLiteral(bookingId)}; DELETE FROM bookings WHERE id=${sqlLiteral(bookingId)};`);
+      await request("/api/bookings/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` },
+        body: JSON.stringify({ bookingId, reason: TEST_SUBJECT }),
+      });
     }
-    psql(`DELETE FROM lawyer_availability WHERE lawyer_id=${sqlLiteral(lawyerId)};`);
-    for (const row of originalAvailability) {
-      const [id, day, start, end, duration, active] = row.split("|");
-      psql(`INSERT INTO lawyer_availability (id, lawyer_id, day_of_week, start_time, end_time, slot_duration_minutes, active) VALUES (${sqlLiteral(id)}, ${sqlLiteral(lawyerId)}, ${Number(day)}, ${sqlLiteral(start)}, ${sqlLiteral(end)}, ${Number(duration)}, ${active === "t"});`);
-    }
+  }
+  if (lawyerToken) {
+    const restoreSlots = originalAvailability.map((row) => {
+      const [, day, start, end, duration] = row.split("|");
+      return { dayOfWeek: Number(day), startTime: start.slice(0, 5), endTime: end.slice(0, 5), slotDurationMinutes: Number(duration) };
+    });
+    await request("/api/availability/lawyers/me", {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
+      body: JSON.stringify({ slots: restoreSlots }),
+    });
   }
 }
