@@ -73,6 +73,7 @@ const globalTimer = setTimeout(() => {
 globalTimer.unref();
 
 let seededAvailability = false;
+let lawyerId = "";
 
 try {
   const clientLogin = await post("/api/auth/local-auth", {
@@ -92,7 +93,7 @@ try {
   assert(lawyerLogin.status === 200, `lawyer login failed: ${lawyerLogin.status}`);
   const lawyerUser = (lawyerLogin.body as { user?: { id?: string } }).user;
   assert(typeof lawyerUser?.id === "string", "lawyer login did not return user id");
-  const lawyerId = lawyerUser.id;
+  lawyerId = lawyerUser.id;
 
   let availabilityRows = psql(
     `SELECT day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND active = true ORDER BY day_of_week, start_time;`,
@@ -201,8 +202,8 @@ try {
   console.log(`- notifications for winner: ${notificationCount}`);
   console.log(`- slot: ${scheduledDate} ${scheduledTime}-${scheduledEndTime} (${lawyerId})`);
 } finally {
-  if (seededAvailability) {
-    psql("DELETE FROM lawyer_availability WHERE lawyer_id = " + sqlLiteral(process.env.CONCURRENCY_LAWYER_ID ?? "") + " AND day_of_week = 1 AND start_time = '09:00' AND end_time = '17:00';");
+  if (seededAvailability && lawyerId) {
+    psql(`DELETE FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND day_of_week = 1 AND start_time = '09:00' AND end_time = '17:00';`);
   }
   clearTimeout(globalTimer);
 }
