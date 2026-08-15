@@ -74,7 +74,6 @@ try {
   const lawyerToken = lawyerLogin.jwt;
   const clientToken = clientLogin.jwt;
 
-  // Role boundary: a client may not mutate lawyer availability.
   let result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` },
@@ -97,7 +96,6 @@ try {
     { dayOfWeek: 3, startTime: "15:00", endTime: "17:00", slotDurationMinutes: 60 },
   ] };
 
-  // Availability validation rules.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
@@ -115,7 +113,6 @@ try {
   });
   assert(result.status === 400 && result.body?.error === "availability_window_shorter_than_slot_duration", `availability duration validation failed: ${JSON.stringify(result)}`);
 
-  // 1. Create availability.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
@@ -123,12 +120,10 @@ try {
   });
   assert(result.status === 200 && result.body?.availability?.length === 2, `availability create failed: ${JSON.stringify(result)}`);
 
-  // 2. Read and verify exact values.
   result = await request(`/api/availability/lawyers/${lawyerId}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200, `availability read failed: ${JSON.stringify(result)}`);
   assert(JSON.stringify(result.body.availability.map((x: any) => [x.dayOfWeek, x.startTime.slice(0, 5), x.endTime.slice(0, 5), x.slotDurationMinutes])) === JSON.stringify([[1, "09:00", "11:00", 60], [3, "14:00", "16:00", 60]]), "availability create/read values mismatch");
 
-  // 3. Modify availability.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
@@ -136,28 +131,23 @@ try {
   });
   assert(result.status === 200 && result.body?.availability?.length === 2, `availability update failed: ${JSON.stringify(result)}`);
 
-  // 4. Re-read and verify modified values.
   result = await request(`/api/availability/lawyers/${lawyerId}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200, `availability re-read failed: ${JSON.stringify(result)}`);
   assert(JSON.stringify(result.body.availability.map((x: any) => [x.dayOfWeek, x.startTime.slice(0, 5), x.endTime.slice(0, 5), x.slotDurationMinutes])) === JSON.stringify([[1, "10:00", "12:00", 60], [3, "15:00", "17:00", 60]]), "availability update/read values mismatch");
 
-  // 5. Verify generated slots are derived only from persisted availability.
   result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200, `available slots read failed: ${JSON.stringify(result)}`);
   assert(result.body.timezone === "Asia/Qatar", "availability slots must declare Qatar timezone");
   assert(JSON.stringify(result.body.slots.map((x: any) => [x.startTime, x.endTime])) === JSON.stringify([["10:00", "11:00"], ["11:00", "12:00"]]), "slot generation does not match persisted availability");
 
-  // 6. Delete availability through the dedicated DELETE API.
   result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200 && Number(result.body.deleted) === 2, `availability delete failed: ${JSON.stringify(result)}`);
 
-  // 7. Verify it disappeared and no weekday fallback remains.
   result = await request(`/api/availability/lawyers/${lawyerId}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200 && result.body.availability.length === 0, `availability delete verification failed: ${JSON.stringify(result)}`);
   result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
   assert(result.status === 200 && result.body.slots.length === 0, `strict availability failed: slots appeared without persisted availability: ${JSON.stringify(result.body)}`);
 
-  // Restore controlled availability for booking-rule verification.
   result = await request("/api/availability/lawyers/me", {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` },
@@ -165,7 +155,6 @@ try {
   });
   assert(result.status === 200, `availability restore failed: ${JSON.stringify(result)}`);
 
-  // 8. Booking outside availability must be rejected.
   result = await request("/api/bookings", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` },
@@ -173,7 +162,6 @@ try {
   });
   assert(result.status === 409 && result.body?.error === "slot_not_available", `outside-availability rule failed: ${JSON.stringify(result)}`);
 
-  // 9. First valid booking must succeed; second identical booking must conflict.
   const validPayload = { lawyerId, subject: TEST_SUBJECT, description: "overlap test", scheduledDate: monday, scheduledTime: "10:00", scheduledEndTime: "11:00", type: "chat" };
   result = await request("/api/bookings", {
     method: "POST",
@@ -191,7 +179,6 @@ try {
   });
   assert(result.status === 409 && result.body?.error === "slot_already_booked", `overlap rule failed: ${JSON.stringify(result)}`);
 
-  // 10. Concurrent requests for a different free slot: exactly one must win.
   const concurrentPayload = { lawyerId, subject: TEST_SUBJECT, description: "concurrency test", scheduledDate: monday, scheduledTime: "11:00", scheduledEndTime: "12:00", type: "chat" };
   const [a, b] = await Promise.all([
     request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(concurrentPayload) }),
