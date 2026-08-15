@@ -67,8 +67,7 @@ export const createBookingSafely = async (req: Request, res: Response) => {
     const booking = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${lawyer.id}:${input.scheduledDate}`}))`);
       const dayOfWeek = new Date(`${input.scheduledDate}T12:00:00Z`).getUTCDay();
-      let availability = await tx.select().from(lawyerAvailabilityTable).where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
-      if (availability.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) availability = [{ startTime: "09:00", endTime: "17:00", slotDurationMinutes: 60 } as typeof availability[number]];
+      const availability = await tx.select().from(lawyerAvailabilityTable).where(and(eq(lawyerAvailabilityTable.lawyerId, lawyer.id), eq(lawyerAvailabilityTable.dayOfWeek, dayOfWeek), eq(lawyerAvailabilityTable.active, true)));
       const matchingWindow = availability.find((window) => { const windowStart = minutes(window.startTime); const windowEnd = minutes(window.endTime); const duration = window.slotDurationMinutes; return start >= windowStart && end <= windowEnd && (start - windowStart) % duration === 0 && end - start === duration; });
       if (!matchingWindow) throw new Error("SLOT_OUTSIDE_AVAILABILITY");
       const occupied = await tx.select({ block: bookingTimeBlocksTable }).from(bookingTimeBlocksTable).innerJoin(bookingsTable, eq(bookingTimeBlocksTable.bookingId, bookingsTable.id)).where(and(eq(bookingTimeBlocksTable.lawyerId, lawyer.id), eq(bookingTimeBlocksTable.scheduledDate, input.scheduledDate), notInArray(bookingsTable.status, ["rejected", "cancelled_by_lawyer", "cancelled_by_client", "refunded_absent"])));
