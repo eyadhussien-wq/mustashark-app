@@ -36,7 +36,7 @@ function formatDateLabel(date: string, lang: "ar" | "en") {
   }).format(parseWallClockDate(date));
 }
 
-function timeLabel(time: string, lang: "ar" = "ar") {
+function timeLabel(time: string, lang: "ar" | "en" = "ar") {
   const [h, m] = time.split(":").map(Number);
   const hour = h % 12 || 12;
   if (lang === "ar") return `${hour}:${String(m).padStart(2, "0")} ${h >= 12 ? "م" : "ص"}`;
