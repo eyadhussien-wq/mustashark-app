@@ -34,6 +34,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: pnpm}
       - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
       - name: Provision database
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
         run: pnpm --filter @workspace/db push
@@ -80,6 +82,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: pnpm}
       - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
       - name: Provision baseline
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
         run: pnpm --filter @workspace/db push
