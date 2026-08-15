@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { bookingsTable, officesTable, paymentProofsTable, usersTable } from "@workspace/db/schema";
+import { bookingsTable, consultationEventsTable, officesTable, paymentProofsTable, usersTable } from "@workspace/db/schema";
 
 const submitPaymentProofSchema = z.object({
   amount: z.coerce.number().positive().finite(),
@@ -92,6 +92,13 @@ export const submitPaymentProof = async (req: Request, res: Response) => {
         channel: "external", method: parsed.data.method, proofUri: parsed.data.proofUri,
         reference: parsed.data.reference || null, note: parsed.data.note || null, status: "submitted",
       }).returning();
+      await tx.insert(consultationEventsTable).values({
+        id: crypto.randomUUID(),
+        bookingId,
+        eventType: "PAYMENT_PROOF_SUBMITTED",
+        actorId: authUser.id,
+        metadata: { proofId: proof.id, amount: proof.amount, currency },
+      });
       return { kind: "ok" as const, proof, currency };
     });
 
@@ -132,8 +139,25 @@ export const confirmPaymentProof = async (req: Request, res: Response) => {
         .where(and(eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "confirmed"), eq(paymentProofsTable.currency, currency)));
       const fullyPaid = Number(totals?.confirmed ?? 0) >= Number(booking.price) - 0.0001;
       const [updatedBooking] = fullyPaid
-        ? await tx.update(bookingsTable).set({ paymentStatus: "paid", updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.paymentStatus, "pending"))).returning()
+        ? await tx.update(bookingsTable).set({ paymentStatus: "paid", escrowStatus: "held", updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.paymentStatus, "pending"))).returning()
         : [booking];
+      if (fullyPaid) {
+        await tx.insert(consultationEventsTable).values({
+          id: crypto.randomUUID(),
+          bookingId,
+          eventType: "PAYMENT_SUCCESS_ESCROW_HELD",
+          actorId: authUser.id,
+          metadata: { proofId, amount: booking.price, currency },
+        });
+      } else {
+        await tx.insert(consultationEventsTable).values({
+          id: crypto.randomUUID(),
+          bookingId,
+          eventType: "PAYMENT_PROOF_CONFIRMED",
+          actorId: authUser.id,
+          metadata: { proofId, amount: updatedProof.amount, currency },
+        });
+      }
       return { kind: "ok" as const, proof: updatedProof, booking: updatedBooking ?? booking };
     });
     if (result.kind === "not_found") return res.status(404).json({ ok: false, error: "booking_not_found" });
@@ -168,6 +192,13 @@ export const rejectPaymentProof = async (req: Request, res: Response) => {
       const [updatedProof] = await tx.update(paymentProofsTable).set({ status: "rejected", rejectionReason: parsed.data.reason, reviewedBy: authUser.id, reviewedAt: new Date(), updatedAt: new Date() })
         .where(and(eq(paymentProofsTable.id, proofId), eq(paymentProofsTable.bookingId, bookingId), eq(paymentProofsTable.status, "submitted"))).returning();
       if (!updatedProof) return { kind: "proof_not_found_or_already_reviewed" as const };
+      await tx.insert(consultationEventsTable).values({
+        id: crypto.randomUUID(),
+        bookingId,
+        eventType: "PAYMENT_PROOF_REJECTED",
+        actorId: authUser.id,
+        metadata: { proofId, reason: parsed.data.reason },
+      });
       return { kind: "ok" as const, proof: updatedProof };
     });
 
