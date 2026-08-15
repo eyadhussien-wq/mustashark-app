@@ -78,6 +78,7 @@ export const bookingsTable = pgTable("bookings", {
   attachments: jsonb("attachments").$type<BookingAttachment[]>().default([]),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   archivedBy: text("archived_by").references(() => usersTable.id),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
