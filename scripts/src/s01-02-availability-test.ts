@@ -62,7 +62,7 @@ try {
   result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${clientToken}` } });
   assert(result.status === 403, `client availability deletion was not rejected: ${JSON.stringify(result)}`);
 
-  const original = psql(`SELECT id || '|' || day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes || '|' || active FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} ORDER BY day_of_week, start_time;`);
+  const original = psql(`SELECT id || '|' || day_of_week || '|' || start_time || '|' || end_time || '|' || slot_duration_minutes || '|' || active FROM lawyer_availability WHERE lawyer_id = ${sqlLiteral(lawyerId)} AND active = true ORDER BY day_of_week, start_time;`);
   if (original) originalAvailability.push(...original.split("\n"));
 
   const monday = nextDateForDay(1);
@@ -145,6 +145,11 @@ try {
   if (clientToken) for (const bookingId of createdBookingIds) await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ bookingId, reason: TEST_SUBJECT }) });
   if (lawyerToken) {
     const restoreSlots = originalAvailability.map((row) => { const [, day, start, end, duration] = row.split("|"); return { dayOfWeek: Number(day), startTime: start.slice(0, 5), endTime: end.slice(0, 5), slotDurationMinutes: Number(duration) }; });
-    await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ slots: restoreSlots }) });
+    try {
+      const restoreResult = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ slots: restoreSlots }) });
+      assert(restoreResult.status === 200, `availability cleanup restore failed: ${JSON.stringify(restoreResult)}`);
+    } catch (error) {
+      throw new Error(`availability cleanup restore request failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
