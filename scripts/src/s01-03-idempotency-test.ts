@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import assertStrict from "node:assert/strict";
 import crypto from "node:crypto";
 
 const baseUrl = process.env.CONCURRENCY_BASE_URL ?? "http://127.0.0.1:8081";
@@ -76,18 +77,15 @@ try {
   const second = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
   assert(second.status === 200, `second idempotent request failed: ${JSON.stringify(second)}`);
 
-  const firstSerialized = JSON.stringify(first.body);
-  const secondSerialized = JSON.stringify(second.body);
-  if (firstSerialized !== secondSerialized) {
-    console.error("S01-03 IDEMPOTENCY RESPONSE DIFF");
-    console.error(`first.status=${first.status}`);
-    console.error(`second.status=${second.status}`);
-    console.error(`first.body=${firstSerialized}`);
-    console.error(`second.body=${secondSerialized}`);
-    console.error(`first.keys=${JSON.stringify(first.body && typeof first.body === "object" ? Object.keys(first.body as Record<string, unknown>) : [])}`);
-    console.error(`second.keys=${JSON.stringify(second.body && typeof second.body === "object" ? Object.keys(second.body as Record<string, unknown>) : [])}`);
+  // JSON object property order is not part of response equality. The first response
+  // is serialized directly by the controller while the idempotent replay is restored
+  // from JSON/JSONB, which may produce the same object with a different key order.
+  if (JSON.stringify(first.body) !== JSON.stringify(second.body)) {
+    console.error("S01-03 IDEMPOTENCY RESPONSE KEY-ORDER DIFF");
+    console.error(`first.body=${JSON.stringify(first.body)}`);
+    console.error(`second.body=${JSON.stringify(second.body)}`);
   }
-  assert(firstSerialized === secondSerialized, "idempotent responses did not match");
+  assertStrict.deepStrictEqual(first.body, second.body, "idempotent responses did not match semantically");
 
   const state = psql(`SELECT status || '|' || version FROM bookings WHERE id = ${sqlLiteral(bookingId)};`);
   assert(state === "cancelled_by_client|2", `unexpected final booking state/version: ${state}`);
