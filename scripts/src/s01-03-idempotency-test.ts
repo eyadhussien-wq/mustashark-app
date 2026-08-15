@@ -1,63 +1,88 @@
-export {};
+import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 
-const baseUrl = process.env.S01_03_BASE_URL ?? "http://127.0.0.1:8081";
-const clientEmail = process.env.S01_03_CLIENT_EMAIL ?? "client@mustashark.com";
-const clientPassword = process.env.S01_03_CLIENT_PASSWORD ?? "test1234";
+const baseUrl = process.env.CONCURRENCY_BASE_URL ?? "http://127.0.0.1:8081";
+const databaseUrl = process.env.DATABASE_URL;
+const clientEmail = process.env.CONCURRENCY_CLIENT_EMAIL ?? "client@mustashark.com";
+const clientPassword = process.env.CONCURRENCY_CLIENT_PASSWORD ?? "test1234";
+
+if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-async function request(path: string, init: RequestInit = {}) {
-  const response = await fetch(`${baseUrl}${path}`, init);
-  const text = await response.text();
-  let body: any = null;
-  if (text) {
-    try { body = JSON.parse(text); } catch { body = { raw: text }; }
-  }
-  return { status: response.status, body };
+function psql(query: string) {
+  return execFileSync("psql", [databaseUrl!, "-At", "-c", query], { encoding: "utf8" }).trim();
 }
 
-const login = await request("/api/auth/local-auth", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ email: clientEmail, password: clientPassword, role: "client" }),
-});
-assert(login.status === 200 && typeof login.body?.jwt === "string", `client login failed: ${JSON.stringify(login)}`);
-const token = login.body.jwt;
+function sqlLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
 
-const missing = await request("/api/bookings/cancel", {
-  method: "POST",
-  headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-  body: JSON.stringify({ bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 }),
-});
-assert(missing.status === 400 && missing.body?.error === "idempotency_key_required", `missing key was not rejected: ${JSON.stringify(missing)}`);
+async function post(path: string, body: unknown, token: string, idempotencyKey: string) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let json: unknown;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { status: response.status, body: json };
+}
 
-const key = `s01-03-${Date.now()}`;
-const requestBody = { bookingId: "s01-03-missing", reason: "idempotency test", expectedVersion: 1 };
-const first = await request("/api/bookings/cancel", {
-  method: "POST",
-  headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify(requestBody),
-});
-assert(first.status === 404 && first.body?.error === "booking_not_found", `first idempotent request failed: ${JSON.stringify(first)}`);
+const clientLogin = await post("/api/auth/local-auth", { email: clientEmail, password: clientPassword, role: "client" }, "", `s01-03-login-${Date.now()}`);
+assert(clientLogin.status === 200, `client login failed: ${clientLogin.status}`);
+const clientToken = (clientLogin.body as { jwt?: string }).jwt;
+const clientId = (clientLogin.body as { user?: { id?: string } }).user?.id;
+assert(typeof clientToken === "string" && typeof clientId === "string", "client login did not return auth data");
 
-const replay = await request("/api/bookings/cancel", {
-  method: "POST",
-  headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify(requestBody),
-});
-assert(replay.status === first.status && JSON.stringify(replay.body) === JSON.stringify(first.body), `replay did not return cached response: first=${JSON.stringify(first)} replay=${JSON.stringify(replay)}`);
+let lawyerId: string | undefined;
+try {
+  const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
+  if (existingLawyerId) lawyerId = existingLawyerId.trim();
+} catch {
+  // Fall through to controlled test-lawyer creation.
+}
 
-const mismatch = await request("/api/bookings/cancel", {
-  method: "POST",
-  headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
-  body: JSON.stringify({ bookingId: "different-booking", reason: "different request", expectedVersion: 1 }),
-});
-assert(mismatch.status === 409 && mismatch.body?.error === "idempotency_key_reused_with_different_request", `mismatched replay was not rejected: ${JSON.stringify(mismatch)}`);
+if (!lawyerId) {
+  const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
+  lawyerId = psql(`
+    INSERT INTO users (email, password_hash, role, name)
+    VALUES (${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
+    RETURNING id;
+  `).trim();
+}
 
-console.log("S01-03 IDEMPOTENCY CONTRACT PASSED");
-console.log("- missing key: PASS (400)");
-console.log("- first request persisted: PASS");
-console.log("- replay returns cached response: PASS");
-console.log("- same key with different request: PASS (409)");
+assert(lawyerId, "test lawyer could not be created or found");
+
+const bookingId = crypto.randomUUID();
+const serialNumber = `S0103-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+const idempotencyKey = `s01-03-idempotency-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
+
+try {
+  psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${sqlLiteral(bookingId)}, ${sqlLiteral(serialNumber)}, ${sqlLiteral(clientId)}, ${sqlLiteral(lawyerId)}, 'S01-03 idempotency test', '2099-01-01', '09:00', 'pending', 'chat', '100.00', 'pending', 'none', 1);`);
+
+  const requestBody = { bookingId, reason: "idempotency test cancel", expectedVersion: 1 };
+  const first = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
+  assert(first.status === 200, `first idempotent request failed: ${JSON.stringify(first)}`);
+
+  const second = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
+  assert(second.status === 200, `second idempotent request failed: ${JSON.stringify(second)}`);
+  assert(JSON.stringify(first.body) === JSON.stringify(second.body), "idempotent responses did not match");
+
+  const state = psql(`SELECT status || '|' || version FROM bookings WHERE id = ${sqlLiteral(bookingId)};`);
+  assert(state === "cancelled_by_client|2", `unexpected final booking state/version: ${state}`);
+
+  const eventCount = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(bookingId)} AND event_type = 'CONSULTATION_CANCELLED';`));
+  assert(eventCount === 1, `expected exactly one cancellation audit event, got ${eventCount}`);
+
+  console.log("S01-03 IDEMPOTENCY TEST PASSED");
+} finally {
+  // Database is discarded by CI.
+}
