@@ -77,6 +77,7 @@ jobs:
       - name: Run S01-03 Join integration test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          SESSION_SECRET: ci-s01-03-join-test-secret
           JOIN_BASE_URL: http://127.0.0.1:8081
           JOIN_CLIENT_EMAIL: client@mustashark.com
           JOIN_CLIENT_PASSWORD: test1234
