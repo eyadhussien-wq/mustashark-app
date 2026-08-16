@@ -179,7 +179,7 @@ export default function LawyerDetail() {
         lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
         subject: booking.subject, description: booking.description ?? description.trim(),
         date: booking.scheduledDate, time: booking.scheduledTime,
-        type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
+        type: booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
         paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
