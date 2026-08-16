@@ -34,9 +34,9 @@ export type IdempotencyResult =
   | { replay: false; key: string; route: string; method: string; requestHash: string };
 
 /**
- * Claims an idempotency key inside the caller's transaction. A concurrent
- * insert on the same unique key is serialized by PostgreSQL. Completed
- * requests are replayed without re-running business effects.
+ * Claims an idempotency key inside the caller's transaction. PostgreSQL's
+ * unique constraint serializes concurrent claims; ON CONFLICT avoids aborting
+ * the transaction so the existing row can then be locked and replayed.
  */
 export async function claimIdempotency(
   tx: any,
@@ -49,8 +49,9 @@ export async function claimIdempotency(
   const requestHash = getRequestHash(req);
   const expiresAt = new Date(Date.now() + RETRY_AFTER_MS);
 
-  try {
-    await tx.insert(idempotencyKeysTable).values({
+  await tx
+    .insert(idempotencyKeysTable)
+    .values({
       id: crypto.randomUUID(),
       userId,
       key,
@@ -58,12 +59,15 @@ export async function claimIdempotency(
       method,
       requestHash,
       expiresAt,
+    })
+    .onConflictDoNothing({
+      target: [
+        idempotencyKeysTable.userId,
+        idempotencyKeysTable.key,
+        idempotencyKeysTable.route,
+        idempotencyKeysTable.method,
+      ],
     });
-
-    return { replay: false, key, route, method, requestHash };
-  } catch (error: any) {
-    if ((error?.code ?? error?.cause?.code) !== "23505") throw error;
-  }
 
   const [existing] = await tx
     .select()
@@ -85,15 +89,17 @@ export async function claimIdempotency(
   if (existing.expiresAt.getTime() > Date.now()) throw new Error("IDEMPOTENCY_REQUEST_IN_PROGRESS");
 
   await tx.delete(idempotencyKeysTable).where(eq(idempotencyKeysTable.id, existing.id));
-  await tx.insert(idempotencyKeysTable).values({
-    id: crypto.randomUUID(),
-    userId,
-    key,
-    route,
-    method,
-    requestHash,
-    expiresAt,
-  });
+  await tx
+    .insert(idempotencyKeysTable)
+    .values({
+      id: crypto.randomUUID(),
+      userId,
+      key,
+      route,
+      method,
+      requestHash,
+      expiresAt,
+    });
   return { replay: false, key, route, method, requestHash };
 }
 
