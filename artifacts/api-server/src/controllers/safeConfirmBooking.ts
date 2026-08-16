@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
 import crypto from "crypto";
 import type { Request, Response } from "express";
+import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { bookingsTable, consultationEventsTable, notificationsTable, platformDuesTable, PLATFORM_COMMISSION_RATE } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
 import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
+import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 
 export const confirmBookingSafely = async (req: Request, res: Response) => {
   try {
@@ -13,7 +14,13 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
     if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
     if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return res.status(400).json({ ok: false, error: "expectedVersion_is_required" });
     const authUser = req.authUser!;
-    const updatedBooking = await db.transaction(async (tx) => {
+
+    const result = await db.transaction(async (tx) => {
+      const idempotency = await claimIdempotency(tx, req, authUser.id);
+      if (idempotency.replay) {
+        return { status: idempotency.status, body: idempotency.body };
+      }
+
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
@@ -26,7 +33,7 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
         throw error;
       }
       const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
-      const updated = await updateBookingWithOptimisticLock(
+      const updatedBooking = await updateBookingWithOptimisticLock(
         tx,
         bookingId,
         expectedVersion,
@@ -43,10 +50,18 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
       await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId, grossAmount, commissionRate, commissionAmount, status: "pending" }).onConflictDoNothing();
       await tx.insert(notificationsTable).values({ id: crypto.randomUUID(), userId: booking.clientId!, bookingId, title: "تم تأكيد موعد الاستشارة", body: `وافق المحامي على طلبك. الموعد المؤكد هو ${booking.scheduledDate} الساعة ${booking.scheduledTime}.`, kind: "success", urgent: true });
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id, metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true, expectedVersion } });
-      return updated;
+
+      const responseBody = { ok: true, booking: updatedBooking };
+      await persistIdempotencyResponse(tx, req, authUser.id, 200, responseBody);
+      return { status: 200, body: responseBody };
     });
-    return res.json({ ok: true, booking: updatedBooking });
+
+    return res.status(result.status).json(result.body);
   } catch (error: any) {
+    if (error?.message === "IDEMPOTENCY_KEY_REQUIRED") return res.status(400).json({ ok: false, error: "idempotency_key_required" });
+    if (error?.message === "IDEMPOTENCY_REQUEST_MISMATCH") return res.status(409).json({ ok: false, error: "idempotency_request_mismatch" });
+    if (error?.message === "IDEMPOTENCY_REQUEST_IN_PROGRESS") return res.status(409).json({ ok: false, error: "idempotency_request_in_progress" });
+    if (error?.message === "IDEMPOTENCY_CLAIM_FAILED") return res.status(409).json({ ok: false, error: "idempotency_claim_failed" });
     if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
     if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
