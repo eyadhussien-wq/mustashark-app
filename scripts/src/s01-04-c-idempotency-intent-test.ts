@@ -5,10 +5,10 @@ import { resolve } from "node:path";
 /**
  * S01-04-C client-boundary proof.
  *
- * This is intentionally a contract/lifecycle test rather than a React renderer
- * test: the mobile package has no component-test harness. It verifies the
- * production source owns the key in useRef, sends it only as a header, keeps
- * it after failure, and clears it only after the local booking succeeds.
+ * The mobile package has no component-test harness, so this test combines a
+ * source-level contract check with a deterministic lifecycle model. It proves
+ * the production implementation owns the key in useRef, sends it only as a
+ * header, retains it after failure, and clears it only after local success.
  */
 
 function loadLawyerDetailSource() {
@@ -62,9 +62,13 @@ function assertSourceContract(source: string) {
 
   const catchIndex = handleProceed.indexOf("} catch (requestError)");
   assert(catchIndex > clearIndex, "catch block must occur after the success-only key reset");
-  assert(!handleProceed.slice(catchIndex).includes("bookingIntentKeyRef.current = null"), "failure path must retain the intent key");
+  assert(
+    !handleProceed.slice(catchIndex).includes("bookingIntentKeyRef.current = null"),
+    "failure path must retain the intent key",
+  );
 
-  assert(!source.includes("customFetch.*randomUUID"), "transport must not generate idempotency keys");
+  const randomUuidCount = (source.match(/globalThis\.crypto\.randomUUID\(\)/g) ?? []).length;
+  assert.equal(randomUuidCount, 1, "the production flow must have exactly one client-side UUID generation site");
 }
 
 function proveLifecycle() {
