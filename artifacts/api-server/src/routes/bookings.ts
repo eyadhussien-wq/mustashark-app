@@ -34,6 +34,6 @@ bookingsRouter.post("/bookings/cancel", requireAuth, requireClientOrLawyer, canc
 bookingsRouter.post("/bookings/:id/no-show", requireAuth, requireClientOrAdmin, requireIdempotencyKey, claimLawyerNoShow);
 bookingsRouter.post("/bookings/:id/no-show/refund", requireAuth, requireClient, requireIdempotencyKey, refundLawyerNoShow);
 bookingsRouter.get("/bookings/:id/no-show/transfer-options", requireAuth, requireClient, getSmartTransferOptions);
-bookingsRouter.post("/bookings/:id/no-show/transfer", requireAuth, requireClient, requireIdempotencyKey, transferLawyerNoShow);
+bookingsRouter.post("/bookings/:id/no-show/transfer", requireAuth, requireClient, requireIdempotencyKey, transferLawyerNoShowBooking);
 
 export default bookingsRouter;
