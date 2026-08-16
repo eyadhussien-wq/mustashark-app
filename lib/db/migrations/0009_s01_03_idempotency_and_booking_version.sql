@@ -13,11 +13,18 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
   response_status INTEGER,
   response_body JSONB,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  completed_at TIMESTAMP
+  completed_at TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '5 minutes')
 );
+
+ALTER TABLE idempotency_keys
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '5 minutes');
 
 CREATE UNIQUE INDEX IF NOT EXISTS idempotency_keys_request_uq
   ON idempotency_keys (user_id, key, route, method);
 
 CREATE INDEX IF NOT EXISTS idempotency_keys_created_at_idx
   ON idempotency_keys (created_at);
+
+CREATE INDEX IF NOT EXISTS idempotency_keys_expires_at_idx
+  ON idempotency_keys (expires_at);
