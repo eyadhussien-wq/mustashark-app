@@ -68,6 +68,7 @@ export default function LawyerDetail() {
   const [slotsError, setSlotsError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const bookingIntentKeyRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     setBaseUrl(API_BASE || null);
@@ -157,11 +158,12 @@ export default function LawyerDetail() {
     if (!selectedSlot) { setError(lang === "ar" ? "الموعد المختار لم يعد متاحاً. يرجى اختيار موعد آخر." : "The selected slot is no longer available. Please choose another time."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
+    const idempotencyKey = bookingIntentKeyRef.current ?? (bookingIntentKeyRef.current = globalThis.crypto.randomUUID());
     try {
       const body = await customFetch<CreateBookingResponse>("/bookings", {
         method: "POST",
         responseType: "json",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({
           lawyerId: lawyer.id,
           subject: subject.trim(),
@@ -182,6 +184,7 @@ export default function LawyerDetail() {
         type: booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
         paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
       });
+      bookingIntentKeyRef.current = null;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("تم إرسال طلبك", "تم إرسال الطلب إلى المحامي بنجاح. سيقوم بمراجعته وإرسال العرض لك قبل بدء الخدمة.", [{ text: "حسناً", onPress: () => router.replace("/") }]);
     } catch (requestError) {
