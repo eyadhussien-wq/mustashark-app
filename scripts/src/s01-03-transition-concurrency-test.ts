@@ -13,7 +13,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 function psql(query: string) {
-  return execFileSync("psql", [databaseUrl!, "-At", "-c", query], { encoding: "utf8" }).trim();
+  return execFileSync("psql", [databaseUrl!, "-Atq", "-c", query], { encoding: "utf8" }).trim();
 }
 
 function sqlLiteral(value: string) {
@@ -46,20 +46,19 @@ let lawyerId: string | undefined;
 
 try {
   const existingLawyerId = psql(`SELECT id FROM users WHERE role = 'lawyer' LIMIT 1;`);
-  if (existingLawyerId) lawyerId = existingLawyerId.trim();
+  if (existingLawyerId) lawyerId = existingLawyerId;
 } catch {
-  // Fall through to controlled test-user creation.
+  // Fall through to controlled test-lawyer creation.
 }
 
 if (!lawyerId) {
   const lawyerIdValue = crypto.randomUUID();
   const lawyerEmail = `test-lawyer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@example.com`;
-  const insertResult = psql(`
+  psql(`
     INSERT INTO users (id, email, password_hash, role, name)
-    VALUES (${sqlLiteral(lawyerIdValue)}, ${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer')
-    RETURNING id;
+    VALUES (${sqlLiteral(lawyerIdValue)}, ${sqlLiteral(lawyerEmail)}, ${sqlLiteral("s01-03-test-password-hash")}, 'lawyer', 'S01-03 Test Lawyer');
   `);
-  lawyerId = insertResult.trim();
+  lawyerId = psql(`SELECT id FROM users WHERE email = ${sqlLiteral(lawyerEmail)} LIMIT 1;`);
 }
 
 assert(lawyerId, "test lawyer could not be created or found");
