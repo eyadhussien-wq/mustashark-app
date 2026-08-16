@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
 const baseUrl = process.env.JOIN_BASE_URL ?? "http://127.0.0.1:8081";
@@ -12,10 +13,6 @@ const REQUEST_TIMEOUT_MS = 5_000;
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 if (!sessionSecret) throw new Error("SESSION_SECRET is required");
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
 
 function psql(query: string) {
   return execFileSync("psql", [databaseUrl!, "-At", "-c", query], {
@@ -201,7 +198,7 @@ const sameKeyReplay = await post("/api/bookings/join", { bookingId: sameKeyBooki
 assertJoinSuccess(sameKeyReplay, "same-key committed replay");
 console.log("[Join replay diagnostic] owner body:", JSON.stringify(sameKeyOwner.body));
 console.log("[Join replay diagnostic] replay body:", JSON.stringify(sameKeyReplay.body));
-assert(JSON.stringify(sameKeyOwner.body) === JSON.stringify(sameKeyReplay.body), "same Idempotency-Key replay must return the exact committed response body");
+assert.deepStrictEqual(sameKeyReplay.body, sameKeyOwner.body, "same Idempotency-Key replay must return the same committed response body");
 const sameKeyEvents = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(sameKeyBooking.id)} AND event_type = 'SESSION_STARTED';`));
 assert(sameKeyEvents === 1, `same Idempotency-Key must create one SESSION_STARTED event, got ${sameKeyEvents}`);
 
