@@ -94,40 +94,54 @@ export async function requireIdempotencyKey(req: Request, res: Response, next: N
   const originalSend = res.send.bind(res);
   const originalEnd = res.end.bind(res);
   let responsePersisted = false;
+  let capturedBody: unknown = null;
 
   const persist = async (status: number, body: unknown) => {
-    if (responsePersisted || isRetryableStatus(status)) return;
-    await db.update(idempotencyKeysTable).set({
-      responseStatus: status,
-      responseBody: body as any,
-      completedAt: new Date(),
-    }).where(and(
-      eq(idempotencyKeysTable.userId, userId),
-      eq(idempotencyKeysTable.key, key),
-      eq(idempotencyKeysTable.route, route),
-      eq(idempotencyKeysTable.method, method),
-    ));
-    responsePersisted = true;
+    if (responsePersisted) return;
+    if (isRetryableStatus(status)) {
+      try {
+        await db.delete(idempotencyKeysTable).where(and(
+          eq(idempotencyKeysTable.userId, userId),
+          eq(idempotencyKeysTable.key, key),
+          eq(idempotencyKeysTable.route, route),
+          eq(idempotencyKeysTable.method, method),
+        ));
+        responsePersisted = true;
+      } catch (error) {
+        console.error("Idempotency claim release failed:", error);
+      }
+      return;
+    }
+    try {
+      await db.update(idempotencyKeysTable).set({
+        responseStatus: status,
+        responseBody: body as any,
+        completedAt: new Date(),
+      }).where(and(
+        eq(idempotencyKeysTable.userId, userId),
+        eq(idempotencyKeysTable.key, key),
+        eq(idempotencyKeysTable.route, route),
+        eq(idempotencyKeysTable.method, method),
+      ));
+      responsePersisted = true;
+    } catch (error) {
+      console.error("Idempotency response persistence failed:", error);
+    }
   };
 
   res.json = ((body: unknown) => {
-    void persist(res.statusCode, body).then(() => originalJson(body)).catch((error) => {
-      console.error("Idempotency response persistence failed:", error);
-      originalJson(body);
-    });
-    return res;
+    capturedBody = body;
+    return originalJson(body);
   }) as Response["json"];
   res.send = ((body?: any) => {
-    void persist(res.statusCode, body).then(() => originalSend(body)).catch((error) => {
-      console.error("Idempotency response persistence failed:", error);
-      originalSend(body);
-    });
-    return res;
+    if (capturedBody === null) capturedBody = body;
+    return originalSend(body);
   }) as Response["send"];
-  res.end = ((...args: Parameters<Response["end"]>) => {
-    if (res.statusCode >= 400) void persist(res.statusCode, args[0]).catch((error) => console.error("Idempotency response persistence failed:", error));
-    return originalEnd(...args);
-  }) as Response["end"];
+  res.end = ((...args: Parameters<Response["end"]>) => originalEnd(...args)) as Response["end"];
+
+  res.on("finish", () => {
+    void persist(res.statusCode, capturedBody);
+  });
 
   return next();
 }
