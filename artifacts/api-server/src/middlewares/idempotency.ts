@@ -58,7 +58,7 @@ export async function requireIdempotencyKey(req: Request, res: Response, next: N
       if (existing.responseBody !== null) return res.status(existing.responseStatus).json(existing.responseBody);
       return res.sendStatus(existing.responseStatus);
     }
-    if (!existing.completedAt && now - existing.createdAt.getTime() < RETRY_AFTER_MS) {
+    if (!existing.completedAt && now < existing.expiresAt.getTime()) {
       return res.status(409).json({ ok: false, error: "idempotency_request_in_progress" });
     }
   }
@@ -74,7 +74,13 @@ export async function requireIdempotencyKey(req: Request, res: Response, next: N
 
   try {
     await db.insert(idempotencyKeysTable).values({
-      id: crypto.randomUUID(), userId, key, route, method, requestHash: hash,
+      id: crypto.randomUUID(),
+      userId,
+      key,
+      route,
+      method,
+      requestHash: hash,
+      expiresAt: new Date(Date.now() + RETRY_AFTER_MS),
     });
   } catch (error: any) {
     const code = error?.code ?? error?.cause?.code;
