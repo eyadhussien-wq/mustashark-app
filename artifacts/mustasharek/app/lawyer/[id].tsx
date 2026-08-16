@@ -17,6 +17,7 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PU
 
 interface ReviewItem { id: string; stars: number; comment: string | null; createdAt: string; clientName: string; }
 interface LiveReviewsData { rating: string | null; reviewsCount: number; reviews: ReviewItem[]; }
+interface ServerSlot { startTime: string; endTime: string; startAtUtc: string; endAtUtc: string; }
 const TYPES = [
   { id: "video" as const, labelAR: "مكالمة فيديو", labelEN: "Video Call", icon: "video" },
   { id: "phone" as const, labelAR: "مكالمة هاتفية", labelEN: "Phone Call", icon: "phone" },
@@ -47,7 +48,7 @@ export default function LawyerDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, getAuthToken, login } = useAuth();
-  const { getLawyerById, getAvailableSlots, bookConsultation } = useData();
+  const { getLawyerById, bookConsultation } = useData();
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
   const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
@@ -60,6 +61,9 @@ export default function LawyerDetail() {
   const [selectedTime, setSelectedTime] = useState("");
   const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">(defaultType);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [serverSlots, setServerSlots] = useState<ServerSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,7 +78,54 @@ export default function LawyerDetail() {
 
   const workingDays = lawyer?.availability?.workingDays ?? [1, 2, 3, 4, 5];
   const calendarDays = useMemo(() => getCalendarDays(workingDays, lang), [workingDays, lang]);
-  const slots = useMemo(() => (selectedDate ? getAvailableSlots(lawyer!.id, selectedDate) : []), [selectedDate, lawyer, getAvailableSlots]);
+
+  useEffect(() => {
+    if (!selectedDate || !lawyer?.id || !API_BASE) {
+      setServerSlots([]);
+      setSlotsError("");
+      return;
+    }
+
+    let cancelled = false;
+    setSlotsLoading(true);
+    setSlotsError("");
+    setServerSlots([]);
+    setSelectedTime("");
+
+    (async () => {
+      try {
+        let token = await getAuthToken();
+        if (!token && user && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
+          await (login as unknown as (email: string, password: string) => Promise<void>)(user.email, "test1234");
+          token = await getAuthToken();
+        }
+        if (!token) throw new Error("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
+
+        const response = await fetch(`${API_BASE}/availability/lawyers/${encodeURIComponent(lawyer.id)}/slots?date=${encodeURIComponent(selectedDate)}`, {
+          method: "GET",
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || body.error || "تعذر تحميل المواعيد المتاحة");
+        if (!body?.ok || !Array.isArray(body.slots)) throw new Error("استجابة المواعيد غير صالحة");
+        if (!cancelled) setServerSlots(body.slots as ServerSlot[]);
+      } catch (requestError) {
+        if (!cancelled) {
+          setServerSlots([]);
+          setSlotsError(requestError instanceof Error ? requestError.message : "تعذر تحميل المواعيد المتاحة");
+        }
+      } finally {
+        if (!cancelled) setSlotsLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedDate, lawyer?.id, getAuthToken, login, user]);
+
+  const slots = useMemo(
+    () => serverSlots.map((slot) => ({ time: slot.startTime, endTime: slot.endTime })),
+    [serverSlots],
+  );
 
   if (!lawyer) return <View style={styles.notFound}><Text style={styles.notFoundText}>{t("noLawyersFound")}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>{t("back")}</Text></TouchableOpacity></View>;
 
@@ -159,7 +210,7 @@ export default function LawyerDetail() {
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر التاريخ" : "Choose date"}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysRow}>
               {calendarDays.map((day) => (
-                <TouchableOpacity key={day.date} style={[styles.dayBtn, selectedDate === day.date && styles.dayBtnActive]} onPress={() => { setSelectedDate(day.date); setSelectedTime(""); }}>
+                <TouchableOpacity key={day.date} style={[styles.dayBtn, selectedDate === day.date && styles.dayBtnActive]} onPress={() => setSelectedDate(day.date)}>
                   <Text style={[styles.weekday, selectedDate === day.date && styles.dayTextActive]}>{day.weekdayLabel}</Text>
                   <Text style={[styles.dayNum, selectedDate === day.date && styles.dayTextActive]}>{day.dayNum}</Text>
                   <Text style={[styles.month, selectedDate === day.date && styles.dayTextActive]}>{day.monthLabel}</Text>
@@ -170,12 +221,14 @@ export default function LawyerDetail() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر الوقت" : "Choose time"}</Text>
             <View style={styles.slotsRow}>
-              {slots.map((slot) => (
-                <TouchableOpacity key={slot.time} style={[styles.slotBtn, selectedTime === slot.time && styles.slotBtnActive]} onPress={() => setSelectedTime(slot.time)}>
+              {slotsLoading && <Text style={styles.noSlots}>{lang === "ar" ? "جارٍ تحميل المواعيد..." : "Loading available times..."}</Text>}
+              {!slotsLoading && slots.map((slot) => (
+                <TouchableOpacity key={`${slot.time}-${slot.endTime}`} style={[styles.slotBtn, selectedTime === slot.time && styles.slotBtnActive]} onPress={() => setSelectedTime(slot.time)}>
                   <Text style={[styles.slotText, selectedTime === slot.time && styles.slotTextActive]}>{slot.time}</Text>
                 </TouchableOpacity>
               ))}
-              {selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
+              {!slotsLoading && slotsError ? <Text style={styles.noSlots}>{slotsError}</Text> : null}
+              {!slotsLoading && !slotsError && selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
             </View>
           </View>
           <View style={styles.section}>
