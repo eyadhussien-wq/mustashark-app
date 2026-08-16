@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   Platform,
   RefreshControl,
@@ -16,15 +17,21 @@ import colors from "@/constants/colors";
 import { ConsultationCard } from "@/components/ConsultationCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData, type ConsultationStatus } from "@/contexts/DataContext";
+import {
+  bookingTransitionRequest,
+  BookingTransitionError,
+} from "@/utils/booking-transition";
 
 const C = colors.light;
-const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+  : "";
 
 const FILTERS: { label: string; value: ConsultationStatus | "all" }[] = [
-  { label: "الكل",    value: "all" },
-  { label: "معلّق",  value: "pending" },
-  { label: "مقبول",  value: "accepted" },
-  { label: "مكتمل",  value: "completed" },
+  { label: "الكل", value: "all" },
+  { label: "معلّق", value: "pending" },
+  { label: "مقبول", value: "accepted" },
+  { label: "مكتمل", value: "completed" },
   { label: "ملغية", value: "cancelled_by_client" },
   { label: "مرفوض", value: "rejected" },
 ];
@@ -33,8 +40,9 @@ export default function LawyerRequests() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, getAuthToken } = useAuth();
-  const { consultations, updateConsultationStatus, refreshData, cancelConsultation } = useData();
+  const { consultations, updateConsultationStatus, refreshData } = useData();
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const { initialFilter } = useLocalSearchParams<{ initialFilter?: string }>();
   const defaultFilter = (
@@ -50,33 +58,54 @@ export default function LawyerRequests() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshData();
-    setRefreshing(false);
+    try {
+      await refreshData();
+    } finally {
+      setRefreshing(false);
+    }
   }, [refreshData]);
 
   async function handleAccept(id: string) {
+    if (acceptingId === id) return;
+
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const token = await getAuthToken();
     if (!token || !API_BASE) return;
-    const response = await fetch(`${API_BASE}/bookings/confirm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ bookingId: id }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || body.error || "تعذر قبول الطلب");
-    await updateConsultationStatus(id, "accepted");
-    await refreshData();
+
+    setAcceptingId(id);
+    try {
+      await bookingTransitionRequest({
+        baseUrl: API_BASE,
+        token,
+        transition: "confirm",
+        path: "/bookings/confirm",
+        body: { bookingId: id },
+      });
+
+      await updateConsultationStatus(id, "accepted");
+      await refreshData();
+    } catch (error) {
+      if (error instanceof BookingTransitionError && error.conflict) {
+        await refreshData();
+        Alert.alert(
+          "تم تحديث الطلب",
+          "تغيرت حالة هذا الحجز أثناء المعالجة. تم تحديث البيانات، يرجى مراجعة الحالة الحالية."
+        );
+      } else {
+        const message =
+          error instanceof BookingTransitionError
+            ? error.message
+            : "تعذر قبول الطلب، يرجى المحاولة مرة أخرى.";
+        Alert.alert("تعذر قبول الطلب", message);
+      }
+    } finally {
+      setAcceptingId(null);
+    }
   }
 
   async function handleReject(id: string) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await updateConsultationStatus(id, "rejected");
-  }
-
-  async function handleCancel(id: string) {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await cancelConsultation(id, "lawyer", "إلغاء من قبل المحامي");
   }
 
   return (
