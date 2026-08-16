@@ -36,7 +36,8 @@ export type IdempotencyResult =
 /**
  * Claims an idempotency key inside the caller's transaction. PostgreSQL's
  * unique constraint serializes concurrent claims; ON CONFLICT avoids aborting
- * the transaction so the existing row can then be locked and replayed.
+ * the transaction. RETURNING distinguishes the transaction that created the
+ * claim from a concurrent request that must replay or report in-progress work.
  */
 export async function claimIdempotency(
   tx: any,
@@ -49,7 +50,7 @@ export async function claimIdempotency(
   const requestHash = getRequestHash(req);
   const expiresAt = new Date(Date.now() + RETRY_AFTER_MS);
 
-  await tx
+  const [inserted] = await tx
     .insert(idempotencyKeysTable)
     .values({
       id: crypto.randomUUID(),
@@ -67,7 +68,12 @@ export async function claimIdempotency(
         idempotencyKeysTable.route,
         idempotencyKeysTable.method,
       ],
-    });
+    })
+    .returning({ id: idempotencyKeysTable.id });
+
+  if (inserted) {
+    return { replay: false, key, route, method, requestHash };
+  }
 
   const [existing] = await tx
     .select()
