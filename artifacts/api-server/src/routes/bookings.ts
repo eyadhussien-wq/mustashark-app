@@ -2,9 +2,10 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
 import { requireIdempotencyKey } from "../middlewares/idempotency";
-import { listMyBookings, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking, cancelBooking } from "../controllers/bookings";
+import { listMyBookings, recordJoin, checkLawyerAbsence, getBookingById, completeBooking, disputeBooking } from "../controllers/bookings";
 import { createBookingSafely } from "../controllers/safeBooking";
 import { confirmBookingSafely } from "../controllers/safeConfirmBooking";
+import { cancelBookingSafely } from "../controllers/safeCancelBooking";
 import { createEmailBooking } from "../controllers/emailBooking";
 import { claimLawyerNoShow, refundLawyerNoShow, getSmartTransferOptions, transferLawyerNoShowBooking } from "../controllers/lawyerNoShow";
 
@@ -24,7 +25,9 @@ bookingsRouter.post("/bookings/join", requireAuth, requireClientOrLawyer, requir
 bookingsRouter.post("/bookings/check-absence", requireAuth, requireClientOrAdmin, requireIdempotencyKey, checkLawyerAbsence);
 bookingsRouter.post("/bookings/complete", requireAuth, requireLawyerOrAdmin, requireIdempotencyKey, completeBooking);
 bookingsRouter.post("/bookings/dispute", requireAuth, requireClientLawyerOrAdmin, requireIdempotencyKey, disputeBooking);
-bookingsRouter.post("/bookings/cancel", requireAuth, requireClientOrLawyer, requireIdempotencyKey, cancelBooking);
+// X/1 uses transactional idempotency inside the DB transaction; the generic
+// HTTP middleware must not claim this key before the financial transaction.
+bookingsRouter.post("/bookings/cancel", requireAuth, requireClientOrLawyer, cancelBookingSafely);
 
 bookingsRouter.post("/bookings/:id/no-show", requireAuth, requireClientOrAdmin, requireIdempotencyKey, claimLawyerNoShow);
 bookingsRouter.post("/bookings/:id/no-show/refund", requireAuth, requireClient, requireIdempotencyKey, refundLawyerNoShow);
