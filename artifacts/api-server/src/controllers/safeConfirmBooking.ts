@@ -19,7 +19,12 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
       if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
       if (booking.version !== expectedVersion) throw new Error("VERSION_CONFLICT");
       if (booking.status !== "pending" || booking.paymentStatus !== "paid" || booking.escrowStatus !== "held") throw new Error("INVALID_FINANCIAL_STATE");
-      assertT01Transition(getT01State(booking), "SCHEDULED");
+      try {
+        assertT01Transition(getT01State(booking), "SCHEDULED");
+      } catch (error: any) {
+        if (typeof error?.message === "string" && error.message.startsWith("INVALID_T01_TRANSITION")) throw new Error("INVALID_STATE_TRANSITION");
+        throw error;
+      }
       const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
       const updated = await updateBookingWithOptimisticLock(
         tx,
@@ -46,6 +51,7 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
     if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
     if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
     if (error?.message === "INVALID_FINANCIAL_STATE") return res.status(409).json({ ok: false, error: "payment_and_escrow_required_before_acceptance" });
+    if (error?.message === "INVALID_STATE_TRANSITION") return res.status(409).json({ ok: false, error: "invalid_state_transition" });
     console.error("Confirm Booking Safely Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
