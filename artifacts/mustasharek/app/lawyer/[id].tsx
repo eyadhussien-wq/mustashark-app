@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState, useMemo, useEffect } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ApiError, customFetch, setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -17,6 +18,8 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PU
 
 interface ReviewItem { id: string; stars: number; comment: string | null; createdAt: string; clientName: string; }
 interface LiveReviewsData { rating: string | null; reviewsCount: number; reviews: ReviewItem[]; }
+interface ServerSlot { startTime: string; endTime: string; startAtUtc: string; endAtUtc: string; }
+interface CreateBookingResponse { ok: boolean; booking?: { id: string; subject: string; description: string | null; scheduledDate: string; scheduledTime: string; scheduledEndTime?: string; type: "video" | "chat" | "phone"; price: string | number; paymentStatus: string; googleMeetLink?: string | null; }; }
 const TYPES = [
   { id: "video" as const, labelAR: "مكالمة فيديو", labelEN: "Video Call", icon: "video" },
   { id: "phone" as const, labelAR: "مكالمة هاتفية", labelEN: "Phone Call", icon: "phone" },
@@ -47,7 +50,7 @@ export default function LawyerDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, getAuthToken, login } = useAuth();
-  const { getLawyerById, getAvailableSlots, bookConsultation } = useData();
+  const { getLawyerById, bookConsultation } = useData();
   const { t, lang } = useLanguage();
   const lawyer = getLawyerById(id ?? "");
   const channels = lawyer?.channels ?? { chat: true, phone: true, video: true };
@@ -60,8 +63,17 @@ export default function LawyerDetail() {
   const [selectedTime, setSelectedTime] = useState("");
   const [selectedType, setSelectedType] = useState<"video" | "phone" | "chat">(defaultType);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [serverSlots, setServerSlots] = useState<ServerSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const bookingIntentKeyRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    setBaseUrl(API_BASE || null);
+    setAuthTokenGetter(getAuthToken);
+  }, [getAuthToken]);
 
   useEffect(() => {
     if (!id || !API_BASE) return;
@@ -74,7 +86,58 @@ export default function LawyerDetail() {
 
   const workingDays = lawyer?.availability?.workingDays ?? [1, 2, 3, 4, 5];
   const calendarDays = useMemo(() => getCalendarDays(workingDays, lang), [workingDays, lang]);
-  const slots = useMemo(() => (selectedDate ? getAvailableSlots(lawyer!.id, selectedDate) : []), [selectedDate, lawyer, getAvailableSlots]);
+
+  useEffect(() => {
+    if (!selectedDate || !lawyer?.id || !API_BASE) {
+      setServerSlots([]);
+      setSlotsError("");
+      return;
+    }
+
+    let cancelled = false;
+    setSlotsLoading(true);
+    setSlotsError("");
+    setServerSlots([]);
+    setSelectedTime("");
+
+    (async () => {
+      try {
+        let token = await getAuthToken();
+        if (!token && user && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
+          await (login as unknown as (email: string, password: string) => Promise<void>)(user.email, "test1234");
+          token = await getAuthToken();
+        }
+        if (!token) throw new Error("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
+
+        const response = await fetch(`${API_BASE}/availability/lawyers/${encodeURIComponent(lawyer.id)}/slots?date=${encodeURIComponent(selectedDate)}`, {
+          method: "GET",
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || body.error || "تعذر تحميل المواعيد المتاحة");
+        if (!body?.ok || !Array.isArray(body.slots)) throw new Error("استجابة المواعيد غير صالحة");
+        if (!cancelled) setServerSlots(body.slots as ServerSlot[]);
+      } catch (requestError) {
+        if (!cancelled) {
+          setServerSlots([]);
+          setSlotsError(requestError instanceof Error ? requestError.message : "تعذر تحميل المواعيد المتاحة");
+        }
+      } finally {
+        if (!cancelled) setSlotsLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedDate, lawyer?.id, getAuthToken, login, user]);
+
+  const slots = useMemo(
+    () => serverSlots.map((slot) => ({ time: slot.startTime, endTime: slot.endTime })),
+    [serverSlots],
+  );
+  const selectedSlot = useMemo(
+    () => serverSlots.find((slot) => slot.startTime === selectedTime),
+    [serverSlots, selectedTime],
+  );
 
   if (!lawyer) return <View style={styles.notFound}><Text style={styles.notFoundText}>{t("noLawyersFound")}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>{t("back")}</Text></TouchableOpacity></View>;
 
@@ -92,37 +155,45 @@ export default function LawyerDetail() {
     if (!subject.trim() || !description.trim() || !selectedDate || !selectedTime) { setError(t("error")); return; }
     if (!user || !lawyer) return;
     if (!API_BASE) { setError("تعذر الاتصال بالخدمة حالياً. حاول مرة أخرى."); return; }
+    if (!selectedSlot) { setError(lang === "ar" ? "الموعد المختار لم يعد متاحاً. يرجى اختيار موعد آخر." : "The selected slot is no longer available. Please choose another time."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
+    const idempotencyKey = bookingIntentKeyRef.current ?? (bookingIntentKeyRef.current = globalThis.crypto.randomUUID());
     try {
-      let token = await getAuthToken();
-      if (!token && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
-        await (login as unknown as (email: string, password: string) => Promise<void>)(user.email, "test1234");
-        token = await getAuthToken();
-      }
-      if (!token) { setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى."); return; }
-      const response = await fetch(`${API_BASE}/bookings`, {
+      const body = await customFetch<CreateBookingResponse>("/bookings", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, type: selectedType }),
+        responseType: "json",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({
+          lawyerId: lawyer.id,
+          subject: subject.trim(),
+          description: description.trim(),
+          scheduledDate: selectedDate,
+          scheduledTime: selectedSlot.startTime,
+          scheduledEndTime: selectedSlot.endTime,
+          type: selectedType,
+        }),
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
       const booking = body.booking;
-      if (booking) {
-        await bookConsultation({
-          clientId: user.id, clientName: user.name,
-          lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
-          subject: booking.subject, description: booking.description ?? description.trim(),
-          date: booking.scheduledDate, time: booking.scheduledTime,
-          type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
-          paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
-        });
-      }
+      if (!booking) throw new Error("استجابة الحجز غير صالحة");
+      await bookConsultation({
+        clientId: user.id, clientName: user.name,
+        lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
+        subject: booking.subject, description: booking.description ?? description.trim(),
+        date: booking.scheduledDate, time: booking.scheduledTime,
+        type: booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
+        paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
+      });
+      bookingIntentKeyRef.current = null;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("تم إرسال طلبك", "تم إرسال الطلب إلى المحامي بنجاح. سيقوم بمراجعته وإرسال العرض لك قبل بدء الخدمة.", [{ text: "حسناً", onPress: () => router.replace("/") }]);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "تعذر إرسال الطلب. حاول مرة أخرى.");
+      if (requestError instanceof ApiError) {
+        const data = requestError.data as { message?: string; error?: string } | null;
+        setError(data?.message || data?.error || requestError.message);
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "تعذر إرسال الطلب. حاول مرة أخرى.");
+      }
     } finally { setSubmitting(false); }
   }
 
@@ -159,7 +230,7 @@ export default function LawyerDetail() {
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر التاريخ" : "Choose date"}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysRow}>
               {calendarDays.map((day) => (
-                <TouchableOpacity key={day.date} style={[styles.dayBtn, selectedDate === day.date && styles.dayBtnActive]} onPress={() => { setSelectedDate(day.date); setSelectedTime(""); }}>
+                <TouchableOpacity key={day.date} style={[styles.dayBtn, selectedDate === day.date && styles.dayBtnActive]} onPress={() => setSelectedDate(day.date)}>
                   <Text style={[styles.weekday, selectedDate === day.date && styles.dayTextActive]}>{day.weekdayLabel}</Text>
                   <Text style={[styles.dayNum, selectedDate === day.date && styles.dayTextActive]}>{day.dayNum}</Text>
                   <Text style={[styles.month, selectedDate === day.date && styles.dayTextActive]}>{day.monthLabel}</Text>
@@ -170,12 +241,14 @@ export default function LawyerDetail() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { textAlign }]}>{lang === "ar" ? "اختر الوقت" : "Choose time"}</Text>
             <View style={styles.slotsRow}>
-              {slots.map((slot) => (
-                <TouchableOpacity key={slot.time} style={[styles.slotBtn, selectedTime === slot.time && styles.slotBtnActive]} onPress={() => setSelectedTime(slot.time)}>
+              {slotsLoading && <Text style={styles.noSlots}>{lang === "ar" ? "جارٍ تحميل المواعيد..." : "Loading available times..."}</Text>}
+              {!slotsLoading && slots.map((slot) => (
+                <TouchableOpacity key={`${slot.time}-${slot.endTime}`} style={[styles.slotBtn, selectedTime === slot.time && styles.slotBtnActive]} onPress={() => setSelectedTime(slot.time)}>
                   <Text style={[styles.slotText, selectedTime === slot.time && styles.slotTextActive]}>{slot.time}</Text>
                 </TouchableOpacity>
               ))}
-              {selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
+              {!slotsLoading && slotsError ? <Text style={styles.noSlots}>{slotsError}</Text> : null}
+              {!slotsLoading && !slotsError && selectedDate && slots.length === 0 && <Text style={styles.noSlots}>{lang === "ar" ? "لا توجد أوقات متاحة في هذا اليوم" : "No available times on this day"}</Text>}
             </View>
           </View>
           <View style={styles.section}>

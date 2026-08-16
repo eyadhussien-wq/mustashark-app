@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 
 const baseUrl = process.env.S01_02_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
@@ -37,6 +38,7 @@ async function login(email: string, password: string, role: "client" | "lawyer")
 
 function psql(query: string) { return execFileSync("psql", [databaseUrl!, "-At", "-c", query], { encoding: "utf8", timeout: timeoutMs }).trim(); }
 function sqlLiteral(value: string) { return `'${value.replaceAll("'", "''")}'`; }
+function idempotencyKey(label: string) { return `s01-02-${label}-${crypto.randomUUID()}`; }
 function nextDateForDay(targetDay: number) {
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   for (let offset = 1; offset <= 21; offset += 1) { const candidate = new Date(today.getTime() + offset * 86_400_000); if (candidate.getUTCDay() === targetDay) return candidate.toISOString().slice(0, 10); }
@@ -100,27 +102,32 @@ try {
   result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify(modified) });
   assert(result.status === 200, `availability restore failed: ${JSON.stringify(result)}`);
 
-  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ lawyerId, subject: TEST_SUBJECT, description: "outside availability", scheduledDate: monday, scheduledTime: "13:00", scheduledEndTime: "14:00", type: "chat" }) });
+  const outsideAvailabilityKey = idempotencyKey("outside-availability");
+  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": outsideAvailabilityKey }, body: JSON.stringify({ lawyerId, subject: TEST_SUBJECT, description: "outside availability", scheduledDate: monday, scheduledTime: "13:00", scheduledEndTime: "14:00", type: "chat" }) });
   assert(result.status === 409 && result.body?.error === "slot_not_available", `outside-availability rule failed: ${JSON.stringify(result)}`);
 
   const validPayload = { lawyerId, subject: TEST_SUBJECT, description: "overlap test", scheduledDate: monday, scheduledTime: "10:00", scheduledEndTime: "11:00", type: "chat" };
-  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(validPayload) });
+  const validBookingKey = idempotencyKey("valid-booking");
+  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": validBookingKey }, body: JSON.stringify(validPayload) });
   assert(result.status === 201 && typeof result.body?.booking?.id === "string", `valid booking failed: ${JSON.stringify(result)}`);
   createdBookingIds.push(result.body.booking.id);
   assert(typeof result.body.booking.reference === "string" && result.body.booking.reference === result.body.booking.serialNumber, "consultation reference is not canonical serialNumber");
-  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(validPayload) });
+  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey("overlap-conflict") }, body: JSON.stringify(validPayload) });
   assert(result.status === 409 && result.body?.error === "slot_already_booked", `overlap rule failed: ${JSON.stringify(result)}`);
 
-  result = await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ bookingId: createdBookingIds[0], reason: TEST_SUBJECT }) });
+  const cancelKey = idempotencyKey("slot-release-cancel");
+  result = await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": cancelKey }, body: JSON.stringify({ bookingId: createdBookingIds[0], reason: TEST_SUBJECT, expectedVersion: 1 }) });
   assert(result.status === 200 && result.body?.booking?.status === "cancelled_by_client", `slot release cancellation failed: ${JSON.stringify(result)}`);
-  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(validPayload) });
+  result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey("reusable-slot") }, body: JSON.stringify(validPayload) });
   assert(result.status === 201 && typeof result.body?.booking?.id === "string", `cancelled slot was not reusable: ${JSON.stringify(result)}`);
   createdBookingIds.push(result.body.booking.id);
 
   const concurrentPayload = { lawyerId, subject: TEST_SUBJECT, description: "concurrency test", scheduledDate: monday, scheduledTime: "11:00", scheduledEndTime: "12:00", type: "chat" };
+  const concurrentKeyA = idempotencyKey("concurrency-a");
+  const concurrentKeyB = idempotencyKey("concurrency-b");
   const [a, b] = await Promise.all([
-    request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(concurrentPayload) }),
-    request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify(concurrentPayload) }),
+    request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": concurrentKeyA }, body: JSON.stringify(concurrentPayload) }),
+    request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": concurrentKeyB }, body: JSON.stringify(concurrentPayload) }),
   ]);
   const results = [a, b];
   const winners = results.filter((x) => x.status === 201);
@@ -142,7 +149,7 @@ try {
   console.log("- concurrency: PASS (1 success / 1 conflict)");
   console.log(`- booking_time_blocks exact active slot: PASS (${blockCount} row)`);
 } finally {
-  if (clientToken) for (const bookingId of createdBookingIds) await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ bookingId, reason: TEST_SUBJECT }) });
+  if (clientToken) for (const bookingId of createdBookingIds) await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey(`cleanup-${bookingId}`) }, body: JSON.stringify({ bookingId, reason: TEST_SUBJECT, expectedVersion: 1 }) });
   if (lawyerToken) {
     const restoreSlots = originalAvailability.map((row) => { const [, day, start, end, duration] = row.split("|"); return { dayOfWeek: Number(day), startTime: start.slice(0, 5), endTime: end.slice(0, 5), slotDurationMinutes: Number(duration) }; });
     try {
