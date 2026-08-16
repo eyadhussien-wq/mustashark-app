@@ -11,11 +11,12 @@ import {
   PLATFORM_COMMISSION_RATE,
 } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
+import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
 
 const createBookingSchema = z.object({ lawyerId: z.string().min(1), subject: z.string().min(1), description: z.string().optional(), scheduledDate: z.string().min(1), scheduledTime: z.string().min(1), type: z.enum(["video", "chat", "phone"]), officeId: z.string().optional() });
 const checkAbsenceSchema = z.object({ bookingId: z.string().min(1) });
-const cancellationSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(1000) });
-const disputeSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(2000) });
+const cancellationSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(1000), expectedVersion: z.number().int().min(1) });
+const disputeSchema = z.object({ bookingId: z.string().min(1), reason: z.string().trim().min(1).max(2000), expectedVersion: z.number().int().min(1) });
 const APPOINTMENT_EARLY_ACCESS_MS = 5 * 60 * 1000;
 const APPOINTMENT_DURATION_MS = 30 * 60 * 1000;
 const BOOKING_TIME_ZONE = "Asia/Qatar";
@@ -175,23 +176,30 @@ export const getBookingById = async (req: Request, res: Response) => {
 
 export const completeBooking = async (req: Request, res: Response) => {
   try {
-    const { bookingId } = req.body;
+    const bookingId = typeof req.body?.bookingId === "string" ? req.body.bookingId : "";
+    const expectedVersion = Number(req.body?.expectedVersion);
     if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return res.status(400).json({ ok: false, error: "expectedVersion_is_required" });
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_action" });
-    if (getT01State(booking) !== "IN_PROGRESS") return res.status(400).json({ ok: false, error: "invalid_state_transition" });
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx.update(bookingsTable).set({ status: "completed", actualEndTime: new Date(), updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "accepted"))).returning();
-      if (!row) throw new Error("ALREADY_PROCESSED");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_COMPLETED", actorId: authUser.id, metadata: { fromState: "IN_PROGRESS", toState: "COMPLETED" } });
-      return row;
-    });
-    return res.json({ ok: true, booking: updated });
+    if (booking.version !== expectedVersion) return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+    if (getT01State(booking) !== "IN_PROGRESS") return res.status(409).json({ ok: false, error: "invalid_state_transition" });
+    try {
+      const updated = await db.transaction(async (tx) => {
+        const row = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "completed", actualEndTime: new Date() }, [eq(bookingsTable.status, "accepted")]);
+        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_COMPLETED", actorId: authUser.id, metadata: { fromState: "IN_PROGRESS", toState: "COMPLETED", expectedVersion } });
+        return row;
+      });
+      return res.json({ ok: true, booking: updated });
+    } catch (error: any) {
+      if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+      throw error;
+    }
   } catch (error: any) {
-    if (error?.message === "ALREADY_PROCESSED") return res.status(409).json({ ok: false, error: "already_processed_or_invalid_state" });
-    console.error("Complete Booking Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
+    console.error("Complete Booking Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
 
@@ -199,22 +207,31 @@ export const disputeBooking = async (req: Request, res: Response) => {
   try {
     const parsed = disputeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
-    const { bookingId, reason } = parsed.data;
+    const { bookingId, reason, expectedVersion } = parsed.data;
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_access" });
     const state = getT01State(booking);
     if (!["SCHEDULED", "IN_PROGRESS", "COMPLETED"].includes(state)) return res.status(409).json({ ok: false, error: "invalid_dispute_state" });
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx.update(bookingsTable).set({ status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, booking.status))).returning();
-      if (!row) throw new Error("ALREADY_PROCESSED");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held" } });
-      return row;
-    });
-    return res.json({ ok: true, booking: updated });
+    try {
+      const updated = await db.transaction(async (tx) => {
+        const row = await updateBookingWithOptimisticLock(
+          tx,
+          bookingId,
+          expectedVersion,
+          { status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus },
+          [eq(bookingsTable.status, booking.status)],
+        );
+        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held", expectedVersion } });
+        return row;
+      });
+      return res.json({ ok: true, booking: updated });
+    } catch (error: any) {
+      if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+      throw error;
+    }
   } catch (error: any) {
-    if (error?.message === "ALREADY_PROCESSED") return res.status(409).json({ ok: false, error: "already_processed_or_invalid_state" });
     console.error("Dispute Booking Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
@@ -223,7 +240,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
   try {
     const parsed = cancellationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
-    const { bookingId, reason } = parsed.data;
+    const { bookingId, reason, expectedVersion } = parsed.data;
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
@@ -231,15 +248,18 @@ export const cancelBooking = async (req: Request, res: Response) => {
     const state = getT01State(booking);
     if (!["PAYMENT_PENDING", "PENDING_ACCEPTANCE", "SCHEDULED"].includes(state)) return res.status(400).json({ ok: false, error: "cannot_cancel_in_current_state" });
     const cancelStatus = booking.clientId === authUser.id ? "cancelled_by_client" : "cancelled_by_lawyer";
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx.update(bookingsTable).set({ status: cancelStatus, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, booking.status))).returning();
-      if (!row) throw new Error("ALREADY_PROCESSED");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CANCELLED", actorId: authUser.id, metadata: { fromState: state, toState: "CANCELLED", reason, financialEffectPendingPolicy: booking.paymentStatus === "paid" } });
-      return row;
-    });
-    return res.json({ ok: true, booking: updated });
+    try {
+      const updated = await db.transaction(async (tx) => {
+        const row = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: cancelStatus }, [eq(bookingsTable.status, booking.status)]);
+        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "CONSULTATION_CANCELLED", actorId: authUser.id, metadata: { fromState: state, toState: "CANCELLED", reason, financialEffectPendingPolicy: booking.paymentStatus === "paid", expectedVersion } });
+        return row;
+      });
+      return res.json({ ok: true, booking: updated });
+    } catch (error: any) {
+      if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+      throw error;
+    }
   } catch (error: any) {
-    if (error?.message === "ALREADY_PROCESSED") return res.status(409).json({ ok: false, error: "already_processed_or_invalid_state" });
     console.error("Cancel Booking Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };

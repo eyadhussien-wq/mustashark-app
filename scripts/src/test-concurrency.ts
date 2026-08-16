@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 
 const baseUrl = process.env.CONCURRENCY_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
@@ -26,17 +27,20 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
-async function post(path: string, body: unknown, token: string) {
+async function post(path: string, body: unknown, token: string, idempotencyKey?: string) {
   return withTimeout((async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      };
+      if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+
       const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -165,8 +169,8 @@ try {
   assert(activeBlockCount === 0, `selected test slot is already occupied: ${activeBlockCount} active block(s)`);
 
   const [requestA, requestB] = await withTimeout(Promise.all([
-    post("/api/bookings", bookingPayload, clientToken),
-    post("/api/bookings", bookingPayload, clientToken),
+    post("/api/bookings", bookingPayload, clientToken, `s01-concurrency-a-${crypto.randomUUID()}`),
+    post("/api/bookings", bookingPayload, clientToken, `s01-concurrency-b-${crypto.randomUUID()}`),
   ]), REQUEST_TIMEOUT_MS + 2_000, "concurrent booking requests");
 
   const results = [requestA, requestB];

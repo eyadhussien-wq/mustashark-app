@@ -1,0 +1,1 @@
+Verification gate: Typecheck → Tests → Concurrency → Migration Rehearsal → Build → CI → CodeRabbit → PR → Squash Merge → Verify main.
