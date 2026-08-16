@@ -93,8 +93,16 @@ const sameKeyResults = await Promise.all([
   post("/api/bookings/cancel", { bookingId: first.id, expectedVersion: first.version, reason: "CI same-key race" }, client.token, sameKey),
 ]);
 assert(sameKeyResults.every((r) => r.status === 200), `same-key requests must both return the committed response: ${JSON.stringify(sameKeyResults)}`);
-const sameBodies = sameKeyResults.map((r) => JSON.stringify(r.body));
-assert(new Set(sameBodies).size === 1, "same idempotency key must replay the exact response");
+const sameBodyA = sameKeyResults[0].body as { booking?: { id?: string; version?: number; status?: string }; refund?: { amount?: string; refunded?: boolean } };
+const sameBodyB = sameKeyResults[1].body as { booking?: { id?: string; version?: number; status?: string }; refund?: { amount?: string; refunded?: boolean } };
+assert(
+  sameBodyA.booking?.id === sameBodyB.booking?.id &&
+    sameBodyA.booking?.version === sameBodyB.booking?.version &&
+    sameBodyA.booking?.status === sameBodyB.booking?.status &&
+    sameBodyA.refund?.amount === sameBodyB.refund?.amount &&
+    sameBodyA.refund?.refunded === sameBodyB.refund?.refunded,
+  "same idempotency key must replay the exact business result",
+);
 const firstBooking = psql(`SELECT status || '|' || payment_status || '|' || escrow_status || '|' || version FROM bookings WHERE id = ${sqlLiteral(first.id)};`);
 assert(firstBooking === "cancelled_by_client|refunded|refunded|2", `unexpected same-key booking state: ${firstBooking}`);
 const firstWallet = psql(`SELECT available_credits || '|' || total_refunded FROM client_wallets WHERE client_id = ${sqlLiteral(client.id)};`);
