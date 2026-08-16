@@ -65,27 +65,20 @@ assert(lawyerId, "test lawyer could not be created or found");
 
 const bookingId = crypto.randomUUID();
 const serialNumber = `S0103-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
-const idempotencyKey = `s01-03-idempotency-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
+const keyA = `s01-03-concurrency-a-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
+const keyB = `s01-03-concurrency-b-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
 
 try {
-  psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${sqlLiteral(bookingId)}, ${sqlLiteral(serialNumber)}, ${sqlLiteral(clientId)}, ${sqlLiteral(lawyerId)}, 'S01-03 idempotency test', '2099-01-01', '09:00', 'pending', 'chat', '100.00', 'pending', 'none', 1);`);
+  psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${sqlLiteral(bookingId)}, ${sqlLiteral(serialNumber)}, ${sqlLiteral(clientId)}, ${sqlLiteral(lawyerId)}, 'S01-03 concurrency test', '2099-01-01', '09:00', 'pending', 'chat', '100.00', 'pending', 'none', 1);`);
 
-  const requestBody = { bookingId, reason: "idempotency test cancel", expectedVersion: 1 };
-  const first = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
-  assert(first.status === 200, `first idempotent request failed: ${JSON.stringify(first)}`);
+  const requestBody = { bookingId, reason: "S01-03 concurrency test", expectedVersion: 1 };
+  const [first, second] = await Promise.all([
+    post("/api/bookings/cancel", requestBody, clientToken, keyA),
+    post("/api/bookings/cancel", requestBody, clientToken, keyB),
+  ]);
 
-  const second = await post("/api/bookings/cancel", requestBody, clientToken, idempotencyKey);
-  assert(second.status === 200, `second idempotent request failed: ${JSON.stringify(second)}`);
-
-  // JSON object property order is not part of response equality. The first response
-  // is serialized directly by the controller while the idempotent replay is restored
-  // from JSON/JSONB, which may produce the same object with a different key order.
-  if (JSON.stringify(first.body) !== JSON.stringify(second.body)) {
-    console.error("S01-03 IDEMPOTENCY RESPONSE KEY-ORDER DIFF");
-    console.error(`first.body=${JSON.stringify(first.body)}`);
-    console.error(`second.body=${JSON.stringify(second.body)}`);
-  }
-  assertStrict.deepStrictEqual(first.body, second.body, "idempotent responses did not match semantically");
+  const statuses = [first.status, second.status].sort((a, b) => a - b);
+  assertStrict.deepStrictEqual(statuses, [200, 409], `expected one success and one version conflict, got ${statuses.join(",")}`);
 
   const state = psql(`SELECT status || '|' || version FROM bookings WHERE id = ${sqlLiteral(bookingId)};`);
   assert(state === "cancelled_by_client|2", `unexpected final booking state/version: ${state}`);
@@ -93,7 +86,14 @@ try {
   const eventCount = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(bookingId)} AND event_type = 'CONSULTATION_CANCELLED';`));
   assert(eventCount === 1, `expected exactly one cancellation audit event, got ${eventCount}`);
 
-  console.log("S01-03 IDEMPOTENCY TEST PASSED");
+  const winningKey = first.status === 200 ? keyA : keyB;
+  const replay = await post("/api/bookings/cancel", requestBody, clientToken, winningKey);
+  assert(replay.status === 200, `idempotent replay failed: ${JSON.stringify(replay)}`);
+
+  const replayEventCount = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(bookingId)} AND event_type = 'CONSULTATION_CANCELLED';`));
+  assert(replayEventCount === 1, `idempotent replay created an additional side effect: ${replayEventCount}`);
+
+  console.log("S01-03 CONCURRENCY + IDEMPOTENCY TEST PASSED");
 } finally {
   // Database is discarded by CI.
 }
