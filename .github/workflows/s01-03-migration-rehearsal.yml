@@ -32,25 +32,29 @@ jobs:
         uses: actions/checkout@v4
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Apply all migrations before S01-03
+      - name: Provision current baseline schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_migration_rehearsal
+        run: pnpm --filter @workspace/db push
+      - name: Recreate pre-0009 state for S01-03 objects
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_migration_rehearsal
         run: |
           set -euo pipefail
-          for migration in lib/db/migrations/*.sql; do
-            case "$migration" in
-              *0009_s01_03_idempotency_and_booking_version.sql) continue ;;
-            esac
-            echo "Applying pre-S01-03 migration: $migration"
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-          done
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DROP INDEX IF EXISTS idempotency_keys_request_uq;
+          DROP INDEX IF EXISTS idempotency_keys_created_at_idx;
+          DROP INDEX IF EXISTS idempotency_keys_expires_at_idx;
+          DROP TABLE IF EXISTS idempotency_keys;
+          ALTER TABLE bookings DROP COLUMN IF EXISTS version;
+          SQL
       - name: Verify pre-S01-03 state
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_migration_rehearsal
         run: |
           set -euo pipefail
-          test "$(psql "$DATABASE_URL" -At -c "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='version';")" = "0"
-          test "$(psql "$DATABASE_URL" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_name='idempotency_keys';")" = "0"
+          test "$(psql "$DATABASE_URL" -Atq -c "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='version';")" = "0"
+          test "$(psql "$DATABASE_URL" -Atq -c "SELECT count(*) FROM information_schema.tables WHERE table_name='idempotency_keys';")" = "0"
       - name: Apply S01-03 migration 0009
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_migration_rehearsal
@@ -60,7 +64,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_migration_rehearsal
         run: |
           set -euo pipefail
-          test "$(psql "$DATABASE_URL" -At -c "SELECT data_type || '|' || column_default FROM information_schema.columns WHERE table_name='bookings' AND column_name='version';")" = "integer|1"
-          test "$(psql "$DATABASE_URL" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_name='idempotency_keys';")" = "1"
-          test "$(psql "$DATABASE_URL" -At -c "SELECT count(*) FROM pg_indexes WHERE indexname='idempotency_keys_request_uq';")" = "1"
+          test "$(psql "$DATABASE_URL" -Atq -c "SELECT data_type || '|' || column_default FROM information_schema.columns WHERE table_name='bookings' AND column_name='version';")" = "integer|1"
+          test "$(psql "$DATABASE_URL" -Atq -c "SELECT count(*) FROM information_schema.tables WHERE table_name='idempotency_keys';")" = "1"
+          test "$(psql "$DATABASE_URL" -Atq -c "SELECT count(*) FROM pg_indexes WHERE indexname='idempotency_keys_request_uq';")" = "1"
           echo "S01-03 MIGRATION REHEARSAL PASSED"
