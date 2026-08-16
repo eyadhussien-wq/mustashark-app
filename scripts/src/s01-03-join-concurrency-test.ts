@@ -3,15 +3,15 @@ import crypto from "node:crypto";
 
 const baseUrl = process.env.JOIN_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
+const sessionSecret = process.env.SESSION_SECRET;
 const CLIENT_EMAIL = process.env.JOIN_CLIENT_EMAIL ?? "client@mustashark.com";
 const CLIENT_PASSWORD = process.env.JOIN_CLIENT_PASSWORD ?? "test1234";
 const LAWYER_EMAIL = process.env.JOIN_LAWYER_EMAIL ?? "lawyer@mustashark.com";
 const LAWYER_PASSWORD = process.env.JOIN_LAWYER_PASSWORD ?? "test1234";
-const ADMIN_EMAIL = process.env.JOIN_ADMIN_EMAIL ?? "admin@mustashark.com";
-const ADMIN_PASSWORD = process.env.JOIN_ADMIN_PASSWORD ?? "test1234";
 const REQUEST_TIMEOUT_MS = 5_000;
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
+if (!sessionSecret) throw new Error("SESSION_SECRET is required");
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -55,7 +55,7 @@ async function post(path: string, body: unknown, token?: string, idempotencyKey?
   }
 }
 
-async function login(email: string, password: string, role: "client" | "lawyer" | "admin") {
+async function login(email: string, password: string, role: "client" | "lawyer") {
   const response = await fetch(`${baseUrl}/api/auth/local-auth`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -66,6 +66,24 @@ async function login(email: string, password: string, role: "client" | "lawyer" 
   assert(typeof body.jwt === "string", `${role} login did not return JWT`);
   assert(typeof body.user?.id === "string", `${role} login did not return user id`);
   return { token: body.jwt, id: body.user.id };
+}
+
+function base64Url(value: string) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function signAdminToken() {
+  const header = base64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = base64Url(JSON.stringify({
+    userId: "admin-seed",
+    email: "admin@mustashark.com",
+    role: "admin",
+    provider: "local",
+    exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+  }));
+  const signingInput = `${header}.${payload}`;
+  const signature = crypto.createHmac("sha256", sessionSecret!).update(signingInput).digest("base64url");
+  return `${signingInput}.${signature}`;
 }
 
 function qatarLocalParts(offsetMs: number) {
@@ -103,7 +121,7 @@ function assertJoinSuccess(result: { status: number; body: unknown }, label: str
 
 const client = await login(CLIENT_EMAIL, CLIENT_PASSWORD, "client");
 const lawyer = await login(LAWYER_EMAIL, LAWYER_PASSWORD, "lawyer");
-const admin = await login(ADMIN_EMAIL, ADMIN_PASSWORD, "admin");
+const admin = { token: signAdminToken(), id: "admin-seed" };
 
 // 1) Lawyer individual Join.
 const lawyerBooking = await seedBooking(client.id, lawyer.id);
