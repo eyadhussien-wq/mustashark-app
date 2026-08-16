@@ -195,7 +195,7 @@ jobs:
       - name: Stop API server
         if: always()
         run: |
-          if [ -f /tmp/mustashark-concurrency-api.pid ]; then kill "$(cat /tmp/mustashark-concurrency-api.pid)" || true; fi
+          if [ -f /tmp/mustashark-concurrency-api.pid ]; then kill "$(cat /tmp/mustashark-concurrency-api.pid")" || true; fi
 
   x1-booking-cancel-smoke:
     name: X1 booking cancel financial/idempotency smoke test
@@ -270,4 +270,85 @@ jobs:
       - name: Stop API server
         if: always()
         run: |
-          if [ -f /tmp/mustashark-x1-api.pid ]; then kill "$(cat /tmp/mustashark-x1-api.pid)" || true; fi
+          if [ -f /tmp/mustashark-x1-api.pid ]; then kill "$(cat /tmp/mustashark-x1-api.pid)")" || true; fi
+
+  s01-03-join-smoke:
+    name: S01-03 Join concurrency integration smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+      - name: Seed CI admin fixture
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/scripts seed-admin
+      - name: Build API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          PORT: "8081"
+          SESSION_SECRET: ci-s01-03-join-test-secret
+        run: |
+          pnpm --filter @workspace/api-server start > /tmp/mustashark-join-api.log 2>&1 &
+          echo $! > /tmp/mustashark-join-api.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mustashark-join-api.log
+          exit 1
+      - name: Run S01-03 Join integration test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          JOIN_BASE_URL: http://127.0.0.1:8081
+          JOIN_CLIENT_EMAIL: client@mustashark.com
+          JOIN_CLIENT_PASSWORD: test1234
+          JOIN_LAWYER_EMAIL: lawyer@mustashark.com
+          JOIN_LAWYER_PASSWORD: test1234
+          JOIN_ADMIN_EMAIL: admin@mustashark.com
+          JOIN_ADMIN_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts s01-03-join-concurrency-test
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/mustashark-join-api.log
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/mustashark-join-api.pid ]; then kill "$(cat /tmp/mustashark-join-api.pid)" || true; fi
