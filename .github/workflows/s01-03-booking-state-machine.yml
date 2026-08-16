@@ -116,16 +116,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build pre-0009 baseline from migrations 0001-0008
+      - name: Build pre-0009 baseline from main Drizzle schema
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
         run: |
-          for migration in $(find lib/db/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            case "$migration" in
-              *0009_s01_03_idempotency_and_booking_version.sql) continue ;;
-            esac
-            PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-          done
+          git fetch --no-tags --depth=1 origin main
+          git archive origin/main lib/db/src/schema lib/db/drizzle.config.ts lib/db/package.json | tar -x
+          pnpm --filter @workspace/db push
+          git checkout HEAD -- lib/db/src/schema lib/db/drizzle.config.ts lib/db/package.json
       - name: Apply S01-03 migration explicitly
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
