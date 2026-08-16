@@ -7,6 +7,11 @@ const clientEmail = process.env.CONCURRENCY_CLIENT_EMAIL ?? "client@mustashark.c
 const clientPassword = process.env.CONCURRENCY_CLIENT_PASSWORD ?? "test1234";
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
+const databaseHost = new URL(databaseUrl).hostname;
+const allowedDatabaseHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+if (!allowedDatabaseHosts.has(databaseHost)) {
+  throw new Error(`Refusing to run destructive concurrency test against database host ${databaseHost}`);
+}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
