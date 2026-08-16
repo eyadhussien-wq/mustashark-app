@@ -88,7 +88,8 @@ jobs:
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
         run: pnpm --filter @workspace/db push
       - uses: actions/checkout@v4
-        with: {ref: ${{ github.sha }}}
+        with:
+          ref: ${{ github.sha }}
       - name: Apply migration
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_migration}
         run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
