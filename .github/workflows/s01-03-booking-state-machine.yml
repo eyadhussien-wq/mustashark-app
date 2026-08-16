@@ -28,8 +28,9 @@ jobs:
       - run: pnpm --filter @workspace/api-server build
 
   idempotency-and-concurrency:
-    name: Idempotency + Transition Concurrency
+    name: Tests + Idempotency + Transition Concurrency
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: typecheck-build
     services:
       postgres:
@@ -77,18 +78,13 @@ jobs:
           done
           cat /tmp/s01-03-api.log
           exit 1
-      - name: Run idempotency smoke test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
-          CONCURRENCY_BASE_URL: http://127.0.0.1:8081
-        run: pnpm --filter @workspace/scripts s01-03-idempotency-test
-      - name: Run transition concurrency test
+      - name: Tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_test
           CONCURRENCY_BASE_URL: http://127.0.0.1:8081
           CONCURRENCY_CLIENT_EMAIL: client@mustashark.com
           CONCURRENCY_CLIENT_PASSWORD: test1234
-        run: pnpm --filter @workspace/scripts s01-03-transition-concurrency-test
+        run: pnpm --filter @workspace/scripts test
       - name: Dump API logs on failure
         if: failure()
         run: cat /tmp/s01-03-api.log
@@ -96,6 +92,7 @@ jobs:
   migration-rehearsal:
     name: Migration Rehearsal
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: typecheck-build
     services:
       postgres:
@@ -119,15 +116,23 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Provision baseline schema
+      - name: Provision current baseline schema
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
         run: pnpm --filter @workspace/db push
+      - name: Revert S01-03 objects to simulate pre-0009 state
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
+        run: |
+          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DROP TABLE IF EXISTS idempotency_keys;
+          ALTER TABLE bookings DROP COLUMN IF EXISTS version;
+          SQL
       - name: Apply S01-03 migration explicitly
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
         run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0009_s01_03_idempotency_and_booking_version.sql
-      - name: Verify S01-03 schema
+      - name: Verify S01-03 upgrade
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
         run: |
