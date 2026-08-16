@@ -14,6 +14,7 @@ export const idempotencyKeysTable = pgTable(
     responseBody: jsonb("response_body"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     completedAt: timestamp("completed_at"),
+    expiresAt: timestamp("expires_at").notNull(),
   },
   (table) => ({
     requestUnique: uniqueIndex("idempotency_keys_request_uq").on(table.userId, table.key, table.route, table.method),
