@@ -69,7 +69,7 @@ export interface Consultation {
   time: string;
   status: ConsultationStatus;
   createdAt: string;
-  type: "video" | "chat" | "phone";
+  type: "video" | "chat" | "phone" | "email";
   price: number;
   paymentStatus?: "paid" | "unpaid" | "refunded" | "forfeited";
   refundAmount?: number;
