@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState, useMemo, useEffect } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ApiError, customFetch, setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -18,6 +19,7 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PU
 interface ReviewItem { id: string; stars: number; comment: string | null; createdAt: string; clientName: string; }
 interface LiveReviewsData { rating: string | null; reviewsCount: number; reviews: ReviewItem[]; }
 interface ServerSlot { startTime: string; endTime: string; startAtUtc: string; endAtUtc: string; }
+interface CreateBookingResponse { ok: boolean; booking?: { id: string; subject: string; description: string | null; scheduledDate: string; scheduledTime: string; scheduledEndTime?: string; type: "video" | "chat" | "phone"; price: string | number; paymentStatus: string; googleMeetLink?: string | null; }; }
 const TYPES = [
   { id: "video" as const, labelAR: "مكالمة فيديو", labelEN: "Video Call", icon: "video" },
   { id: "phone" as const, labelAR: "مكالمة هاتفية", labelEN: "Phone Call", icon: "phone" },
@@ -66,6 +68,11 @@ export default function LawyerDetail() {
   const [slotsError, setSlotsError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setBaseUrl(API_BASE || null);
+    setAuthTokenGetter(getAuthToken);
+  }, [getAuthToken]);
 
   useEffect(() => {
     if (!id || !API_BASE) return;
@@ -126,6 +133,10 @@ export default function LawyerDetail() {
     () => serverSlots.map((slot) => ({ time: slot.startTime, endTime: slot.endTime })),
     [serverSlots],
   );
+  const selectedSlot = useMemo(
+    () => serverSlots.find((slot) => slot.startTime === selectedTime),
+    [serverSlots, selectedTime],
+  );
 
   if (!lawyer) return <View style={styles.notFound}><Text style={styles.notFoundText}>{t("noLawyersFound")}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>{t("back")}</Text></TouchableOpacity></View>;
 
@@ -143,37 +154,43 @@ export default function LawyerDetail() {
     if (!subject.trim() || !description.trim() || !selectedDate || !selectedTime) { setError(t("error")); return; }
     if (!user || !lawyer) return;
     if (!API_BASE) { setError("تعذر الاتصال بالخدمة حالياً. حاول مرة أخرى."); return; }
+    if (!selectedSlot) { setError(lang === "ar" ? "الموعد المختار لم يعد متاحاً. يرجى اختيار موعد آخر." : "The selected slot is no longer available. Please choose another time."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
     try {
-      let token = await getAuthToken();
-      if (!token && (user.email === "client@mustashark.com" || user.email === "lawyer@mustashark.com")) {
-        await (login as unknown as (email: string, password: string) => Promise<void>)(user.email, "test1234");
-        token = await getAuthToken();
-      }
-      if (!token) { setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى."); return; }
-      const response = await fetch(`${API_BASE}/bookings`, {
+      const body = await customFetch<CreateBookingResponse>("/bookings", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lawyerId: lawyer.id, subject: subject.trim(), description: description.trim(), scheduledDate: selectedDate, scheduledTime: selectedTime, type: selectedType }),
+        responseType: "json",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lawyerId: lawyer.id,
+          subject: subject.trim(),
+          description: description.trim(),
+          scheduledDate: selectedDate,
+          scheduledTime: selectedSlot.startTime,
+          scheduledEndTime: selectedSlot.endTime,
+          type: selectedType,
+        }),
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || body.error || "تعذر إرسال الطلب");
       const booking = body.booking;
-      if (booking) {
-        await bookConsultation({
-          clientId: user.id, clientName: user.name,
-          lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
-          subject: booking.subject, description: booking.description ?? description.trim(),
-          date: booking.scheduledDate, time: booking.scheduledTime,
-          type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
-          paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
-        });
-      }
+      if (!booking) throw new Error("استجابة الحجز غير صالحة");
+      await bookConsultation({
+        clientId: user.id, clientName: user.name,
+        lawyerId: lawyer.id, lawyerName: lawyer.name, lawyerSpecialization: lawyer.specialization, lawyerCountry: lawyer.country,
+        subject: booking.subject, description: booking.description ?? description.trim(),
+        date: booking.scheduledDate, time: booking.scheduledTime,
+        type: booking.type === "email" ? "chat" : booking.type, price: Number(booking.price ?? lawyer.hourlyRate),
+        paymentStatus: booking.paymentStatus === "paid" ? "paid" : "unpaid", meetLink: booking.googleMeetLink ?? undefined,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("تم إرسال طلبك", "تم إرسال الطلب إلى المحامي بنجاح. سيقوم بمراجعته وإرسال العرض لك قبل بدء الخدمة.", [{ text: "حسناً", onPress: () => router.replace("/") }]);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "تعذر إرسال الطلب. حاول مرة أخرى.");
+      if (requestError instanceof ApiError) {
+        const data = requestError.data as { message?: string; error?: string } | null;
+        setError(data?.message || data?.error || requestError.message);
+      } else {
+        setError(requestError instanceof Error ? requestError.message : "تعذر إرسال الطلب. حاول مرة أخرى.");
+      }
     } finally { setSubmitting(false); }
   }
 
