@@ -119,6 +119,18 @@ function assertJoinSuccess(result: { status: number; body: unknown }, label: str
   assert(body.ok === true && body.booking?.id, `${label} returned an unexpected success body: ${JSON.stringify(result.body)}`);
 }
 
+async function waitForIdempotencyCompletion(userId: string, key: string) {
+  const deadline = Date.now() + 2_000;
+  const query = `SELECT completed_at IS NOT NULL FROM idempotency_keys WHERE user_id = ${sqlLiteral(userId)} AND key = ${sqlLiteral(key)} AND route = '/bookings/join' AND method = 'POST' LIMIT 1;`;
+
+  while (Date.now() < deadline) {
+    if (psql(query) === "t") return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`Idempotency-Key ${key} did not reach completed state within 2 seconds`);
+}
+
 const client = await login(CLIENT_EMAIL, CLIENT_PASSWORD, "client");
 const lawyer = await login(LAWYER_EMAIL, LAWYER_PASSWORD, "lawyer");
 const admin = { token: signAdminToken(), id: "admin-seed" };
@@ -170,16 +182,24 @@ assert(clientRaceStatuses[0] === 200 && clientRaceStatuses[1] === 409, `expected
 const clientRaceEvents = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(clientRaceBooking.id)} AND event_type = 'SESSION_STARTED';`));
 assert(clientRaceEvents === 1, `expected one SESSION_STARTED event for duplicate client join, got ${clientRaceEvents}`);
 
-// 6) Same Idempotency-Key replay: both concurrent HTTP calls replay the same committed business result.
+// 6) Same Idempotency-Key: concurrent callers are explicitly split into one owner (200) and one in-progress rejection (409).
+// After the owner commits, a sequential replay with the same key must return the stored business response (200) without a second mutation.
 const sameKeyBooking = await seedBooking(client.id, lawyer.id);
 const sameKey = `join-same-key-${crypto.randomUUID()}`;
 const [sameKeyA, sameKeyB] = await Promise.all([
   post("/api/bookings/join", { bookingId: sameKeyBooking.id }, client.token, sameKey),
   post("/api/bookings/join", { bookingId: sameKeyBooking.id }, client.token, sameKey),
 ]);
-assertJoinSuccess(sameKeyA, "same-key first join");
-assertJoinSuccess(sameKeyB, "same-key replay join");
-assert(JSON.stringify(sameKeyA.body) === JSON.stringify(sameKeyB.body), "same Idempotency-Key must replay the exact response body");
+const sameKeyStatuses = [sameKeyA.status, sameKeyB.status].sort((a, b) => a - b);
+assert(sameKeyStatuses[0] === 200 && sameKeyStatuses[1] === 409, `same-key concurrent requests expected one 200 and one 409: ${JSON.stringify([sameKeyA, sameKeyB])}`);
+const sameKeyOwner = sameKeyA.status === 200 ? sameKeyA : sameKeyB;
+const sameKeyInProgress = sameKeyA.status === 409 ? sameKeyA : sameKeyB;
+assert((sameKeyInProgress.body as { error?: string }).error === "idempotency_request_in_progress", `same-key concurrent loser returned wrong error: ${JSON.stringify(sameKeyInProgress.body)}`);
+assertJoinSuccess(sameKeyOwner, "same-key owner join");
+await waitForIdempotencyCompletion(client.id, sameKey);
+const sameKeyReplay = await post("/api/bookings/join", { bookingId: sameKeyBooking.id }, client.token, sameKey);
+assertJoinSuccess(sameKeyReplay, "same-key committed replay");
+assert(JSON.stringify(sameKeyOwner.body) === JSON.stringify(sameKeyReplay.body), "same Idempotency-Key replay must return the exact committed response body");
 const sameKeyEvents = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${sqlLiteral(sameKeyBooking.id)} AND event_type = 'SESSION_STARTED';`));
 assert(sameKeyEvents === 1, `same Idempotency-Key must create one SESSION_STARTED event, got ${sameKeyEvents}`);
 
@@ -208,7 +228,7 @@ console.log("- client individual join: PASS");
 console.log("- concurrent lawyer + client join: PASS");
 console.log("- concurrent duplicate lawyer join: PASS (1x 200, 1x 409)");
 console.log("- concurrent duplicate client join: PASS (1x 200, 1x 409)");
-console.log("- same Idempotency-Key concurrent replay: PASS (one business mutation)");
+console.log("- same Idempotency-Key concurrent + committed replay: PASS (1x 200, 1x 409, then replay 200)");
 console.log("- appointment window guard: PASS");
 console.log("- accepted-state guard: PASS");
 console.log("- authentication/role guards: PASS");
