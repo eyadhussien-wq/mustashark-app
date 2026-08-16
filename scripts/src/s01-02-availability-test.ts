@@ -116,7 +116,7 @@ try {
   assert(result.status === 409 && result.body?.error === "slot_already_booked", `overlap rule failed: ${JSON.stringify(result)}`);
 
   const cancelKey = idempotencyKey("slot-release-cancel");
-  result = await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": cancelKey }, body: JSON.stringify({ bookingId: createdBookingIds[0], reason: TEST_SUBJECT }) });
+  result = await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": cancelKey }, body: JSON.stringify({ bookingId: createdBookingIds[0], reason: TEST_SUBJECT, expectedVersion: 1 }) });
   assert(result.status === 200 && result.body?.booking?.status === "cancelled_by_client", `slot release cancellation failed: ${JSON.stringify(result)}`);
   result = await request("/api/bookings", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey("reusable-slot") }, body: JSON.stringify(validPayload) });
   assert(result.status === 201 && typeof result.body?.booking?.id === "string", `cancelled slot was not reusable: ${JSON.stringify(result)}`);
@@ -149,7 +149,7 @@ try {
   console.log("- concurrency: PASS (1 success / 1 conflict)");
   console.log(`- booking_time_blocks exact active slot: PASS (${blockCount} row)`);
 } finally {
-  if (clientToken) for (const bookingId of createdBookingIds) await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey(`cleanup-${bookingId}`) }, body: JSON.stringify({ bookingId, reason: TEST_SUBJECT }) });
+  if (clientToken) for (const bookingId of createdBookingIds) await request("/api/bookings/cancel", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}`, "Idempotency-Key": idempotencyKey(`cleanup-${bookingId}`) }, body: JSON.stringify({ bookingId, reason: TEST_SUBJECT, expectedVersion: 1 }) });
   if (lawyerToken) {
     const restoreSlots = originalAvailability.map((row) => { const [, day, start, end, duration] = row.split("|"); return { dayOfWeek: Number(day), startTime: start.slice(0, 5), endTime: end.slice(0, 5), slotDurationMinutes: Number(duration) }; });
     try {
