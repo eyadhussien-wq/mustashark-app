@@ -116,18 +116,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Provision current baseline schema
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
-        run: pnpm --filter @workspace/db push
-      - name: Revert S01-03 objects to simulate pre-0009 state
+      - name: Build pre-0009 baseline from migrations 0001-0008
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
         run: |
-          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-          DROP TABLE IF EXISTS idempotency_keys;
-          ALTER TABLE bookings DROP COLUMN IF EXISTS version;
-          SQL
+          for migration in $(find lib/db/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+            case "$migration" in
+              *0009_s01_03_idempotency_and_booking_version.sql) continue ;;
+            esac
+            PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: Apply S01-03 migration explicitly
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_migration
