@@ -17,7 +17,7 @@ export function AgendaCalendar({ model, monthKey, onSelectDay, viewer }: AgendaC
   const cells = buildCalendarCells(model, monthKey);
 
   return (
-    <View accessibilityRole="grid">
+    <View accessibilityRole="none">
       <View style={styles.weekHeader}>
         {WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}
       </View>
