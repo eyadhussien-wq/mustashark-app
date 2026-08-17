@@ -11,6 +11,7 @@ import documentHandoversRouter from "./documentHandovers";
 import paymentProofsRouter from "./paymentProofs";
 import consultationDocumentationRouter from "./consultationDocumentation";
 import representationQuoteRequestsRouter from "./representationQuoteRequests";
+import lawyerProposalsRouter from "./lawyerProposals";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(documentHandoversRouter);
 router.use(paymentProofsRouter);
 router.use(consultationDocumentationRouter);
 router.use(representationQuoteRequestsRouter);
+router.use(lawyerProposalsRouter);
 
 export default router;
