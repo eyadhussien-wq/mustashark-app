@@ -2,19 +2,11 @@ import { Request, Response } from "express";
 import { and, eq, gt, lte } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
-import {
-  lawyerProposalsTable,
-  representationQuoteRequestsTable,
-  usersTable,
-} from "@workspace/db/schema";
-import {
-  createLawyerProposalSchema,
-  lawyerProposalParamsSchema,
-} from "@workspace/api-zod";
+import { lawyerProposalsTable, representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
+import { createLawyerProposalSchema, lawyerProposalParamsSchema } from "@workspace/api-zod";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 
 const PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000;
-
 type ActorRole = "client" | "lawyer";
 
 function requireActor(req: Request, role: ActorRole): string {
@@ -25,31 +17,20 @@ function requireActor(req: Request, role: ActorRole): string {
 }
 
 function parseParams(req: Request) {
-  return lawyerProposalParamsSchema.safeParse({
-    requestId: req.params.requestId,
-    proposalId: req.params.proposalId,
-  });
+  return lawyerProposalParamsSchema.safeParse({ requestId: req.params.requestId, proposalId: req.params.proposalId });
 }
 
 function mapError(error: unknown): { status: number; code: string } | null {
   if (!(error instanceof Error)) return null;
   switch (error.message) {
-    case "AUTHENTICATION_REQUIRED":
-      return { status: 401, code: "authentication_required" };
-    case "CLIENT_ROLE_REQUIRED":
-      return { status: 403, code: "client_role_required" };
-    case "LAWYER_ROLE_REQUIRED":
-      return { status: 403, code: "lawyer_role_required" };
-    case "IDEMPOTENCY_KEY_REQUIRED":
-      return { status: 400, code: "idempotency_key_required" };
-    case "IDEMPOTENCY_REQUEST_MISMATCH":
-      return { status: 409, code: "idempotency_request_mismatch" };
-    case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
-      return { status: 409, code: "idempotency_request_in_progress" };
-    case "IDEMPOTENCY_CLAIM_FAILED":
-      return { status: 409, code: "idempotency_claim_failed" };
-    default:
-      return null;
+    case "AUTHENTICATION_REQUIRED": return { status: 401, code: "authentication_required" };
+    case "CLIENT_ROLE_REQUIRED": return { status: 403, code: "client_role_required" };
+    case "LAWYER_ROLE_REQUIRED": return { status: 403, code: "lawyer_role_required" };
+    case "IDEMPOTENCY_KEY_REQUIRED": return { status: 400, code: "idempotency_key_required" };
+    case "IDEMPOTENCY_REQUEST_MISMATCH": return { status: 409, code: "idempotency_request_mismatch" };
+    case "IDEMPOTENCY_REQUEST_IN_PROGRESS": return { status: 409, code: "idempotency_request_in_progress" };
+    case "IDEMPOTENCY_CLAIM_FAILED": return { status: 409, code: "idempotency_claim_failed" };
+    default: return null;
   }
 }
 
@@ -58,84 +39,53 @@ async function reconcileExpiredProposals(
   requestId: string,
   now: Date,
 ) {
-  await tx
-    .update(lawyerProposalsTable)
-    .set({ status: "expired", updatedAt: now })
-    .where(
-      and(
-        eq(lawyerProposalsTable.requestId, requestId),
-        eq(lawyerProposalsTable.status, "submitted"),
-        lte(lawyerProposalsTable.expiresAt, now),
-      ),
-    );
+  await tx.update(lawyerProposalsTable).set({ status: "expired", updatedAt: now }).where(and(
+    eq(lawyerProposalsTable.requestId, requestId),
+    eq(lawyerProposalsTable.status, "submitted"),
+    lte(lawyerProposalsTable.expiresAt, now),
+  ));
 }
 
 export async function createLawyerProposal(req: Request, res: Response) {
   let lawyerId: string;
-  try {
-    lawyerId = requireActor(req, "lawyer");
-  } catch (error) {
+  try { lawyerId = requireActor(req, "lawyer"); }
+  catch (error) {
     const mapped = mapError(error);
     return res.status(mapped?.status ?? 500).json({ ok: false, error: mapped?.code ?? "internal_server_error" });
   }
 
   const requestId = String(req.params.requestId ?? "");
   const parsed = createLawyerProposalSchema.safeParse(req.body ?? {});
-  if (!requestId || !parsed.success) {
-    return res.status(400).json({
-      ok: false,
-      error: "invalid_lawyer_proposal",
-      ...(parsed.success ? {} : { issues: parsed.error.issues }),
-    });
-  }
+  if (!requestId || !parsed.success) return res.status(400).json({
+    ok: false, error: "invalid_lawyer_proposal", ...(parsed.success ? {} : { issues: parsed.error.issues }),
+  });
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [request] = await tx
-        .select({ id: representationQuoteRequestsTable.id, lawyerId: representationQuoteRequestsTable.lawyerId, status: representationQuoteRequestsTable.status })
-        .from(representationQuoteRequestsTable)
-        .where(eq(representationQuoteRequestsTable.id, requestId))
-        .limit(1);
-
+      const [request] = await tx.select({
+        id: representationQuoteRequestsTable.id,
+        lawyerId: representationQuoteRequestsTable.lawyerId,
+        status: representationQuoteRequestsTable.status,
+      }).from(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, requestId)).limit(1);
       if (!request) return { error: "request_not_found" as const };
-      if (request.status !== "submitted" && request.status !== "under_review") {
-        return { error: "request_not_available" as const };
-      }
-      if (request.lawyerId && request.lawyerId !== lawyerId) {
-        return { error: "lawyer_not_authorized_for_request" as const };
-      }
+      if (request.status !== "submitted" && request.status !== "under_review") return { error: "request_not_available" as const };
+      if (request.lawyerId && request.lawyerId !== lawyerId) return { error: "lawyer_not_authorized_for_request" as const };
 
-      const [lawyer] = await tx
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(and(eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active")))
-        .limit(1);
+      const [lawyer] = await tx.select({ id: usersTable.id }).from(usersTable).where(and(
+        eq(usersTable.id, lawyerId), eq(usersTable.role, "lawyer"), eq(usersTable.accountStatus, "active"),
+      )).limit(1);
       if (!lawyer) return { error: "lawyer_not_found_or_unavailable" as const };
 
       const idempotency = await claimIdempotency(tx, req, lawyerId);
       if (idempotency.replay) return idempotency;
 
       const now = new Date();
-      const submittedAt = now;
-      const expiresAt = new Date(now.getTime() + PROPOSAL_TTL_MS);
-      const id = randomUUID();
-
-      const [created] = await tx
-        .insert(lawyerProposalsTable)
-        .values({
-          id,
-          requestId,
-          lawyerId,
-          amount: parsed.data.amount,
-          currency: parsed.data.currency,
-          status: "submitted",
-          expiresAt,
-          createdAt: now,
-          updatedAt: now,
-          submittedAt,
-        })
-        .returning();
-
+      const [created] = await tx.insert(lawyerProposalsTable).values({
+        id: randomUUID(), requestId, lawyerId,
+        amount: parsed.data.amount, currency: parsed.data.currency,
+        status: "submitted", expiresAt: new Date(now.getTime() + PROPOSAL_TTL_MS),
+        createdAt: now, updatedAt: now, submittedAt: now,
+      }).returning();
       if (!created) throw new Error("LAWYER_PROPOSAL_CREATE_FAILED");
 
       const responseBody = { ok: true, proposal: created };
@@ -162,21 +112,15 @@ export async function listLawyerProposals(req: Request, res: Response) {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [request] = await tx
-        .select({ clientId: representationQuoteRequestsTable.clientId, lawyerId: representationQuoteRequestsTable.lawyerId })
-        .from(representationQuoteRequestsTable)
-        .where(eq(representationQuoteRequestsTable.id, requestId))
-        .limit(1);
+      const [request] = await tx.select({ clientId: representationQuoteRequestsTable.clientId, lawyerId: representationQuoteRequestsTable.lawyerId })
+        .from(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, requestId)).limit(1);
       if (!request) return { error: "request_not_found" as const };
       if (role === "client" && request.clientId !== userId) return { error: "forbidden" as const };
       if (role === "lawyer" && request.lawyerId && request.lawyerId !== userId) return { error: "forbidden" as const };
-
       const now = new Date();
       await reconcileExpiredProposals(tx, requestId, now);
-      const proposals = await tx.select().from(lawyerProposalsTable).where(eq(lawyerProposalsTable.requestId, requestId));
-      return { proposals };
+      return { proposals: await tx.select().from(lawyerProposalsTable).where(eq(lawyerProposalsTable.requestId, requestId)) };
     });
-
     if ("error" in result) return res.status(result.error === "request_not_found" ? 404 : 403).json({ ok: false, error: result.error });
     return res.status(200).json({ ok: true, proposals: result.proposals });
   } catch (error) {
@@ -195,28 +139,24 @@ export async function getLawyerProposal(req: Request, res: Response) {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ proposal: lawyerProposalsTable, clientId: representationQuoteRequestsTable.clientId, requestLawyerId: representationQuoteRequestsTable.lawyerId })
-        .from(lawyerProposalsTable)
-        .innerJoin(representationQuoteRequestsTable, eq(representationQuoteRequestsTable.id, lawyerProposalsTable.requestId))
-        .where(and(eq(lawyerProposalsTable.id, parsed.data.proposalId), eq(lawyerProposalsTable.requestId, parsed.data.requestId)))
-        .limit(1);
+      const [row] = await tx.select({
+        proposal: lawyerProposalsTable, clientId: representationQuoteRequestsTable.clientId,
+      }).from(lawyerProposalsTable).innerJoin(representationQuoteRequestsTable,
+        eq(representationQuoteRequestsTable.id, lawyerProposalsTable.requestId),
+      ).where(and(eq(lawyerProposalsTable.id, parsed.data.proposalId), eq(lawyerProposalsTable.requestId, parsed.data.requestId))).limit(1);
       if (!row) return { error: "proposal_not_found" as const };
       if (role === "client" && row.clientId !== userId) return { error: "forbidden" as const };
       if (role === "lawyer" && row.proposal.lawyerId !== userId) return { error: "forbidden" as const };
 
       const now = new Date();
       if (row.proposal.status === "submitted" && row.proposal.expiresAt && now >= row.proposal.expiresAt) {
-        const [expired] = await tx
-          .update(lawyerProposalsTable)
-          .set({ status: "expired", updatedAt: now })
-          .where(and(eq(lawyerProposalsTable.id, row.proposal.id), eq(lawyerProposalsTable.status, "submitted"), lte(lawyerProposalsTable.expiresAt, now)))
-          .returning();
+        const [expired] = await tx.update(lawyerProposalsTable).set({ status: "expired", updatedAt: now }).where(and(
+          eq(lawyerProposalsTable.id, row.proposal.id), eq(lawyerProposalsTable.status, "submitted"), lte(lawyerProposalsTable.expiresAt, now),
+        )).returning();
         return { proposal: expired ?? { ...row.proposal, status: "expired" as const, updatedAt: now } };
       }
       return { proposal: row.proposal };
     });
-
     if ("error" in result) return res.status(result.error === "proposal_not_found" ? 404 : 403).json({ ok: false, error: result.error });
     return res.status(200).json({ ok: true, proposal: result.proposal });
   } catch (error) {
@@ -230,47 +170,41 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
   if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_lawyer_proposal_params", issues: parsed.error.issues });
 
   let actorId: string;
-  try {
-    actorId = requireActor(req, target === "withdrawn" ? "lawyer" : "client");
-  } catch (error) {
+  try { actorId = requireActor(req, target === "withdrawn" ? "lawyer" : "client"); }
+  catch (error) {
     const mapped = mapError(error);
     return res.status(mapped?.status ?? 500).json({ ok: false, error: mapped?.code ?? "internal_server_error" });
   }
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ proposal: lawyerProposalsTable, clientId: representationQuoteRequestsTable.clientId })
-        .from(lawyerProposalsTable)
-        .innerJoin(representationQuoteRequestsTable, eq(representationQuoteRequestsTable.id, lawyerProposalsTable.requestId))
-        .where(and(eq(lawyerProposalsTable.id, parsed.data.proposalId), eq(lawyerProposalsTable.requestId, parsed.data.requestId)))
-        .limit(1);
+      const [row] = await tx.select({ proposal: lawyerProposalsTable, clientId: representationQuoteRequestsTable.clientId })
+        .from(lawyerProposalsTable).innerJoin(representationQuoteRequestsTable,
+          eq(representationQuoteRequestsTable.id, lawyerProposalsTable.requestId),
+        ).where(and(eq(lawyerProposalsTable.id, parsed.data.proposalId), eq(lawyerProposalsTable.requestId, parsed.data.requestId))).limit(1);
       if (!row) return { error: "proposal_not_found" as const };
       if (target === "withdrawn" ? row.proposal.lawyerId !== actorId : row.clientId !== actorId) return { error: "forbidden" as const };
 
-      const now = new Date();
-      if (row.proposal.status === "submitted" && row.proposal.expiresAt && now >= row.proposal.expiresAt) {
-        await tx
-          .update(lawyerProposalsTable)
-          .set({ status: "expired", updatedAt: now })
-          .where(and(eq(lawyerProposalsTable.id, row.proposal.id), eq(lawyerProposalsTable.status, "submitted"), lte(lawyerProposalsTable.expiresAt, now)));
-        return { error: "proposal_expired" as const };
-      }
-
+      // Claim idempotency before evaluating terminal state so a retry can replay
+      // the original successful response even after the proposal is no longer submitted.
       const idempotency = await claimIdempotency(tx, req, actorId);
       if (idempotency.replay) return idempotency;
 
-      const conditions = [
+      const now = new Date();
+      if (row.proposal.status === "submitted" && row.proposal.expiresAt && now >= row.proposal.expiresAt) {
+        await tx.update(lawyerProposalsTable).set({ status: "expired", updatedAt: now }).where(and(
+          eq(lawyerProposalsTable.id, row.proposal.id), eq(lawyerProposalsTable.status, "submitted"), lte(lawyerProposalsTable.expiresAt, now),
+        ));
+        return { error: "proposal_expired" as const };
+      }
+
+      const [updated] = await tx.update(lawyerProposalsTable).set({
+        status: target, updatedAt: now, ...(target === "withdrawn" ? { withdrawnAt: now } : {}),
+      }).where(and(
         eq(lawyerProposalsTable.id, row.proposal.id),
         eq(lawyerProposalsTable.status, "submitted"),
         gt(lawyerProposalsTable.expiresAt, now),
-      ];
-      const [updated] = await tx
-        .update(lawyerProposalsTable)
-        .set({ status: target, updatedAt: now, ...(target === "withdrawn" ? { withdrawnAt: now } : {}) })
-        .where(and(...conditions))
-        .returning();
-
+      )).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
       const responseBody = { ok: true, proposal: updated };
@@ -279,7 +213,7 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
     });
 
     if ("error" in result) {
-      const status = result.error === "proposal_not_found" ? 404 : result.error === "forbidden" ? 403 : result.error === "proposal_expired" ? 409 : 409;
+      const status = result.error === "proposal_not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
       return res.status(status).json({ ok: false, error: result.error });
     }
     return res.status(result.status).json(result.body);
