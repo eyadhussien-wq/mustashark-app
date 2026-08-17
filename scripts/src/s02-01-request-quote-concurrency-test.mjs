@@ -52,21 +52,19 @@ const results = await Promise.all(
 );
 
 const successful = results.filter((result) => result.status === 201);
-assert(successful.length >= 1, `expected at least one 201 response: ${JSON.stringify(results)}`);
 assert(
-  successful.length === 1,
-  `expected exactly one creator under concurrency, got ${successful.length}: ${JSON.stringify(results)}`,
+  successful.length === results.length,
+  `all concurrent requests must resolve through the same 201 replay contract: ${JSON.stringify(results)}`,
 );
 
-for (const result of results) {
-  assert(
-    result.status === 201,
-    `all concurrent requests must resolve through the same 201 replay contract: ${JSON.stringify(result)}`,
-  );
-}
-
 const createdIds = new Set(results.map((result) => result.body?.request?.id));
-assert(createdIds.size === 1, `concurrent replay returned different request ids: ${JSON.stringify(results)}`);
+assert(
+  createdIds.size === 1,
+  `concurrent requests must resolve to exactly one persisted request id; got ${createdIds.size}: ${JSON.stringify(results)}`,
+);
+
+const [createdId] = createdIds;
+assert(createdId, `concurrent requests returned no persisted request id: ${JSON.stringify(results)}`);
 
 const conflict = await post(
   "/api/representation/quote-requests",
@@ -96,6 +94,6 @@ assert(
 );
 
 console.log("S02-01 REQUEST QUOTE CONCURRENCY TEST PASSED");
-console.log("- concurrent same-key requests: single creator + deterministic replay: PASS");
+console.log("- concurrent same-key requests: one persisted request id + deterministic 201 replay: PASS");
 console.log("- same-key different intent conflict: PASS");
 console.log("- client identity injection rejected: PASS");
