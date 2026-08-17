@@ -20,13 +20,12 @@ bookingsRouter.post("/bookings/email", requireAuth, requireClient, requireIdempo
 bookingsRouter.post("/bookings", requireAuth, requireClient, requireIdempotencyKey, createBookingSafely);
 bookingsRouter.get("/bookings", requireAuth, requireClientLawyerOrAdmin, listMyBookings);
 bookingsRouter.get("/bookings/:id", requireAuth, requireClientLawyerOrAdmin, getBookingById);
-// Confirm uses transactional idempotency inside the DB transaction; the generic
-// HTTP middleware must not claim this key before the financial transaction.
 bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, confirmBookingSafely);
 bookingsRouter.post("/bookings/join", requireAuth, requireClientOrLawyer, requireIdempotencyKey, recordJoin);
 bookingsRouter.post("/bookings/check-absence", requireAuth, requireClientOrAdmin, requireIdempotencyKey, checkLawyerAbsence);
-bookingsRouter.post("/bookings/complete", requireAuth, requireLawyerOrAdmin, requireIdempotencyKey, completeBooking);
-bookingsRouter.post("/bookings/dispute", requireAuth, requireClientLawyerOrAdmin, requireIdempotencyKey, disputeBooking);
+// S01-06: complete/dispute claim idempotency inside the same DB transaction as the state transition.
+bookingsRouter.post("/bookings/complete", requireAuth, requireLawyerOrAdmin, completeBooking);
+bookingsRouter.post("/bookings/dispute", requireAuth, requireClientLawyerOrAdmin, disputeBooking);
 // X/1 uses transactional idempotency inside the DB transaction; the generic
 // HTTP middleware must not claim this key before the financial transaction.
 bookingsRouter.post("/bookings/cancel", requireAuth, requireClientOrLawyer, cancelBookingSafely);
