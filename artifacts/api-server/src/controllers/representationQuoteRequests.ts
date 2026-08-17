@@ -56,9 +56,6 @@ export async function createRepresentationQuoteRequest(req: Request, res: Respon
 
   try {
     const result = await db.transaction(async (tx) => {
-      const idempotency = await claimRepresentationQuoteRequestIdempotency(tx, req, clientId);
-      if (idempotency.replay) return idempotency;
-
       if (parsed.data.lawyerId) {
         const [lawyer] = await tx
           .select({ id: usersTable.id })
@@ -76,6 +73,9 @@ export async function createRepresentationQuoteRequest(req: Request, res: Respon
           return { validationError: "lawyer_not_found_or_unavailable" as const };
         }
       }
+
+      const idempotency = await claimRepresentationQuoteRequestIdempotency(tx, req, clientId);
+      if (idempotency.replay) return idempotency;
 
       const now = new Date();
       const id = randomUUID();
@@ -96,6 +96,8 @@ export async function createRepresentationQuoteRequest(req: Request, res: Respon
           submittedAt: now,
         })
         .returning();
+
+      if (!created) throw new Error("REPRESENTATION_QUOTE_REQUEST_CREATE_FAILED");
 
       const responseBody = { ok: true, request: created };
       await persistIdempotencyResponse(tx, req, clientId, 201, responseBody);
