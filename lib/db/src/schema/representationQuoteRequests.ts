@@ -18,7 +18,7 @@ export const representationQuoteRequestsTable = pgTable(
     serialNumber: text("serial_number").notNull(),
     clientId: text("client_id").notNull().references(() => usersTable.id),
     lawyerId: text("lawyer_id").references(() => usersTable.id),
-    quoteId: text("quote_id").unique().references(() => representationQuotesTable.id),
+    quoteId: text("quote_id").references(() => representationQuotesTable.id),
     title: text("title").notNull(),
     description: text("description"),
     status: representationQuoteRequestStatusEnum("status").notNull().default("draft"),
