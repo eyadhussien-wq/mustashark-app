@@ -12,6 +12,7 @@ import {
 } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
 import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
+import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 
 const createBookingSchema = z.object({ lawyerId: z.string().min(1), subject: z.string().min(1), description: z.string().optional(), scheduledDate: z.string().min(1), scheduledTime: z.string().min(1), type: z.enum(["video", "chat", "phone"]), officeId: z.string().optional() });
 const checkAbsenceSchema = z.object({ bookingId: z.string().min(1) });
@@ -126,7 +127,7 @@ export const checkLawyerAbsence = async (req: Request, res: Response) => {
     const authUser = req.authUser!;
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
     if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
-    if (booking.clientId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_action" });
+    if (booking.clientId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_access" });
     if (!booking.clientJoinedAt) return res.status(400).json({ ok: false, error: "client_did_not_join" });
     const scheduledStartTime = scheduledAt(booking.scheduledDate, booking.scheduledTime);
     if (!scheduledStartTime) return res.status(400).json({ ok: false, error: "invalid_scheduled_datetime" });
@@ -153,7 +154,7 @@ export const listMyBookings = async (req: Request, res: Response) => {
     const rows = await db.select().from(bookingsTable).where(authUser.role === "admin" ? undefined : or(eq(bookingsTable.clientId, authUser.id), eq(bookingsTable.lawyerId, authUser.id)));
     const bookings = await Promise.all(rows.map(async (booking) => {
       const [client] = booking.clientId ? await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, booking.clientId)).limit(1) : [];
-      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId)).limit(1) : [];
+      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId).limit(1) : [];
       return { ...booking, clientName: client?.name ?? "العميل", lawyerName: lawyer?.name ?? "المحامي", lawyerSpecialization: lawyer?.specialization ?? "", lawyerCountry: lawyer?.country ?? null };
     }));
     bookings.sort((a, b) => `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`));
@@ -181,23 +182,31 @@ export const completeBooking = async (req: Request, res: Response) => {
     if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
     if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return res.status(400).json({ ok: false, error: "expectedVersion_is_required" });
     const authUser = req.authUser!;
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
-    if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
-    if (booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_action" });
-    if (booking.version !== expectedVersion) return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
-    if (getT01State(booking) !== "IN_PROGRESS") return res.status(409).json({ ok: false, error: "invalid_state_transition" });
-    try {
-      const updated = await db.transaction(async (tx) => {
-        const row = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "completed", actualEndTime: new Date() }, [eq(bookingsTable.status, "accepted")]);
-        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_COMPLETED", actorId: authUser.id, metadata: { fromState: "IN_PROGRESS", toState: "COMPLETED", expectedVersion } });
-        return row;
-      });
-      return res.json({ ok: true, booking: updated });
-    } catch (error: any) {
-      if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
-      throw error;
-    }
+    const result = await db.transaction(async (tx) => {
+      const idempotency = await claimIdempotency(tx, req, authUser.id);
+      if (idempotency.replay) return { replay: true as const, status: idempotency.status, body: idempotency.body };
+
+      const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+      if (!booking) throw new Error("NOT_FOUND");
+      if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
+      if (booking.version !== expectedVersion) throw new Error("VERSION_CONFLICT");
+      const state = getT01State(booking);
+      if (state !== "IN_PROGRESS") throw new Error("INVALID_T01_TRANSITION:expected_IN_PROGRESS");
+      assertT01Transition(state, "COMPLETED");
+
+      const updated = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "completed", actualEndTime: new Date() }, [eq(bookingsTable.status, "accepted")]);
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_COMPLETED", actorId: authUser.id, metadata: { fromState: state, toState: "COMPLETED", expectedVersion } });
+      const body = { ok: true, booking: updated };
+      await persistIdempotencyResponse(tx, req, authUser.id, 200, body);
+      return { replay: false as const, status: 200, body };
+    });
+    return res.status(result.status).json(result.body);
   } catch (error: any) {
+    if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
+    if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
+    if (error?.message === "VERSION_CONFLICT" || error?.message === "IDEMPOTENCY_REQUEST_IN_PROGRESS") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+    if (error?.message === "IDEMPOTENCY_REQUEST_MISMATCH") return res.status(409).json({ ok: false, error: "idempotency_request_mismatch" });
+    if (error?.message?.startsWith("INVALID_T01_TRANSITION")) return res.status(409).json({ ok: false, error: "invalid_state_transition" });
     console.error("Complete Booking Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
@@ -209,30 +218,33 @@ export const disputeBooking = async (req: Request, res: Response) => {
     if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_input", details: parsed.error.errors });
     const { bookingId, reason, expectedVersion } = parsed.data;
     const authUser = req.authUser!;
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
-    if (!booking) return res.status(404).json({ ok: false, error: "booking_not_found" });
-    if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") return res.status(403).json({ ok: false, error: "unauthorized_access" });
-    const state = getT01State(booking);
-    if (!["SCHEDULED", "IN_PROGRESS", "COMPLETED"].includes(state)) return res.status(409).json({ ok: false, error: "invalid_dispute_state" });
-    try {
-      const updated = await db.transaction(async (tx) => {
-        const row = await updateBookingWithOptimisticLock(
-          tx,
-          bookingId,
-          expectedVersion,
-          { status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus },
-          [eq(bookingsTable.status, booking.status)],
-        );
-        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held", expectedVersion } });
-        return row;
-      });
-      return res.json({ ok: true, booking: updated });
-    } catch (error: any) {
-      if (error?.message === "VERSION_CONFLICT") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
-      throw error;
-    }
+    const result = await db.transaction(async (tx) => {
+      const idempotency = await claimIdempotency(tx, req, authUser.id);
+      if (idempotency.replay) return { replay: true as const, status: idempotency.status, body: idempotency.body };
+
+      const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+      if (!booking) throw new Error("NOT_FOUND");
+      if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
+      if (booking.version !== expectedVersion) throw new Error("VERSION_CONFLICT");
+      const state = getT01State(booking);
+      if (!["SCHEDULED", "IN_PROGRESS", "COMPLETED"].includes(state)) throw new Error("INVALID_T01_TRANSITION:dispute");
+      assertT01Transition(state, "DISPUTED");
+
+      const updated = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus }, [eq(bookingsTable.status, booking.status)]);
+      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held", expectedVersion } });
+      const body = { ok: true, booking: updated };
+      await persistIdempotencyResponse(tx, req, authUser.id, 200, body);
+      return { replay: false as const, status: 200, body };
+    });
+    return res.status(result.status).json(result.body);
   } catch (error: any) {
-    console.error("Dispute Booking Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
+    if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
+    if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_access" });
+    if (error?.message === "VERSION_CONFLICT" || error?.message === "IDEMPOTENCY_REQUEST_IN_PROGRESS") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
+    if (error?.message === "IDEMPOTENCY_REQUEST_MISMATCH") return res.status(409).json({ ok: false, error: "idempotency_request_mismatch" });
+    if (error?.message?.startsWith("INVALID_T01_TRANSITION")) return res.status(409).json({ ok: false, error: "invalid_dispute_state" });
+    console.error("Dispute Booking Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
 
