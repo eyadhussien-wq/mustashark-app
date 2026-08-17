@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
-import { db, lawyerProposalsTable } from "@workspace/db";
+import { db, lawyerProposalsTable, pool } from "@workspace/db";
 
 const baseUrl = process.env.S02_02_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.S02_02_CLIENT_EMAIL ?? "client@mustashark.com";
@@ -120,7 +120,7 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
   assert.ok(["accepted", "rejected"].includes(persisted.status), `unexpected final state: ${persisted.status}`);
 }
 
-// Scenario C: expiry vs withdrawal. Force the proposal to the exact expired side of the boundary,
+// Scenario C: expiry vs withdrawal. Force the proposal to the expired side of the boundary,
 // then race the lazy server expiry reconciliation (GET) against lawyer withdrawal.
 {
   const requestId = await createRequest(clientToken);
@@ -162,7 +162,7 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
   assert.equal(persisted.length, 1, `duplicate submission must create exactly one proposal, got ${persisted.length}`);
 }
 
-await db.$client.end();
+await pool.end();
 console.log("S02-02 LAWYER PROPOSAL CONCURRENCY TEST PASSED");
 console.log("- concurrent accept × N: PASS");
 console.log("- idempotent accept retry: PASS");
