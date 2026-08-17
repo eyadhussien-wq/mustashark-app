@@ -154,7 +154,7 @@ export const listMyBookings = async (req: Request, res: Response) => {
     const rows = await db.select().from(bookingsTable).where(authUser.role === "admin" ? undefined : or(eq(bookingsTable.clientId, authUser.id), eq(bookingsTable.lawyerId, authUser.id)));
     const bookings = await Promise.all(rows.map(async (booking) => {
       const [client] = booking.clientId ? await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, booking.clientId)).limit(1) : [];
-      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId).limit(1) : [];
+      const [lawyer] = booking.lawyerId ? await db.select({ name: usersTable.name, specialization: usersTable.specialization, country: usersTable.country }).from(usersTable).where(eq(usersTable.id, booking.lawyerId)).limit(1) : [];
       return { ...booking, clientName: client?.name ?? "العميل", lawyerName: lawyer?.name ?? "المحامي", lawyerSpecialization: lawyer?.specialization ?? "", lawyerCountry: lawyer?.country ?? null };
     }));
     bookings.sort((a, b) => `${a.scheduledDate}${a.scheduledTime}`.localeCompare(`${b.scheduledDate}${b.scheduledTime}`));
@@ -185,7 +185,6 @@ export const completeBooking = async (req: Request, res: Response) => {
     const result = await db.transaction(async (tx) => {
       const idempotency = await claimIdempotency(tx, req, authUser.id);
       if (idempotency.replay) return { replay: true as const, status: idempotency.status, body: idempotency.body };
-
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
@@ -193,7 +192,6 @@ export const completeBooking = async (req: Request, res: Response) => {
       const state = getT01State(booking);
       if (state !== "IN_PROGRESS") throw new Error("INVALID_T01_TRANSITION:expected_IN_PROGRESS");
       assertT01Transition(state, "COMPLETED");
-
       const updated = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "completed", actualEndTime: new Date() }, [eq(bookingsTable.status, "accepted")]);
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_COMPLETED", actorId: authUser.id, metadata: { fromState: state, toState: "COMPLETED", expectedVersion } });
       const body = { ok: true, booking: updated };
@@ -221,7 +219,6 @@ export const disputeBooking = async (req: Request, res: Response) => {
     const result = await db.transaction(async (tx) => {
       const idempotency = await claimIdempotency(tx, req, authUser.id);
       if (idempotency.replay) return { replay: true as const, status: idempotency.status, body: idempotency.body };
-
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.clientId !== authUser.id && booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
@@ -229,7 +226,6 @@ export const disputeBooking = async (req: Request, res: Response) => {
       const state = getT01State(booking);
       if (!["SCHEDULED", "IN_PROGRESS", "COMPLETED"].includes(state)) throw new Error("INVALID_T01_TRANSITION:dispute");
       assertT01Transition(state, "DISPUTED");
-
       const updated = await updateBookingWithOptimisticLock(tx, bookingId, expectedVersion, { status: "disputed", paymentStatus: booking.escrowStatus === "held" ? "disputed" : booking.paymentStatus }, [eq(bookingsTable.status, booking.status)]);
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "DISPUTE_RAISED", actorId: authUser.id, metadata: { fromState: state, toState: "DISPUTED", reason, financialFreeze: booking.escrowStatus === "held", expectedVersion } });
       const body = { ok: true, booking: updated };
