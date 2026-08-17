@@ -20,7 +20,9 @@ bookingsRouter.post("/bookings/email", requireAuth, requireClient, requireIdempo
 bookingsRouter.post("/bookings", requireAuth, requireClient, requireIdempotencyKey, createBookingSafely);
 bookingsRouter.get("/bookings", requireAuth, requireClientLawyerOrAdmin, listMyBookings);
 bookingsRouter.get("/bookings/:id", requireAuth, requireClientLawyerOrAdmin, getBookingById);
-bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, requireIdempotencyKey, confirmBookingSafely);
+// Confirm uses transactional idempotency inside the DB transaction; the generic
+// HTTP middleware must not claim this key before the financial transaction.
+bookingsRouter.post("/bookings/confirm", requireAuth, requireLawyerOrAdmin, confirmBookingSafely);
 bookingsRouter.post("/bookings/join", requireAuth, requireClientOrLawyer, requireIdempotencyKey, recordJoin);
 bookingsRouter.post("/bookings/check-absence", requireAuth, requireClientOrAdmin, requireIdempotencyKey, checkLawyerAbsence);
 bookingsRouter.post("/bookings/complete", requireAuth, requireLawyerOrAdmin, requireIdempotencyKey, completeBooking);
