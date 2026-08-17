@@ -111,5 +111,10 @@ jobs:
           grep -q "scheduledTimezone" artifacts/api-server/src/controllers/safeBooking.ts
           grep -q "bookingTimeBlocksTable" artifacts/api-server/src/controllers/safeBooking.ts
 
+      - name: Build workspace type declarations
+        run: |
+          pnpm --filter @workspace/db exec tsc -p tsconfig.json
+          pnpm --filter @workspace/api-zod exec tsc -p tsconfig.json
+
       - name: Typecheck API
         run: pnpm --filter @workspace/api-server typecheck
