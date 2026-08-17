@@ -28,13 +28,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-      - name: Upload refreshed lockfile for verification
-        uses: actions/upload-artifact@v4
-        with:
-          name: s01-10-pnpm-lockfile
-          path: pnpm-lock.yaml
-          if-no-files-found: error
+        run: pnpm install --frozen-lockfile
       - name: Typecheck workspace
         run: pnpm run typecheck
       - name: Run S01-10 agenda presentation tests
