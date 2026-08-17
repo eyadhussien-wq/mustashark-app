@@ -12,6 +12,8 @@ export const bookingTimeBlocksTable = pgTable(
     scheduledDate: text("scheduled_date").notNull(),
     startTime: text("start_time").notNull(),
     endTime: text("end_time").notNull(),
+    scheduledAtUtc: timestamp("scheduled_at_utc", { withTimezone: true }),
+    scheduledTimezone: text("scheduled_timezone"),
     releasedAt: timestamp("released_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
