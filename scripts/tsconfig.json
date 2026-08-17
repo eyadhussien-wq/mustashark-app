@@ -5,5 +5,8 @@
     "rootDir": "..",
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "../artifacts/api-server/src/types/express.d.ts"
+  ]
 }

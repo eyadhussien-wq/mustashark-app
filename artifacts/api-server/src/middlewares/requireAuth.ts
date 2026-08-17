@@ -3,14 +3,6 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { verifyToken } from "../lib/jwt";
 
-declare global {
-  namespace Express {
-    interface Request {
-      authUser?: typeof usersTable.$inferSelect & { userId: string };
-    }
-  }
-}
-
 export const requireAuth = async (
   req: Request,
   res: Response,

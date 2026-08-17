@@ -183,6 +183,14 @@ jobs:
           done
           cat /tmp/mustashark-concurrency-api.log
           exit 1
+      - name: Run S02.1 Request Quote contract test
+        run: pnpm --filter @workspace/scripts s02-01:contract
+      - name: Run S02.1 Request Quote concurrency test
+        env:
+          S02_01_BASE_URL: http://127.0.0.1:8081
+          S02_01_CLIENT_EMAIL: client@mustashark.com
+          S02_01_CLIENT_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts s02-01:concurrency
       - name: Run concurrency smoke test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test

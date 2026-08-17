@@ -10,6 +10,7 @@ import notificationsRouter from "./notifications";
 import documentHandoversRouter from "./documentHandovers";
 import paymentProofsRouter from "./paymentProofs";
 import consultationDocumentationRouter from "./consultationDocumentation";
+import representationQuoteRequestsRouter from "./representationQuoteRequests";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(notificationsRouter);
 router.use(documentHandoversRouter);
 router.use(paymentProofsRouter);
 router.use(consultationDocumentationRouter);
+router.use(representationQuoteRequestsRouter);
 
 export default router;
