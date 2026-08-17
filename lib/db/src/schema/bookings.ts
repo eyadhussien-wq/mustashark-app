@@ -60,6 +60,8 @@ export const bookingsTable = pgTable("bookings", {
   description: text("description"),
   scheduledDate: text("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time").notNull(),
+  scheduledAtUtc: timestamp("scheduled_at_utc", { withTimezone: true }),
+  scheduledTimezone: text("scheduled_timezone"),
   status: bookingStatusEnum("status").notNull().default("pending"),
   type: bookingTypeEnum("type").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
