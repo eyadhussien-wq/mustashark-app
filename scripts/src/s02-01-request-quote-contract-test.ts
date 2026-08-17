@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createRepresentationQuoteRequestSchema } from "@workspace/api-zod";
+import { createRepresentationQuoteRequestSchema } from "../../lib/api-zod/src/representationQuoteRequests";
 import {
   requireAuthenticatedClientId,
   RepresentationQuoteRequestValidationError,
@@ -8,9 +8,10 @@ import {
   getIdempotencyKey,
   getRequestHash,
 } from "../../artifacts/api-server/src/lib/transactionalIdempotency";
-import type { Request } from "express";
 
-function request(overrides: Partial<Request> = {}): Request {
+type AuthRequest = Parameters<typeof requireAuthenticatedClientId>[0];
+
+function request(overrides: Partial<AuthRequest> = {}): AuthRequest {
   return {
     get(name: string) {
       if (name.toLowerCase() === "idempotency-key") return "s02-01-test-key";
@@ -26,7 +27,7 @@ function request(overrides: Partial<Request> = {}): Request {
       description: "Need legal representation.",
     },
     ...overrides,
-  } as Request;
+  } as AuthRequest;
 }
 
 function expectValidationError(fn: () => unknown, code: string) {
