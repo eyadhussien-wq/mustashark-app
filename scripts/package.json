@@ -14,6 +14,7 @@
     "s01-03-transition-concurrency-test": "tsx ./src/s01-03-transition-concurrency-test.ts",
     "s01-03-join-concurrency-test": "tsx ./src/s01-03-join-concurrency-test.ts",
     "s01-06-transition-hardening-test": "tsx ./src/s01-06-transition-hardening-test.ts",
+    "s01-10-security-edge-cases-test": "tsx ./src/s01-10-security-edge-cases-test.ts",
     "test": "tsx ./src/s01-03-idempotency-test.ts && tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
