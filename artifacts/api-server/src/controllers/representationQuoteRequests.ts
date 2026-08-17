@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
@@ -57,59 +57,40 @@ export async function createRepresentationQuoteRequest(req: Request, res: Respon
   try {
     const result = await db.transaction(async (tx) => {
       const idempotency = await claimRepresentationQuoteRequestIdempotency(tx, req, clientId);
-      if (idempotency.replay) {
-        return idempotency;
-      }
+      if (idempotency.replay) return idempotency;
 
       if (parsed.data.lawyerId) {
         const [lawyer] = await tx
           .select({ id: usersTable.id })
           .from(usersTable)
-          .where(eq(usersTable.id, parsed.data.lawyerId))
+          .where(
+            and(
+              eq(usersTable.id, parsed.data.lawyerId),
+              eq(usersTable.role, "lawyer"),
+              eq(usersTable.accountStatus, "active"),
+            ),
+          )
           .limit(1);
 
         if (!lawyer) {
-          return { validationError: "lawyer_not_found" as const };
-        }
-
-        const [lawyerRole] = await tx
-          .select({ id: usersTable.id })
-          .from(usersTable)
-          .where(eq(usersTable.id, parsed.data.lawyerId))
-          .limit(1);
-
-        if (!lawyerRole) {
-          return { validationError: "lawyer_not_found" as const };
+          return { validationError: "lawyer_not_found_or_unavailable" as const };
         }
       }
 
       const now = new Date();
-      const body = {
-        ok: true,
-        request: {
-          id: randomUUID(),
-          serialNumber: createSerialNumber(),
-          clientId,
-          lawyerId: parsed.data.lawyerId ?? null,
-          title: parsed.data.title,
-          description: parsed.data.description ?? null,
-          status: "submitted" as const,
-          createdAt: now,
-          updatedAt: now,
-          submittedAt: now,
-        },
-      };
+      const id = randomUUID();
+      const serialNumber = createSerialNumber();
 
       const [created] = await tx
         .insert(representationQuoteRequestsTable)
         .values({
-          id: body.request.id,
-          serialNumber: body.request.serialNumber,
+          id,
+          serialNumber,
           clientId,
-          lawyerId: body.request.lawyerId,
-          title: body.request.title,
-          description: body.request.description,
-          status: body.request.status,
+          lawyerId: parsed.data.lawyerId ?? null,
+          title: parsed.data.title,
+          description: parsed.data.description ?? null,
+          status: "submitted",
           createdAt: now,
           updatedAt: now,
           submittedAt: now,
