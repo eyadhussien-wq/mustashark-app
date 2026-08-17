@@ -1,0 +1,120 @@
+name: S01-08 Timezone Localization Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/db/migrations/0001_s01_08_timezone_localization.sql"
+      - "lib/db/src/schema/bookings.ts"
+      - "lib/db/src/schema/bookingTimeBlocks.ts"
+      - "artifacts/api-server/src/controllers/safeBooking.ts"
+      - ".github/workflows/s01-08-timezone-localization.yml"
+  push:
+    branches: ["codex/s01-08-timezone-localization"]
+
+permissions:
+  contents: read
+
+jobs:
+  migration-rehearsal:
+    name: S01-08 Migration Rehearsal + UTC Schema Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s01_08_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_08_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_08_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Build legacy baseline from main
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          rm -rf /tmp/s01-08-main-schema
+          mkdir -p /tmp/s01-08-main-schema
+          git archive origin/main lib/db/src/schema lib/db/drizzle.config.ts lib/db/package.json | tar -x -C /tmp/s01-08-main-schema
+          cp -R /tmp/s01-08-main-schema/lib/db/src/schema/. lib/db/src/schema/
+          cp /tmp/s01-08-main-schema/lib/db/drizzle.config.ts lib/db/drizzle.config.ts
+          cp /tmp/s01-08-main-schema/lib/db/package.json lib/db/package.json
+          pnpm --filter @workspace/db push
+
+      - name: Restore S01-08 schema files
+        run: git checkout HEAD -- lib/db/src/schema lib/db/drizzle.config.ts lib/db/package.json
+
+      - name: Apply Migration 0001 explicitly
+        run: |
+          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f lib/db/migrations/0001_s01_08_timezone_localization.sql
+
+      - name: Verify UTC columns and types
+        run: |
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='scheduled_at_utc' AND data_type='timestamp with time zone';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='scheduled_timezone' AND data_type='text';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='scheduled_at_utc' AND data_type='timestamp with time zone';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='scheduled_timezone' AND data_type='text';")" = "1"
+
+      - name: Verify legacy columns remain intact
+        run: |
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='scheduled_date';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='scheduled_time';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='scheduled_date';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='start_time';")" = "1"
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='booking_time_blocks' AND column_name='end_time';")" = "1"
+
+      - name: Verify idempotent migration re-run
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0001_s01_08_timezone_localization.sql
+
+      - name: Verify transaction rollback semantics
+        run: |
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='s01_08_rollback_probe';")" = "0"
+          PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          ALTER TABLE bookings ADD COLUMN s01_08_rollback_probe TEXT;
+          ROLLBACK;
+          SQL
+          test "$(PGPASSWORD=postgres psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.columns WHERE table_name='bookings' AND column_name='s01_08_rollback_probe';")" = "0"
+
+      - name: Verify dual-write transaction contract
+        run: |
+          grep -q "db.transaction" artifacts/api-server/src/controllers/safeBooking.ts
+          grep -q "scheduledAtUtc" artifacts/api-server/src/controllers/safeBooking.ts
+          grep -q "scheduledTimezone" artifacts/api-server/src/controllers/safeBooking.ts
+          grep -q "bookingTimeBlocksTable" artifacts/api-server/src/controllers/safeBooking.ts
+
+      - name: Build workspace type declarations
+        run: |
+          pnpm --filter @workspace/db exec tsc -p tsconfig.json
+          pnpm --filter @workspace/api-zod exec tsc -p tsconfig.json
+
+      - name: Typecheck API
+        run: pnpm --filter @workspace/api-server typecheck
