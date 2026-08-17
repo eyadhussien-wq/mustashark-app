@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import type { AgendaReadModel } from "../lib/agenda/agendaTypes";
 import { buildCalendarCells } from "../lib/agenda/agendaCalendar";
+import { formatAgendaTime } from "../lib/agenda/agendaPresentation";
 
 type AgendaCalendarProps = {
   model: AgendaReadModel;
@@ -31,7 +32,7 @@ export function AgendaCalendar({ model, monthKey, onSelectDay }: AgendaCalendarP
             <Text style={[styles.dayNumber, !cell.isCurrentMonth && styles.muted]}>{cell.dayNumber}</Text>
             {cell.day?.items.slice(0, 3).map((item) => (
               <Text key={item.bookingId} numberOfLines={1} style={styles.item}>
-                {item.startsAtUtc.slice(11, 16)} {item.subject}
+                {formatAgendaTime(item.startsAtUtc, model.timezone)} {item.subject}
               </Text>
             ))}
           </Pressable>
