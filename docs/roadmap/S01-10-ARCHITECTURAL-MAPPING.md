@@ -29,3 +29,7 @@ S01-10 must not create a financial effect. If a future implementation crosses in
 ## Evidence Requirement
 
 The final registry entry must record Branch, PR, tests, security review, CI status, Final Diff Audit, and Verify Main evidence before `CLOSED / VERIFIED`.
+
+## CI Activation Marker
+
+This architectural-only update intentionally changes no application or database behavior. It exists to trigger the PR workflow and establish CI evidence before S01-10 implementation begins.
