@@ -15,6 +15,7 @@ export * from "./lawyerBankAccounts";
 export * from "./userNotifications";
 export * from "./representationFinance";
 export * from "./representationQuoteRequests";
+export * from "./lawyerProposals";
 export * from "./documentHandovers";
 export * from "./caseMemberships";
 export * from "./paymentProofs";
