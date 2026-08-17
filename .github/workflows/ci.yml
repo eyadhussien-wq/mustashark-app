@@ -31,6 +31,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck workspace
         run: pnpm run typecheck
+      - name: Run S01-10 agenda presentation tests
+        working-directory: artifacts/mustasharek
+        run: pnpm test
       - name: Build API server
         run: pnpm --filter @workspace/api-server build
       - name: Build admin dashboard
