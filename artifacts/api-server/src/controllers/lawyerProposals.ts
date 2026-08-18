@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, lte } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { lawyerProposalsTable, representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
@@ -7,6 +7,7 @@ import { createLawyerProposalSchema, lawyerProposalParamsSchema } from "@workspa
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 
 const PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000;
+const ACTIVE_PARENT_REQUEST_STATUSES = ["submitted", "under_review"] as const;
 type ActorRole = "client" | "lawyer";
 
 function requireActor(req: Request, role: ActorRole): string {
@@ -68,7 +69,7 @@ export async function createLawyerProposal(req: Request, res: Response) {
         status: representationQuoteRequestsTable.status,
       }).from(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, requestId)).limit(1);
       if (!request) return { error: "request_not_found" as const };
-      if (request.status !== "submitted" && request.status !== "under_review") return { error: "request_not_available" as const };
+      if (!ACTIVE_PARENT_REQUEST_STATUSES.includes(request.status as typeof ACTIVE_PARENT_REQUEST_STATUSES[number])) return { error: "request_not_available" as const };
       if (request.lawyerId && request.lawyerId !== lawyerId) return { error: "lawyer_not_authorized_for_request" as const };
 
       const [lawyer] = await tx.select({ id: usersTable.id }).from(usersTable).where(and(
@@ -116,7 +117,18 @@ export async function listLawyerProposals(req: Request, res: Response) {
         .from(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, requestId)).limit(1);
       if (!request) return { error: "request_not_found" as const };
       if (role === "client" && request.clientId !== userId) return { error: "forbidden" as const };
-      if (role === "lawyer" && request.lawyerId && request.lawyerId !== userId) return { error: "forbidden" as const };
+
+      if (role === "lawyer") {
+        const isAssignedLawyer = request.lawyerId === userId;
+        if (!isAssignedLawyer) {
+          const [ownProposal] = await tx.select({ id: lawyerProposalsTable.id })
+            .from(lawyerProposalsTable)
+            .where(and(eq(lawyerProposalsTable.requestId, requestId), eq(lawyerProposalsTable.lawyerId, userId)))
+            .limit(1);
+          if (!ownProposal) return { error: "forbidden" as const };
+        }
+      }
+
       const now = new Date();
       await reconcileExpiredProposals(tx, requestId, now);
       return { proposals: await tx.select().from(lawyerProposalsTable).where(eq(lawyerProposalsTable.requestId, requestId)) };
@@ -178,12 +190,19 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [row] = await tx.select({ proposal: lawyerProposalsTable, clientId: representationQuoteRequestsTable.clientId })
+      const [row] = await tx.select({
+        proposal: lawyerProposalsTable,
+        clientId: representationQuoteRequestsTable.clientId,
+        parentStatus: representationQuoteRequestsTable.status,
+      })
         .from(lawyerProposalsTable).innerJoin(representationQuoteRequestsTable,
           eq(representationQuoteRequestsTable.id, lawyerProposalsTable.requestId),
         ).where(and(eq(lawyerProposalsTable.id, parsed.data.proposalId), eq(lawyerProposalsTable.requestId, parsed.data.requestId))).limit(1);
       if (!row) return { error: "proposal_not_found" as const };
       if (target === "withdrawn" ? row.proposal.lawyerId !== actorId : row.clientId !== actorId) return { error: "forbidden" as const };
+      if (!ACTIVE_PARENT_REQUEST_STATUSES.includes(row.parentStatus as typeof ACTIVE_PARENT_REQUEST_STATUSES[number])) {
+        return { error: "request_not_available" as const };
+      }
 
       // Claim idempotency before evaluating terminal state so a retry can replay
       // the original successful response even after the proposal is no longer submitted.
@@ -204,6 +223,7 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
         eq(lawyerProposalsTable.id, row.proposal.id),
         eq(lawyerProposalsTable.status, "submitted"),
         gt(lawyerProposalsTable.expiresAt, now),
+        inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
       )).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
