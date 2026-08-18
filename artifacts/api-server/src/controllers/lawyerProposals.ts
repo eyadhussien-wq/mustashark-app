@@ -226,7 +226,7 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
         exists(tx.select({ id: representationQuoteRequestsTable.id }).from(representationQuoteRequestsTable).where(and(
           eq(representationQuoteRequestsTable.id, row.proposal.requestId),
           inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
-        )),
+        ))),
       )).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
