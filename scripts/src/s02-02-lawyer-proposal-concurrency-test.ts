@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
-import { db, lawyerProposalsTable, pool } from "@workspace/db";
+import { db, lawyerProposalsTable, pool, representationQuoteRequestsTable } from "@workspace/db";
 
 const baseUrl = process.env.S02_02_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.S02_02_CLIENT_EMAIL ?? "client@mustashark.com";
@@ -120,7 +120,31 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
   assert.ok(["accepted", "rejected"].includes(persisted.status), `unexpected final state: ${persisted.status}`);
 }
 
-// Scenario C: expiry vs withdrawal. Force the proposal to the expired side of the boundary,
+// Scenario C: parent request state guard. Once the parent request is no longer active,
+// proposal transitions must be rejected and the proposal must remain submitted.
+{
+  const requestId = await createRequest(clientToken);
+  const proposal = await createProposal(requestId, lawyerToken);
+  await db
+    .update(representationQuoteRequestsTable)
+    .set({ status: "converted_to_quote", updatedAt: new Date() })
+    .where(eq(representationQuoteRequestsTable.id, requestId));
+
+  const accept = await post(
+    `/api/representation-quote-requests/${requestId}/proposals/${proposal.id}/accept`,
+    {},
+    clientToken,
+    `parent-guard-${Date.now()}-${Math.random()}`,
+  );
+  assert.equal(accept.status, 409, `transition must be blocked by parent state guard: ${JSON.stringify(accept)}`);
+  assert.equal(accept.body?.error, "request_not_available", "parent state guard must return request_not_available");
+
+  const persisted = await db.query.lawyerProposalsTable.findFirst({ where: eq(lawyerProposalsTable.id, proposal.id) });
+  assert.ok(persisted, "proposal must remain persisted after parent state rejection");
+  assert.equal(persisted.status, "submitted", "blocked transition must not mutate proposal state");
+}
+
+// Scenario D: expiry vs withdrawal. Force the proposal to the expired side of the boundary,
 // then race the lazy server expiry reconciliation (GET) against lawyer withdrawal.
 {
   const requestId = await createRequest(clientToken);
@@ -145,7 +169,7 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
   assert.ok(read.status === 200 || read.status === 409, `expiry read must not fail unexpectedly: ${JSON.stringify(read)}`);
 }
 
-// Scenario D: duplicate submission with the same request + lawyer + idempotency key.
+// Scenario E: duplicate submission with the same request + lawyer + idempotency key.
 {
   const requestId = await createRequest(clientToken);
   const key = `s02-02-duplicate-submit-${Date.now()}-${Math.random()}`;
@@ -167,5 +191,6 @@ console.log("S02-02 LAWYER PROPOSAL CONCURRENCY TEST PASSED");
 console.log("- concurrent accept × N: PASS");
 console.log("- idempotent accept retry: PASS");
 console.log("- accept vs reject race: PASS");
+console.log("- parent request state guard: PASS");
 console.log("- withdraw vs server expiry race: PASS");
 console.log("- duplicate proposal submission: PASS");
