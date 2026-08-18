@@ -1,0 +1,153 @@
+name: S02.2 Lawyer Proposal Tests
+
+on:
+  push:
+    branches:
+      - codex/s02-02-lawyer-proposal
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "lib/db/**"
+      - "lib/api-zod/**"
+      - "artifacts/api-server/**"
+      - "scripts/**"
+      - ".github/workflows/s02-02-lawyer-proposal-tests.yml"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s02-02-lawyer-proposal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+  NODE_ENV: production
+  MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+  PORT: "8081"
+  SESSION_SECRET: s02-02-ci-test-secret
+
+jobs:
+  typecheck:
+    name: S02.2 Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  runtime:
+    name: S02.2 Contract + Concurrency + Isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s02_02_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s02_02_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Provision isolated PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+        run: pnpm --filter @workspace/db push
+
+      - name: Build API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Start API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          PORT: "8081"
+          SESSION_SECRET: s02-02-ci-test-secret
+        run: |
+          pnpm --filter @workspace/api-server start >/tmp/s02-02-api.log 2>&1 &
+          echo $! >/tmp/s02-02-api.pid
+
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/s02-02-api.log
+          exit 1
+
+      - name: Run S02.2 Contract Test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+        run: pnpm --filter @workspace/scripts s02-02:contract
+
+      - name: Run S02.2 Concurrency Test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s02_02_test
+          S02_02_BASE_URL: http://127.0.0.1:8081
+          S02_02_CLIENT_EMAIL: client@mustashark.com
+          S02_02_CLIENT_PASSWORD: test1234
+          S02_02_LAWYER_EMAIL: lawyer@mustashark.com
+          S02_02_LAWYER_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts s02-02:concurrency
+
+      - name: Run Production DB Mutation Guard
+        run: bash scripts/security/forbid-production-db-mutations.sh
+
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/s02-02-api.log
+
+      - name: Teardown API
+        if: always()
+        run: |
+          if [ -f /tmp/s02-02-api.pid ]; then
+            kill "$(cat /tmp/s02-02-api.pid)" 2>/dev/null || true
+          fi
+          pkill -f "node .*dist/index.mjs" 2>/dev/null || true
+
+      - name: Teardown PostgreSQL connections
+        if: always()
+        run: |
+          PGPASSWORD=postgres psql "postgresql://postgres:postgres@localhost:5432/postgres" \
+            -v ON_ERROR_STOP=0 \
+            -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'mustashark_s02_02_test' AND pid <> pg_backend_pid();" || true
