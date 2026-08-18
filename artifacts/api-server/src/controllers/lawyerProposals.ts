@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, lte } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { lawyerProposalsTable, representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
@@ -223,7 +223,10 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
         eq(lawyerProposalsTable.id, row.proposal.id),
         eq(lawyerProposalsTable.status, "submitted"),
         gt(lawyerProposalsTable.expiresAt, now),
-        inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
+        exists(tx.select({ id: representationQuoteRequestsTable.id }).from(representationQuoteRequestsTable).where(and(
+          eq(representationQuoteRequestsTable.id, row.proposal.requestId),
+          inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
+        )),
       )).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
