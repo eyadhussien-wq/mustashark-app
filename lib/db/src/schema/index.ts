@@ -21,6 +21,7 @@ export * from "./caseMemberships";
 export * from "./paymentProofs";
 export * from "./idempotencyKeys";
 export * from "./bookingReminderDeliveries";
+export * from "./agreements";
 
 // Keep these availability/booking tables explicitly exported as part of the
 // public DB schema surface. This avoids project-reference/declaration emit
