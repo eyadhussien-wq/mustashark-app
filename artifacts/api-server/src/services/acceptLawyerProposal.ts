@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, lte } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import {
@@ -96,14 +96,14 @@ export async function acceptLawyerProposalAndInitializeFunding(
     if (!proposal) return { error: "proposal_not_found" };
 
     const now = new Date();
-    if (proposal.status === "submitted" && proposal.expiresAt && now >= proposal.expiresAt) {
+    if (proposal.status === "submitted" && (!proposal.expiresAt || now >= proposal.expiresAt)) {
       await tx
         .update(lawyerProposalsTable)
         .set({ status: "expired", updatedAt: now })
         .where(and(
           eq(lawyerProposalsTable.id, proposal.id),
           eq(lawyerProposalsTable.status, "submitted"),
-          gt(now, proposal.expiresAt),
+          lte(lawyerProposalsTable.expiresAt, now),
         ));
       return { error: "proposal_expired" };
     }
