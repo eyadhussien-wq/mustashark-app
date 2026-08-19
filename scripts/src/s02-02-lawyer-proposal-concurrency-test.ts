@@ -137,7 +137,11 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
     `parent-guard-${Date.now()}-${Math.random()}`,
   );
   assert.equal(accept.status, 409, `transition must be blocked by parent state guard: ${JSON.stringify(accept)}`);
-  assert.equal(accept.body?.error, "request_not_available", "parent state guard must return request_not_available");
+  assert.equal(
+    accept.body?.error,
+    "request_already_converted",
+    "converted parent request must report request_already_converted",
+  );
 
   const persisted = await db.query.lawyerProposalsTable.findFirst({ where: eq(lawyerProposalsTable.id, proposal.id) });
   assert.ok(persisted, "proposal must remain persisted after parent state rejection");
