@@ -20,6 +20,7 @@
     "s02-02:contract": "tsx ./src/s02-02-lawyer-proposal-contract-test.ts",
     "s02-02:concurrency": "tsx ./src/s02-02-lawyer-proposal-concurrency-test.ts",
     "s02-03:contract": "tsx ./src/s02-03-accept-pay-contract-test.ts",
+    "s02-03:concurrency": "tsx ./src/s02-03-accept-pay-concurrency-test.ts",
     "test": "tsx ./src/s01-03-idempotency-test.ts && tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
