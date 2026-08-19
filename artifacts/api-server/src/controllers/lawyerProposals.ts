@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import { lawyerProposalsTable, representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
 import { createLawyerProposalSchema, lawyerProposalParamsSchema } from "@workspace/api-zod";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
+import { acceptLawyerProposalAndInitializeFunding } from "../services/acceptLawyerProposal";
 
 const PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_PARENT_REQUEST_STATUSES = ["submitted", "under_review"] as const;
@@ -31,6 +32,10 @@ function mapError(error: unknown): { status: number; code: string } | null {
     case "IDEMPOTENCY_REQUEST_MISMATCH": return { status: 409, code: "idempotency_request_mismatch" };
     case "IDEMPOTENCY_REQUEST_IN_PROGRESS": return { status: 409, code: "idempotency_request_in_progress" };
     case "IDEMPOTENCY_CLAIM_FAILED": return { status: 409, code: "idempotency_claim_failed" };
+    case "INVALID_AUTHORITATIVE_PROPOSAL_AMOUNT": return { status: 409, code: "invalid_authoritative_proposal_amount" };
+    case "REPRESENTATION_QUOTE_CREATE_FAILED": return { status: 500, code: "representation_quote_create_failed" };
+    case "ESCROW_ACCOUNT_CREATE_FAILED": return { status: 500, code: "escrow_account_create_failed" };
+    case "QUOTE_REQUEST_CONVERSION_FAILED": return { status: 409, code: "quote_request_conversion_failed" };
     default: return null;
   }
 }
@@ -177,7 +182,7 @@ export async function getLawyerProposal(req: Request, res: Response) {
   }
 }
 
-async function transitionProposal(req: Request, res: Response, target: "accepted" | "rejected" | "withdrawn") {
+async function transitionProposal(req: Request, res: Response, target: "rejected" | "withdrawn") {
   const parsed = parseParams(req);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_lawyer_proposal_params", issues: parsed.error.issues });
 
@@ -226,8 +231,8 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
         exists(tx.select({ id: representationQuoteRequestsTable.id }).from(representationQuoteRequestsTable).where(and(
           eq(representationQuoteRequestsTable.id, row.proposal.requestId),
           inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
-        ))),
-      )).returning();
+        )),
+      ))).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
       const responseBody = { ok: true, proposal: updated };
@@ -248,6 +253,37 @@ async function transitionProposal(req: Request, res: Response, target: "accepted
   }
 }
 
-export const acceptLawyerProposal = (req: Request, res: Response) => transitionProposal(req, res, "accepted");
+export async function acceptLawyerProposal(req: Request, res: Response) {
+  const parsed = parseParams(req);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_lawyer_proposal_params", issues: parsed.error.issues });
+
+  let clientId: string;
+  try { clientId = requireActor(req, "client"); }
+  catch (error) {
+    const mapped = mapError(error);
+    return res.status(mapped?.status ?? 500).json({ ok: false, error: mapped?.code ?? "internal_server_error" });
+  }
+
+  try {
+    const result = await acceptLawyerProposalAndInitializeFunding(
+      req,
+      parsed.data.requestId,
+      parsed.data.proposalId,
+      clientId,
+    );
+
+    if ("error" in result) {
+      const status = result.error === "proposal_not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
+      return res.status(status).json({ ok: false, error: result.error });
+    }
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    const mapped = mapError(error);
+    if (mapped) return res.status(mapped.status).json({ ok: false, error: mapped.code });
+    console.error("Lawyer Proposal Accept Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
+  }
+}
+
 export const rejectLawyerProposal = (req: Request, res: Response) => transitionProposal(req, res, "rejected");
 export const withdrawLawyerProposal = (req: Request, res: Response) => transitionProposal(req, res, "withdrawn");
