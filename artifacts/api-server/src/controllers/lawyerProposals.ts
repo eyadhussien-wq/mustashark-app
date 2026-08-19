@@ -232,7 +232,7 @@ async function transitionProposal(req: Request, res: Response, target: "rejected
           eq(representationQuoteRequestsTable.id, row.proposal.requestId),
           inArray(representationQuoteRequestsTable.status, ACTIVE_PARENT_REQUEST_STATUSES),
         )),
-      )).returning();
+      ))).returning();
       if (!updated) return { error: "proposal_transition_conflict" as const };
 
       const responseBody = { ok: true, proposal: updated };

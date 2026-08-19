@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import {
@@ -192,7 +192,7 @@ export async function acceptLawyerProposalAndInitializeFunding(
       .where(and(
         eq(representationQuoteRequestsTable.id, request.id),
         inArray(representationQuoteRequestsTable.status, ACTIVE_REQUEST_STATUSES),
-        eq(representationQuoteRequestsTable.quoteId, request.quoteId),
+        isNull(representationQuoteRequestsTable.quoteId),
       ))
       .returning({ id: representationQuoteRequestsTable.id });
 
