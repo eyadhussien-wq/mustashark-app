@@ -26,24 +26,6 @@ const assertCaseActor = (
   throw new Error("FORBIDDEN");
 };
 
-const assertLawyerEligibility = async (
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  lawyer: typeof usersTable.$inferSelect,
-) => {
-  if (lawyer.role !== "lawyer") throw new Error("LAWYER_ROLE_REQUIRED");
-  if (lawyer.accountStatus !== "active") throw new Error("LAWYER_NOT_ACTIVE");
-
-  const [verification] = await tx
-    .select({ status: lawyerVerificationsTable.status })
-    .from(lawyerVerificationsTable)
-    .where(eq(lawyerVerificationsTable.userId, lawyer.id))
-    .limit(1);
-
-  if (!verification || verification.status !== "approved") {
-    throw new Error("LAWYER_PROFESSIONAL_VERIFICATION_REQUIRED");
-  }
-};
-
 export const createCaseFromAgreement = async (input: {
   agreementId: string;
   actorUserId: string;
@@ -66,7 +48,17 @@ export const createCaseFromAgreement = async (input: {
       .where(eq(usersTable.id, agreement.lawyerId))
       .limit(1);
     if (!lawyer) throw new Error("LAWYER_NOT_FOUND");
-    await assertLawyerEligibility(tx, lawyer);
+    if (lawyer.role !== "lawyer") throw new Error("LAWYER_ROLE_REQUIRED");
+    if (lawyer.accountStatus !== "active") throw new Error("LAWYER_NOT_ACTIVE");
+
+    const [verification] = await tx
+      .select({ status: lawyerVerificationsTable.status })
+      .from(lawyerVerificationsTable)
+      .where(eq(lawyerVerificationsTable.userId, lawyer.id))
+      .limit(1);
+    if (!verification || verification.status !== "approved") {
+      throw new Error("LAWYER_PROFESSIONAL_VERIFICATION_REQUIRED");
+    }
 
     const [existingCase] = await tx
       .select()
