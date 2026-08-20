@@ -9,7 +9,8 @@ const C = colors.light;
 
 export default function ClientActiveCase() {
   const router = useRouter();
-  const { milestoneId } = useLocalSearchParams<{ milestoneId?: string }>();
+  const { caseId, milestoneId } = useLocalSearchParams<{ caseId?: string; milestoneId?: string }>();
+  const normalizedCaseId = typeof caseId === "string" ? caseId.trim() : undefined;
   const normalizedMilestoneId = typeof milestoneId === "string" ? milestoneId.trim() : undefined;
 
   return <View style={styles.screen}>
@@ -18,7 +19,7 @@ export default function ClientActiveCase() {
       <Text style={styles.title}>القضية النشطة</Text>
       <View style={{ width: 29 }} />
     </View>
-    <ActiveCaseWorkspace role="client" milestoneId={normalizedMilestoneId} />
+    <ActiveCaseWorkspace role="client" caseId={normalizedCaseId} milestoneId={normalizedMilestoneId} />
   </View>;
 }
 

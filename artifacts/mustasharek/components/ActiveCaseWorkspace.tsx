@@ -1,13 +1,25 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import colors from "@/constants/colors";
+import { useAuth } from "@/contexts/AuthContext";
 import { FundMilestoneButton } from "@/components/FundMilestoneButton";
 import { ReleaseMilestoneButton } from "@/components/ReleaseMilestoneButton";
 
 const C = colors.light;
 
 export type ActiveCaseRole = "client" | "lawyer";
+type CaseStatus = "active" | "completed" | "closed" | string;
+type CaseRecord = {
+  id: string;
+  agreementId: string;
+  clientId: string;
+  lawyerId: string;
+  status: CaseStatus;
+  completedAt?: string | null;
+  closedAt?: string | null;
+  updatedAt?: string | null;
+};
 
 type TimelineItem = {
   icon: keyof typeof Feather.glyphMap;
@@ -35,20 +47,74 @@ const documents = [
   { icon: "paperclip" as const, title: "مستندات القضية", meta: "4 ملفات" },
 ];
 
-export function ActiveCaseWorkspace({ role, milestoneId }: { role: ActiveCaseRole; milestoneId?: string }) {
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+
+export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: ActiveCaseRole; caseId?: string; milestoneId?: string }) {
   const isClient = role === "client";
+  const { getAuthToken } = useAuth();
+  const [caseRecord, setCaseRecord] = useState<CaseRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(caseId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!caseId) {
+      setCaseRecord(null);
+      setIsLoading(false);
+      setError("معرّف القضية غير موجود");
+      return;
+    }
+
+    const loadCase = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const token = await getAuthToken();
+        if (!token) throw new Error("جلسة الدخول غير متاحة");
+        if (!API_BASE) throw new Error("خدمة القضايا غير مهيأة في هذه البيئة");
+
+        const response = await fetch(`${API_BASE}/cases/${encodeURIComponent(caseId)}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        });
+        const payload = await response.json().catch(() => null) as { ok?: boolean; case?: CaseRecord; error?: string } | null;
+        if (!response.ok || !payload?.ok || !payload.case) {
+          if (response.status === 403) throw new Error("ليس لديك صلاحية للوصول إلى هذه القضية");
+          if (response.status === 404) throw new Error("القضية غير موجودة");
+          throw new Error(payload?.error ?? "تعذر تحميل بيانات القضية");
+        }
+        if (!cancelled) setCaseRecord(payload.case);
+      } catch (loadError) {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void loadCase();
+    return () => { cancelled = true; };
+  }, [caseId, getAuthToken]);
+
+  const statusLabel = caseRecord?.status === "active" ? "نشطة" : caseRecord?.status === "completed" ? "مكتملة" : caseRecord?.status === "closed" ? "مغلقة" : caseRecord?.status ?? "—";
+
+  if (isLoading) {
+    return <View style={styles.centerState}><ActivityIndicator size="large" color={C.gold} /><Text style={styles.stateText}>جاري تحميل بيانات القضية…</Text></View>;
+  }
+
+  if (error || !caseRecord) {
+    return <View style={styles.centerState}><Feather name="alert-circle" size={28} color={C.gold} /><Text style={styles.stateTitle}>تعذر تحميل القضية</Text><Text style={styles.stateText}>{error ?? "بيانات القضية غير متاحة"}</Text></View>;
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.hero}>
         <View style={styles.heroTop}>
-          <View style={styles.caseBadge}><Feather name="briefcase" size={15} color={C.gold} /><Text style={styles.caseBadgeText}>قضية نشطة</Text></View>
+          <View style={styles.caseBadge}><Feather name="briefcase" size={15} color={C.gold} /><Text style={styles.caseBadgeText}>قضية {statusLabel}</Text></View>
           <Text style={styles.kicker}>{isClient ? "مساحة العميل" : "مساحة المحامي"}</Text>
         </View>
-        <Text style={styles.heroTitle}>توكيل وتمثيل — نزاع مدني</Text>
-        <Text style={styles.heroMeta}>{isClient ? "المحامي: أحمد القانوني" : "العميل: محمد العميل"} · رقم القضية #MS-2048</Text>
-        <View style={styles.progressTrack}><View style={styles.progressFill} /></View>
-        <Text style={styles.progressText}>التقدم الإجمالي 60%</Text>
+        <Text style={styles.heroTitle}>القضية #{caseRecord.id}</Text>
+        <Text style={styles.heroMeta}>{isClient ? `المحامي: ${caseRecord.lawyerId}` : `العميل: ${caseRecord.clientId}`} · الحالة: {statusLabel}</Text>
+        <View style={styles.progressTrack}><View style={[styles.progressFill, caseRecord.status === "closed" && styles.closedProgress]} /></View>
+        <Text style={styles.progressText}>الحالة التشغيلية: {statusLabel}</Text>
       </View>
 
       <SectionTitle icon="activity" title="Timeline القضية" />
@@ -101,7 +167,7 @@ export function ActiveCaseWorkspace({ role, milestoneId }: { role: ActiveCaseRol
         ))}
       </View>
 
-      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>التمويل الحقيقي لا يحدد المبلغ من الواجهة؛ الـBackend يقرأ المبلغ والعملة من قاعدة البيانات، ويحمي العملية بـIdempotency ومعاملة ذرية.</Text></View>
+      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات الحالة في هذه الشاشة تأتي الآن من Backend عبر GET /api/cases/:id، مع تمرير JWT الحالي لتطبيق صلاحيات Admin/Client/Lawyer.</Text></View>
     </ScrollView>
   );
 }
@@ -118,6 +184,9 @@ function StatusPill({ status }: { status: TimelineItem["status"] }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   content: { padding: 20, paddingTop: 58, paddingBottom: 110 },
+  centerState: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, backgroundColor: C.background, gap: 10 },
+  stateTitle: { color: C.foreground, fontSize: 16, fontFamily: "Inter_700Bold", textAlign: "center" },
+  stateText: { color: C.mutedForeground, fontSize: 11, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "center" },
   hero: { backgroundColor: C.navy, borderRadius: 20, padding: 19, borderWidth: 1, borderColor: "rgba(201,160,53,.35)" },
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   caseBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(201,160,53,.12)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 10 },
@@ -126,7 +195,8 @@ const styles = StyleSheet.create({
   heroTitle: { color: "#fff", fontSize: 19, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 13 },
   heroMeta: { color: "rgba(255,255,255,.68)", fontSize: 10, textAlign: "right", marginTop: 5, fontFamily: "Inter_400Regular" },
   progressTrack: { height: 8, backgroundColor: "rgba(255,255,255,.12)", borderRadius: 8, marginTop: 16, overflow: "hidden" },
-  progressFill: { width: "60%", height: "100%", backgroundColor: C.gold, borderRadius: 8 },
+  progressFill: { width: "100%", height: "100%", backgroundColor: C.gold, borderRadius: 8 },
+  closedProgress: { backgroundColor: C.success },
   progressText: { color: C.gold, fontSize: 10, textAlign: "right", marginTop: 7, fontFamily: "Inter_600SemiBold" },
   sectionTitle: { flexDirection: "row-reverse", alignItems: "center", gap: 7, marginTop: 20, marginBottom: 9 },
   sectionTitleText: { color: C.foreground, fontSize: 14, fontFamily: "Inter_700Bold", textAlign: "right" },
