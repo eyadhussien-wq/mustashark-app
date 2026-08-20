@@ -52,6 +52,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
 
+      - name: Build workspace libraries
+        run: pnpm run typecheck:libs
+
       - name: Typecheck scripts and API
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
