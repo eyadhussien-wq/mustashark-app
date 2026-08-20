@@ -23,6 +23,7 @@ export * from "./idempotencyKeys";
 export * from "./bookingReminderDeliveries";
 export * from "./agreements";
 export * from "./legalRepresentationDocuments";
+export * from "./cases";
 
 // Keep these availability/booking tables explicitly exported as part of the
 // public DB schema surface. This avoids project-reference/declaration emit
