@@ -7,6 +7,7 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Lawyers from "./pages/lawyers";
+import LawyerVerifications from "./pages/lawyer-verifications";
 import Clients from "./pages/clients";
 import Consultations from "./pages/consultations";
 import Offices from "./pages/offices";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/" component={Dashboard} />
       <Route path="/lawyers" component={Lawyers} />
+      <Route path="/lawyer-verifications" component={LawyerVerifications} />
       <Route path="/clients" component={Clients} />
       <Route path="/consultations" component={Consultations} />
       <Route path="/offices" component={Offices} />
