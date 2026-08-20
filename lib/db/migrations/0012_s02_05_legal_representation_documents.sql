@@ -49,7 +49,7 @@ CREATE TABLE "legal_representation_documents" (
   "created_at" timestamp DEFAULT now() NOT NULL,
   "updated_at" timestamp DEFAULT now() NOT NULL,
   CONSTRAINT "legal_representation_documents_agreement_id_fk"
-    FOREIGN KEY ("agreement_id") REFERENCES "agreements"("id") ON DELETE cascade,
+    FOREIGN KEY ("agreement_id") REFERENCES "agreements"("id"),
   CONSTRAINT "legal_representation_documents_uploaded_by_fk"
     FOREIGN KEY ("uploaded_by") REFERENCES "users"("id"),
   CONSTRAINT "legal_representation_documents_verified_by_fk"
