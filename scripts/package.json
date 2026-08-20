@@ -23,6 +23,7 @@
     "s02-03:concurrency": "tsx ./src/s02-03-accept-pay-concurrency-test.ts",
     "s02-04:contract": "tsx ./src/s02-04-agreement-electronic-confirmation-contract-test.ts",
     "s02-05:api": "tsx ./src/s02-05-legal-representation-documents-api-behavioral-test.ts",
+    "s02-06:financial-closure": "tsx ./src/s02-06-case-financial-closure-guard-test.ts",
     "s02-07:lawyer-eligibility": "tsx ./src/s02-07-lawyer-operational-eligibility-test.ts",
     "test": "tsx ./src/s01-03-idempotency-test.ts && tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
