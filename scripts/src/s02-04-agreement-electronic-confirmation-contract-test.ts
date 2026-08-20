@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import {
   agreementStatusEnum,
@@ -107,14 +108,45 @@ for (const [table, columns] of requiredColumns) {
   }
 }
 
-const agreementSource = JSON.stringify(agreementsTable);
-assert.ok(
-  Object.keys(agreementsTable).includes("currentVersionId"),
-  "agreements must expose currentVersionId",
+const agreementSource = fs.readFileSync(
+  new URL("../../lib/db/src/schema/agreements.ts", import.meta.url),
+  "utf8",
 );
-assert.ok(
-  agreementSource.length > 0,
-  "agreements schema must be materialized",
+
+assert.match(
+  agreementSource,
+  /currentVersionId:[\s\S]*?\.references\(\(\) => agreementVersionsTable\.id\)/,
+  "currentVersionId must retain its FK to agreement_versions.id",
+);
+
+assert.doesNotMatch(
+  agreementSource,
+  /currentVersionId:[\s\S]*?onDelete:\s*["']cascade["']/i,
+  "currentVersionId must not introduce ON DELETE CASCADE",
+);
+
+assert.match(
+  agreementSource,
+  /uniqueIndex\("agreement_versions_agreement_version_uidx"\)/,
+  "agreement version uniqueness constraint must remain declared",
+);
+
+assert.match(
+  agreementSource,
+  /uniqueIndex\("agreement_confirmations_actor_uidx"\)/,
+  "actor confirmation uniqueness constraint must remain declared",
+);
+
+assert.match(
+  agreementSource,
+  /uniqueIndex\("agreement_confirmations_idempotency_uidx"\)/,
+  "confirmation idempotency uniqueness constraint must remain declared",
+);
+
+assert.match(
+  agreementSource,
+  /uniqueIndex\("agreement_evidence_confirmation_uidx"\)/,
+  "evidence uniqueness constraint must remain declared",
 );
 
 console.log("S02-04 AGREEMENT ELECTRONIC CONFIRMATION CONTRACT TEST PASSED");
@@ -125,4 +157,6 @@ console.log("- agreements schema surface: PASS");
 console.log("- agreement_versions schema surface: PASS");
 console.log("- agreement_confirmations schema surface: PASS");
 console.log("- agreement_evidence schema surface: PASS");
-console.log("- currentVersionId schema surface: PASS");
+console.log("- currentVersionId FK contract: PASS");
+console.log("- uniqueness/idempotency constraints: PASS");
+console.log("- no ON DELETE CASCADE on currentVersionId: PASS");
