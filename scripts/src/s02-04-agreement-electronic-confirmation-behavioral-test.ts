@@ -238,14 +238,14 @@ async function run() {
       () => createAgreementVersion({
         agreementId: created.agreement.id,
         content: "unauthorized version",
-        actorUserId: fixture.outsiderId,
+        actorUserId: fixture!.outsiderId,
       }),
       "FORBIDDEN",
     );
     await expectError(
       () => confirmAgreement({
         agreementId: created.agreement.id,
-        actorUserId: fixture.outsiderId,
+        actorUserId: fixture!.outsiderId,
         actorRole: "client",
         idempotencyKey: id("outsider-confirmation"),
       }),
