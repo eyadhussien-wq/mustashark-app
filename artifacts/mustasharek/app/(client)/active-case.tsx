@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
-import React from "react";
 import { Feather } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ActiveCaseWorkspace } from "@/components/ActiveCaseWorkspace";
 import colors from "@/constants/colors";
@@ -9,13 +9,16 @@ const C = colors.light;
 
 export default function ClientActiveCase() {
   const router = useRouter();
+  const { milestoneId } = useLocalSearchParams<{ milestoneId?: string }>();
+  const normalizedMilestoneId = typeof milestoneId === "string" ? milestoneId.trim() : undefined;
+
   return <View style={styles.screen}>
     <View style={styles.header}>
       <TouchableOpacity onPress={() => router.back()} style={styles.back}><Feather name="arrow-right" size={21} color={C.foreground} /></TouchableOpacity>
       <Text style={styles.title}>القضية النشطة</Text>
       <View style={{ width: 29 }} />
     </View>
-    <ActiveCaseWorkspace role="client" />
+    <ActiveCaseWorkspace role="client" milestoneId={normalizedMilestoneId} />
   </View>;
 }
 
