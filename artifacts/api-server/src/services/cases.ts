@@ -1,0 +1,198 @@
+import crypto from "node:crypto";
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  agreementsTable,
+  caseMembershipsTable,
+  casesTable,
+  legalRepresentationDocumentsTable,
+  usersTable,
+} from "@workspace/db/schema";
+
+const REQUIRED_DOCUMENT_TYPES = ["poa", "court_proof"] as const;
+const CASE_TERMINAL_STATES = ["closed"] as const;
+
+type CaseTransition = "completed" | "closed";
+
+const assertCaseActor = (
+  agreement: typeof agreementsTable.$inferSelect,
+  actorUserId: string,
+  actorRole: string,
+) => {
+  if (actorRole === "admin") return;
+  if (actorRole === "client" && agreement.clientId === actorUserId) return;
+  if (actorRole === "lawyer" && agreement.lawyerId === actorUserId) return;
+  throw new Error("FORBIDDEN");
+};
+
+const assertLawyerEligibility = (lawyer: typeof usersTable.$inferSelect) => {
+  if (lawyer.role !== "lawyer") throw new Error("LAWYER_ROLE_REQUIRED");
+  if (lawyer.accountStatus !== "active") throw new Error("LAWYER_NOT_ACTIVE");
+  // Professional verification is intentionally not inferred from accountStatus.
+  // main currently has no canonical professional-verification field/model.
+};
+
+export const createCaseFromAgreement = async (input: {
+  agreementId: string;
+  actorUserId: string;
+  actorRole: string;
+}) => {
+  return db.transaction(async (tx) => {
+    const [agreement] = await tx
+      .select()
+      .from(agreementsTable)
+      .where(eq(agreementsTable.id, input.agreementId))
+      .limit(1);
+    if (!agreement) throw new Error("AGREEMENT_NOT_FOUND");
+
+    assertCaseActor(agreement, input.actorUserId, input.actorRole);
+    if (agreement.status !== "confirmed") throw new Error("AGREEMENT_NOT_CONFIRMED");
+
+    const [lawyer] = await tx
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, agreement.lawyerId))
+      .limit(1);
+    if (!lawyer) throw new Error("LAWYER_NOT_FOUND");
+    assertLawyerEligibility(lawyer);
+
+    const [existingCase] = await tx
+      .select()
+      .from(casesTable)
+      .where(eq(casesTable.agreementId, agreement.id))
+      .limit(1);
+    if (existingCase) return { case: existingCase, created: false };
+
+    const documents = await tx
+      .select({ id: legalRepresentationDocumentsTable.id, documentType: legalRepresentationDocumentsTable.documentType })
+      .from(legalRepresentationDocumentsTable)
+      .where(
+        and(
+          eq(legalRepresentationDocumentsTable.agreementId, agreement.id),
+          eq(legalRepresentationDocumentsTable.status, "verified"),
+          inArray(legalRepresentationDocumentsTable.documentType, [...REQUIRED_DOCUMENT_TYPES]),
+        ),
+      );
+
+    const verifiedTypes = new Set(documents.map((document) => document.documentType));
+    const missingPrerequisites = REQUIRED_DOCUMENT_TYPES.filter((type) => !verifiedTypes.has(type));
+    if (missingPrerequisites.length > 0) {
+      throw new Error(`DOCUMENT_PREREQUISITES_MISSING:${missingPrerequisites.join(",")}`);
+    }
+
+    const caseId = `case_${crypto.randomUUID()}`;
+    const [createdCase] = await tx
+      .insert(casesTable)
+      .values({
+        id: caseId,
+        agreementId: agreement.id,
+        clientId: agreement.clientId,
+        lawyerId: agreement.lawyerId,
+        status: "active",
+      })
+      .returning();
+
+    if (!createdCase) throw new Error("CASE_CREATION_FAILED");
+
+    await tx.insert(caseMembershipsTable).values([
+      {
+        id: `membership_${crypto.randomUUID()}`,
+        caseId,
+        userId: agreement.clientId,
+        role: "client",
+        status: "active",
+      },
+      {
+        id: `membership_${crypto.randomUUID()}`,
+        caseId,
+        userId: agreement.lawyerId,
+        role: "lawyer",
+        status: "active",
+      },
+    ]);
+
+    await tx
+      .update(legalRepresentationDocumentsTable)
+      .set({ caseId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(legalRepresentationDocumentsTable.agreementId, agreement.id),
+          eq(legalRepresentationDocumentsTable.status, "verified"),
+          inArray(legalRepresentationDocumentsTable.documentType, [...REQUIRED_DOCUMENT_TYPES]),
+        ),
+      );
+
+    return { case: createdCase, created: true };
+  });
+};
+
+export const getCaseById = async (caseId: string, actorUserId: string, actorRole: string) => {
+  const [caseRecord] = await db
+    .select()
+    .from(casesTable)
+    .where(eq(casesTable.id, caseId))
+    .limit(1);
+  if (!caseRecord) throw new Error("CASE_NOT_FOUND");
+
+  if (actorRole !== "admin" && caseRecord.clientId !== actorUserId && caseRecord.lawyerId !== actorUserId) {
+    const [membership] = await db
+      .select({ id: caseMembershipsTable.id })
+      .from(caseMembershipsTable)
+      .where(
+        and(
+          eq(caseMembershipsTable.caseId, caseId),
+          eq(caseMembershipsTable.userId, actorUserId),
+          eq(caseMembershipsTable.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!membership) throw new Error("FORBIDDEN");
+  }
+
+  return { case: caseRecord };
+};
+
+export const transitionCase = async (input: {
+  caseId: string;
+  targetStatus: CaseTransition;
+  actorUserId: string;
+  actorRole: string;
+}) => {
+  return db.transaction(async (tx) => {
+    const [caseRecord] = await tx
+      .select()
+      .from(casesTable)
+      .where(eq(casesTable.id, input.caseId))
+      .limit(1);
+    if (!caseRecord) throw new Error("CASE_NOT_FOUND");
+    if (CASE_TERMINAL_STATES.includes(caseRecord.status as (typeof CASE_TERMINAL_STATES)[number])) {
+      throw new Error("CASE_ALREADY_CLOSED");
+    }
+
+    if (input.actorRole !== "admin" && caseRecord.lawyerId !== input.actorUserId && caseRecord.clientId !== input.actorUserId) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (input.targetStatus === "completed" && caseRecord.status !== "active") {
+      throw new Error("INVALID_CASE_TRANSITION");
+    }
+    if (input.targetStatus === "closed" && caseRecord.status !== "completed") {
+      throw new Error("INVALID_CASE_TRANSITION");
+    }
+
+    const now = new Date();
+    const [updatedCase] = await tx
+      .update(casesTable)
+      .set({
+        status: input.targetStatus,
+        completedAt: input.targetStatus === "completed" ? now : caseRecord.completedAt,
+        closedAt: input.targetStatus === "closed" ? now : caseRecord.closedAt,
+        updatedAt: now,
+      })
+      .where(and(eq(casesTable.id, input.caseId), eq(casesTable.status, caseRecord.status)))
+      .returning();
+
+    if (!updatedCase) throw new Error("CASE_TRANSITION_CONFLICT");
+    return { case: updatedCase };
+  });
+};
