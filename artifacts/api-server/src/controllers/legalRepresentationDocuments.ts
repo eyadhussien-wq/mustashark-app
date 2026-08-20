@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod/v4";
 import { agreementLegalDocumentsParamsSchema, legalDocumentIdParamsSchema, rejectLegalDocumentSchema, supersedeLegalDocumentSchema, uploadLegalDocumentSchema } from "@workspace/api-zod";
 import { getLegalDocument, listLegalDocuments, rejectLegalDocument, startLegalDocumentReview, submitLegalDocument, supersedeLegalDocument, uploadLegalDocument, verifyLegalDocument } from "../services/legalRepresentationDocuments";
 
@@ -20,7 +21,7 @@ function serviceErrorResponse(res: Response, error: unknown) {
   return res.status(status).json({ ok: false, error: errorCode });
 }
 
-function parseRequest<T>(schema: { safeParse: (input: unknown) => { success: true; data: T } | { success: false } }, input: unknown, res: Response) {
+function parseRequest<T>(schema: z.ZodType<T>, input: unknown, res: Response): T | null {
   const parsed = schema.safeParse(input ?? {});
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: "invalid_request" });
