@@ -169,7 +169,8 @@ export const transitionCase = async (input: {
       .select()
       .from(casesTable)
       .where(eq(casesTable.id, input.caseId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!caseRecord) throw new Error("CASE_NOT_FOUND");
     if (CASE_TERMINAL_STATES.includes(caseRecord.status as (typeof CASE_TERMINAL_STATES)[number])) {
       throw new Error("CASE_ALREADY_CLOSED");
@@ -201,7 +202,8 @@ export const transitionCase = async (input: {
           eq(agreementsTable.id, caseRecord.agreementId),
           notInArray(representationMilestonesTable.status, [...SETTLED_MILESTONE_STATUSES]),
         ),
-      );
+      )
+      .for("update");
 
     if (unsettledMilestones.length > 0) {
       throw new Error(
