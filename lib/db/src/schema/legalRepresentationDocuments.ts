@@ -3,6 +3,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { agreementsTable } from "./agreements";
+import { casesTable } from "./cases";
 
 export const legalRepresentationDocumentTypeEnum = pgEnum("legal_representation_document_type", [
   "poa",
@@ -31,7 +32,7 @@ export const legalRepresentationDocumentsTable = pgTable(
     agreementId: text("agreement_id")
       .notNull()
       .references(() => agreementsTable.id),
-    caseId: text("case_id"),
+    caseId: text("case_id").references(() => casesTable.id),
     documentType: legalRepresentationDocumentTypeEnum("document_type").notNull(),
     status: legalRepresentationDocumentStatusEnum("status").notNull().default("uploaded"),
     uploadedBy: text("uploaded_by")
