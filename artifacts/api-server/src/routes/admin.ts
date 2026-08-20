@@ -34,6 +34,10 @@ import {
 } from "../controllers/adminReviews";
 import { listAdminBankAccounts } from "../controllers/adminBankAccounts";
 import { reviewBankAccount } from "../controllers/lawyerBankAccounts";
+import {
+  listPendingLawyerVerifications,
+  reviewLawyerVerification,
+} from "../controllers/lawyerVerification";
 
 const adminRouter = Router();
 
@@ -62,6 +66,17 @@ adminRouter.post(
   "/admin/kill-switch/run-all",
   requireAdmin,
   runKillSwitchForAllOffices,
+);
+
+adminRouter.get(
+  "/admin/lawyer-verifications/pending",
+  requireAdmin,
+  listPendingLawyerVerifications,
+);
+adminRouter.patch(
+  "/admin/lawyer-verifications/:id/review",
+  requireAdmin,
+  reviewLawyerVerification,
 );
 
 // ── Lawyer deletion requests ──────────────────────────────────────────────────

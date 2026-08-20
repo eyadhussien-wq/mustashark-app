@@ -10,6 +10,7 @@ import {
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
 import { getLawyerBankAccount, upsertLawyerBankAccount } from "../controllers/lawyerBankAccounts";
+import { getLawyerVerification, submitLawyerVerification } from "../controllers/lawyerVerification";
 
 const profileRouter = Router();
 
@@ -17,8 +18,6 @@ const requireClient = requireRole("client");
 const requireLawyer = requireRole("lawyer");
 const requireClientOrLawyer = requireRole("client", "lawyer");
 
-// Residence country is an identity field. Regular users may not change it after
-// account creation; only an admin-level workflow may change it later.
 function protectResidenceCountry(req: any, res: any, next: any) {
   if (
     req.authUser?.role !== "admin" &&
@@ -36,12 +35,10 @@ function protectResidenceCountry(req: any, res: any, next: any) {
 
 profileRouter.patch("/profile", requireAuth, requireClientOrLawyer, protectResidenceCountry, updateProfile);
 profileRouter.get("/profile/pending-changes", requireAuth, requireLawyer, getPendingChanges);
-
-// Lawyer financial identity: only a lawyer may view or submit a bank account.
-// The submitted account always returns to pending verification, including when
-// an already verified IBAN is replaced.
 profileRouter.get("/profile/bank-account", requireAuth, requireLawyer, getLawyerBankAccount);
 profileRouter.put("/profile/bank-account", requireAuth, requireLawyer, upsertLawyerBankAccount);
+profileRouter.get("/profile/lawyer-verification", requireAuth, requireLawyer, getLawyerVerification);
+profileRouter.post("/profile/lawyer-verification", requireAuth, requireLawyer, submitLawyerVerification);
 
 profileRouter.delete("/profile", requireAuth, requireClient, softDeleteClient);
 profileRouter.post(
