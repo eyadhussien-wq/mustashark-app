@@ -8,6 +8,7 @@ import {
   legalRepresentationDocumentsTable,
   lawyerVerificationsTable,
   representationMilestonesTable,
+  representationQuotesTable,
   usersTable,
 } from "@workspace/db/schema";
 
@@ -155,7 +156,57 @@ export const getCaseById = async (caseId: string, actorUserId: string, actorRole
     if (!membership) throw new Error("FORBIDDEN");
   }
 
-  return { case: caseRecord };
+  const [agreementContext] = await db
+    .select({
+      id: agreementsTable.id,
+      status: agreementsTable.status,
+      quoteId: representationQuotesTable.id,
+      quoteTitle: representationQuotesTable.title,
+      quoteDescription: representationQuotesTable.description,
+      quoteTotalAmount: representationQuotesTable.totalAmount,
+      quoteCurrency: representationQuotesTable.currency,
+      quoteStatus: representationQuotesTable.status,
+      quoteFundingMode: representationQuotesTable.fundingMode,
+    })
+    .from(agreementsTable)
+    .innerJoin(representationQuotesTable, eq(representationQuotesTable.id, agreementsTable.quoteId))
+    .where(eq(agreementsTable.id, caseRecord.agreementId))
+    .limit(1);
+
+  if (!agreementContext) throw new Error("AGREEMENT_NOT_FOUND");
+
+  const milestones = await db
+    .select({
+      id: representationMilestonesTable.id,
+      title: representationMilestonesTable.title,
+      stage: representationMilestonesTable.stage,
+      percentage: representationMilestonesTable.percentage,
+      amount: representationMilestonesTable.amount,
+      status: representationMilestonesTable.status,
+    })
+    .from(representationMilestonesTable)
+    .where(eq(representationMilestonesTable.quoteId, agreementContext.quoteId));
+
+  return {
+    case: {
+      ...caseRecord,
+      agreement: {
+        id: agreementContext.id,
+        status: agreementContext.status,
+        quote: {
+          id: agreementContext.quoteId,
+          title: agreementContext.quoteTitle,
+          description: agreementContext.quoteDescription,
+          totalAmount: agreementContext.quoteTotalAmount,
+          currency: agreementContext.quoteCurrency,
+          status: agreementContext.quoteStatus,
+          fundingMode: agreementContext.quoteFundingMode,
+        },
+        milestones,
+      },
+      milestones,
+    },
+  };
 };
 
 export const transitionCase = async (input: {
