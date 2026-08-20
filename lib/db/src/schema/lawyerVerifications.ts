@@ -13,9 +13,9 @@ export const lawyerVerificationsTable = pgTable("lawyer_verifications", {
     .notNull()
     .unique()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  licenseNumber: text("license_number").notNull().unique(),
-  barAssociation: text("bar_association").notNull(),
-  documentStorageKey: text("document_storage_key").notNull(),
+  licenseNumber: text("license_number").unique(),
+  barAssociation: text("bar_association"),
+  documentStorageKey: text("document_storage_key"),
   status: lawyerVerificationStatusEnum("status").notNull().default("pending"),
   reviewedBy: text("reviewed_by").references(() => usersTable.id),
   reviewedAt: timestamp("reviewed_at"),
