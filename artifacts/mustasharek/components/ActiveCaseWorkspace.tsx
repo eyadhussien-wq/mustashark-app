@@ -3,6 +3,7 @@ import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import colors from "@/constants/colors";
 import { FundMilestoneButton } from "@/components/FundMilestoneButton";
+import { ReleaseMilestoneButton } from "@/components/ReleaseMilestoneButton";
 
 const C = colors.light;
 
@@ -78,6 +79,7 @@ export function ActiveCaseWorkspace({ role, milestoneId }: { role: ActiveCaseRol
           </View>
         ))}
         {isClient && milestoneId ? <FundMilestoneButton milestoneId={milestoneId} /> : null}
+        {isClient && milestoneId ? <ReleaseMilestoneButton milestoneId={milestoneId} /> : null}
       </View>
 
       <SectionTitle icon="credit-card" title="Payments" />
