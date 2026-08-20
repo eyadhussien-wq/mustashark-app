@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
-import { db, lawyerProposalsTable, pool, representationQuoteRequestsTable } from "@workspace/db";
+import {
+  db,
+  lawyerProposalsTable,
+  lawyerVerificationsTable,
+  pool,
+  representationQuoteRequestsTable,
+  usersTable,
+} from "@workspace/db";
 
 const baseUrl = process.env.S02_02_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.S02_02_CLIENT_EMAIL ?? "client@mustashark.com";
@@ -51,6 +58,23 @@ async function postWithoutAuth(path: string, body: unknown) {
   });
 }
 
+async function prepareApprovedLawyerFixture() {
+  const lawyer = await db.query.usersTable.findFirst({
+    where: eq(usersTable.email, lawyerEmail),
+  });
+  assertOk(lawyer, `lawyer fixture user not found: ${lawyerEmail}`);
+
+  await db
+    .update(lawyerVerificationsTable)
+    .set({
+      status: "approved",
+      reviewedAt: new Date(),
+      rejectionReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(lawyerVerificationsTable.userId, lawyer.id));
+}
+
 async function createRequest(clientToken: string) {
   const key = `s02-02-request-${Date.now()}-${Math.random()}`;
   const result = await post(
@@ -76,6 +100,7 @@ async function createProposal(requestId: string, lawyerToken: string, key = `s02
   return result.body.proposal as { id: string; status: string; expiresAt: string };
 }
 
+await prepareApprovedLawyerFixture();
 const clientToken = await login(clientEmail, clientPassword, "client");
 const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
 
