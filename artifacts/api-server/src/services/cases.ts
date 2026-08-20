@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   agreementsTable,
@@ -7,11 +7,13 @@ import {
   casesTable,
   legalRepresentationDocumentsTable,
   lawyerVerificationsTable,
+  representationMilestonesTable,
   usersTable,
 } from "@workspace/db/schema";
 
 const REQUIRED_DOCUMENT_TYPES = ["poa", "court_proof"] as const;
 const CASE_TERMINAL_STATES = ["closed"] as const;
+const SETTLED_MILESTONE_STATUSES = ["released", "cancelled"] as const;
 
 type CaseTransition = "completed" | "closed";
 
@@ -167,7 +169,8 @@ export const transitionCase = async (input: {
       .select()
       .from(casesTable)
       .where(eq(casesTable.id, input.caseId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!caseRecord) throw new Error("CASE_NOT_FOUND");
     if (CASE_TERMINAL_STATES.includes(caseRecord.status as (typeof CASE_TERMINAL_STATES)[number])) {
       throw new Error("CASE_ALREADY_CLOSED");
@@ -188,6 +191,26 @@ export const transitionCase = async (input: {
     }
     if (input.targetStatus === "closed" && caseRecord.status !== "completed") {
       throw new Error("INVALID_CASE_TRANSITION");
+    }
+
+    const unsettledMilestones = await tx
+      .select({ id: representationMilestonesTable.id, status: representationMilestonesTable.status })
+      .from(representationMilestonesTable)
+      .innerJoin(agreementsTable, eq(agreementsTable.quoteId, representationMilestonesTable.quoteId))
+      .where(
+        and(
+          eq(agreementsTable.id, caseRecord.agreementId),
+          notInArray(representationMilestonesTable.status, [...SETTLED_MILESTONE_STATUSES]),
+        ),
+      )
+      .for("update");
+
+    if (unsettledMilestones.length > 0) {
+      throw new Error(
+        `CASE_FINANCIAL_CLOSURE_BLOCKED:${unsettledMilestones
+          .map((milestone) => `${milestone.id}:${milestone.status}`)
+          .join(",")}`,
+      );
     }
 
     const now = new Date();
