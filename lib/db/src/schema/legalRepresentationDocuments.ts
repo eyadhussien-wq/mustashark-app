@@ -30,7 +30,7 @@ export const legalRepresentationDocumentsTable = pgTable(
     id: text("id").primaryKey(),
     agreementId: text("agreement_id")
       .notNull()
-      .references(() => agreementsTable.id, { onDelete: "cascade" }),
+      .references(() => agreementsTable.id),
     caseId: text("case_id"),
     documentType: legalRepresentationDocumentTypeEnum("document_type").notNull(),
     status: legalRepresentationDocumentStatusEnum("status").notNull().default("uploaded"),
