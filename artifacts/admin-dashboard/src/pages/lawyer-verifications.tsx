@@ -93,6 +93,8 @@ export default function LawyerVerifications() {
     },
   });
 
+  const items = pendingQuery.data?.items ?? [];
+
   const approve = (id: string) => {
     if (reviewMutation.isPending) return;
     reviewMutation.mutate({ id, status: "approved" });
@@ -131,7 +133,7 @@ export default function LawyerVerifications() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-600" />
-            <CardTitle>طلبات معلقة ({pendingQuery.data?.items.length ?? 0})</CardTitle>
+            <CardTitle>طلبات معلقة ({items.length})</CardTitle>
           </div>
           <CardDescription>المصدر الوحيد للقائمة هو GET /api/admin/lawyer-verifications/pending.</CardDescription>
         </CardHeader>
@@ -147,14 +149,14 @@ export default function LawyerVerifications() {
                 {pendingQuery.error instanceof Error ? pendingQuery.error.message : "request_failed"}
               </AlertDescription>
             </Alert>
-          ) : pendingQuery.data.items.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
               <FileText className="mx-auto mb-3 h-8 w-8" />
               لا توجد طلبات تحقق مهني معلقة حالياً.
             </div>
           ) : (
             <div className="space-y-4">
-              {pendingQuery.data.items.map((item) => {
+              {items.map((item) => {
                 const isBusy = reviewMutation.isPending && reviewMutation.variables?.id === item.id;
                 return (
                   <div key={item.id} className="overflow-hidden rounded-lg border">
