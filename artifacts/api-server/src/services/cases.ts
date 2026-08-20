@@ -6,6 +6,7 @@ import {
   caseMembershipsTable,
   casesTable,
   legalRepresentationDocumentsTable,
+  lawyerVerificationsTable,
   usersTable,
 } from "@workspace/db/schema";
 
@@ -25,11 +26,22 @@ const assertCaseActor = (
   throw new Error("FORBIDDEN");
 };
 
-const assertLawyerEligibility = (lawyer: typeof usersTable.$inferSelect) => {
+const assertLawyerEligibility = async (
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  lawyer: typeof usersTable.$inferSelect,
+) => {
   if (lawyer.role !== "lawyer") throw new Error("LAWYER_ROLE_REQUIRED");
   if (lawyer.accountStatus !== "active") throw new Error("LAWYER_NOT_ACTIVE");
-  // Professional verification is intentionally not inferred from accountStatus.
-  // main currently has no canonical professional-verification field/model.
+
+  const [verification] = await tx
+    .select({ status: lawyerVerificationsTable.status })
+    .from(lawyerVerificationsTable)
+    .where(eq(lawyerVerificationsTable.userId, lawyer.id))
+    .limit(1);
+
+  if (!verification || verification.status !== "approved") {
+    throw new Error("LAWYER_PROFESSIONAL_VERIFICATION_REQUIRED");
+  }
 };
 
 export const createCaseFromAgreement = async (input: {
@@ -54,7 +66,7 @@ export const createCaseFromAgreement = async (input: {
       .where(eq(usersTable.id, agreement.lawyerId))
       .limit(1);
     if (!lawyer) throw new Error("LAWYER_NOT_FOUND");
-    assertLawyerEligibility(lawyer);
+    await assertLawyerEligibility(tx, lawyer);
 
     const [existingCase] = await tx
       .select()
@@ -169,16 +181,12 @@ export const transitionCase = async (input: {
       throw new Error("CASE_ALREADY_CLOSED");
     }
 
-    // Completion is a professional-work transition: only the assigned lawyer
-    // or an administrator may perform it. Client membership alone is insufficient.
     if (input.targetStatus === "completed") {
       if (input.actorRole !== "admin" && !(input.actorRole === "lawyer" && caseRecord.lawyerId === input.actorUserId)) {
         throw new Error("FORBIDDEN");
       }
     }
 
-    // Closure remains an administrative terminal action until a canonical
-    // client-side closure policy/condition exists in main. Do not invent one.
     if (input.targetStatus === "closed" && input.actorRole !== "admin") {
       throw new Error("FORBIDDEN");
     }
