@@ -1,4 +1,14 @@
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  AnyPgColumn,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { representationQuotesTable } from "./representationFinance";
 
@@ -29,7 +39,9 @@ export const agreementsTable = pgTable(
     clientId: text("client_id").notNull().references(() => usersTable.id),
     lawyerId: text("lawyer_id").notNull().references(() => usersTable.id),
     status: agreementStatusEnum("status").notNull().default("draft"),
-    currentVersionId: text("current_version_id").references(() => agreementVersionsTable.id),
+    currentVersionId: text("current_version_id").references(
+      (): AnyPgColumn => agreementVersionsTable.id,
+    ),
     confirmedAt: timestamp("confirmed_at"),
     confirmedBy: text("confirmed_by").references(() => usersTable.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -46,7 +58,9 @@ export const agreementVersionsTable = pgTable(
   "agreement_versions",
   {
     id: text("id").primaryKey(),
-    agreementId: text("agreement_id").notNull().references(() => agreementsTable.id),
+    agreementId: text("agreement_id")
+      .notNull()
+      .references((): AnyPgColumn => agreementsTable.id),
     version: integer("version").notNull(),
     status: agreementVersionStatusEnum("status").notNull().default("draft"),
     content: text("content").notNull(),
