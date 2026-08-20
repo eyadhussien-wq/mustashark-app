@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -9,13 +9,16 @@ const C = colors.light;
 
 export default function LawyerActiveCase() {
   const router = useRouter();
+  const { caseId } = useLocalSearchParams<{ caseId?: string }>();
+  const normalizedCaseId = typeof caseId === "string" ? caseId.trim() : undefined;
+
   return <View style={styles.screen}>
     <View style={styles.header}>
       <TouchableOpacity onPress={() => router.back()} style={styles.back}><Feather name="arrow-right" size={21} color={C.foreground} /></TouchableOpacity>
       <Text style={styles.title}>القضية النشطة</Text>
       <View style={{ width: 29 }} />
     </View>
-    <ActiveCaseWorkspace role="lawyer" />
+    <ActiveCaseWorkspace role="lawyer" caseId={normalizedCaseId} />
   </View>;
 }
 
