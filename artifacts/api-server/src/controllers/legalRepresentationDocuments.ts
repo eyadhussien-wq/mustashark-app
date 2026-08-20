@@ -49,7 +49,8 @@ function serviceErrorResponse(res: Response, error: unknown) {
 function parseRequest<T>(schema: { safeParse: (input: unknown) => { success: true; data: T } | { success: false; error: unknown } }, input: unknown, res: Response) {
   const parsed = schema.safeParse(input ?? {});
   if (!parsed.success) {
-    return res.status(400).json({ ok: false, error: "invalid_request" });
+    res.status(400).json({ ok: false, error: "invalid_request" });
+    return null;
   }
   return parsed.data;
 }
@@ -58,7 +59,7 @@ export async function uploadLegalRepresentationDocument(req: Request, res: Respo
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const data = parseRequest(uploadLegalDocumentSchema, req.body, res);
-  if (res.headersSent) return;
+  if (!data) return;
 
   try {
     const { agreementId, ...documentInput } = data;
@@ -73,7 +74,7 @@ export async function submitLegalRepresentationDocument(req: Request, res: Respo
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
 
   try {
     const document = await submitLegalDocument({ documentId: params.id, actor });
@@ -87,7 +88,7 @@ export async function startLegalRepresentationDocumentReview(req: Request, res: 
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
 
   try {
     const document = await startLegalDocumentReview({ documentId: params.id, actor });
@@ -101,7 +102,7 @@ export async function verifyLegalRepresentationDocument(req: Request, res: Respo
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
 
   try {
     const document = await verifyLegalDocument({ documentId: params.id, actor });
@@ -115,9 +116,9 @@ export async function rejectLegalRepresentationDocument(req: Request, res: Respo
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
   const data = parseRequest(rejectLegalDocumentSchema, req.body, res);
-  if (res.headersSent) return;
+  if (!data) return;
 
   try {
     const document = await rejectLegalDocument({ documentId: params.id, actor, ...data });
@@ -131,9 +132,9 @@ export async function supersedeLegalRepresentationDocument(req: Request, res: Re
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
   const data = parseRequest(supersedeLegalDocumentSchema, req.body, res);
-  if (res.headersSent) return;
+  if (!data) return;
 
   try {
     const result = await supersedeLegalDocument({ documentId: params.id, actor, ...data });
@@ -147,7 +148,7 @@ export async function getLegalRepresentationDocument(req: Request, res: Response
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
 
   try {
     const document = await getLegalDocument({ documentId: params.id, actor });
@@ -161,7 +162,7 @@ export async function listLegalRepresentationDocuments(req: Request, res: Respon
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
   const params = parseRequest(agreementLegalDocumentsParamsSchema, req.params, res);
-  if (res.headersSent) return;
+  if (!params) return;
 
   try {
     const documents = await listLegalDocuments({ agreementId: params.agreementId, actor });
