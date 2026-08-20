@@ -1,11 +1,10 @@
 import type { Request, Response } from "express";
-import { z } from "zod/v4";
 import {
-  parseAgreementLegalDocumentsParams,
-  parseLegalDocumentIdParams,
-  parseRejectLegalDocument,
-  parseSupersedeLegalDocument,
-  parseUploadLegalDocument,
+  agreementLegalDocumentsParamsSchema,
+  legalDocumentIdParamsSchema,
+  rejectLegalDocumentSchema,
+  supersedeLegalDocumentSchema,
+  uploadLegalDocumentSchema,
 } from "@workspace/api-zod";
 import {
   getLegalDocument,
@@ -21,10 +20,7 @@ import {
 function actorFromRequest(req: Request) {
   const authUser = req.authUser;
   if (!authUser) return null;
-  return {
-    userId: authUser.id,
-    role: authUser.role,
-  };
+  return { userId: authUser.id, role: authUser.role };
 }
 
 function serviceErrorResponse(res: Response, error: unknown) {
@@ -50,11 +46,10 @@ function serviceErrorResponse(res: Response, error: unknown) {
   }
 }
 
-function parseBody<T>(schema: z.ZodType<T>, body: unknown, res: Response) {
-  const parsed = schema.safeParse(body ?? {});
+function parseRequest<T>(schema: { safeParse: (input: unknown) => { success: true; data: T } | { success: false; error: unknown } }, input: unknown, res: Response) {
+  const parsed = schema.safeParse(input ?? {});
   if (!parsed.success) {
-    res.status(400).json({ ok: false, error: "invalid_request", issues: parsed.error.issues });
-    return null;
+    return res.status(400).json({ ok: false, error: "invalid_request" });
   }
   return parsed.data;
 }
@@ -62,9 +57,8 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown, res: Response) {
 export async function uploadLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const data = parseBody(parseUploadLegalDocument, req.body, res);
-  if (!data) return;
+  const data = parseRequest(uploadLegalDocumentSchema, req.body, res);
+  if (res.headersSent) return;
 
   try {
     const { agreementId, ...documentInput } = data;
@@ -78,9 +72,8 @@ export async function uploadLegalRepresentationDocument(req: Request, res: Respo
 export async function submitLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
 
   try {
     const document = await submitLegalDocument({ documentId: params.id, actor });
@@ -93,9 +86,8 @@ export async function submitLegalRepresentationDocument(req: Request, res: Respo
 export async function startLegalRepresentationDocumentReview(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
 
   try {
     const document = await startLegalDocumentReview({ documentId: params.id, actor });
@@ -108,9 +100,8 @@ export async function startLegalRepresentationDocumentReview(req: Request, res: 
 export async function verifyLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
 
   try {
     const document = await verifyLegalDocument({ documentId: params.id, actor });
@@ -123,11 +114,10 @@ export async function verifyLegalRepresentationDocument(req: Request, res: Respo
 export async function rejectLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
-  const data = parseBody(parseRejectLegalDocument, req.body, res);
-  if (!data) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
+  const data = parseRequest(rejectLegalDocumentSchema, req.body, res);
+  if (res.headersSent) return;
 
   try {
     const document = await rejectLegalDocument({ documentId: params.id, actor, ...data });
@@ -140,11 +130,10 @@ export async function rejectLegalRepresentationDocument(req: Request, res: Respo
 export async function supersedeLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
-  const data = parseBody(parseSupersedeLegalDocument, req.body, res);
-  if (!data) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
+  const data = parseRequest(supersedeLegalDocumentSchema, req.body, res);
+  if (res.headersSent) return;
 
   try {
     const result = await supersedeLegalDocument({ documentId: params.id, actor, ...data });
@@ -157,9 +146,8 @@ export async function supersedeLegalRepresentationDocument(req: Request, res: Re
 export async function getLegalRepresentationDocument(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseLegalDocumentIdParams, req.params, res);
-  if (!params) return;
+  const params = parseRequest(legalDocumentIdParamsSchema, req.params, res);
+  if (res.headersSent) return;
 
   try {
     const document = await getLegalDocument({ documentId: params.id, actor });
@@ -172,9 +160,8 @@ export async function getLegalRepresentationDocument(req: Request, res: Response
 export async function listLegalRepresentationDocuments(req: Request, res: Response) {
   const actor = actorFromRequest(req);
   if (!actor) return res.status(401).json({ ok: false, error: "unauthorized" });
-
-  const params = parseBody(parseAgreementLegalDocumentsParams, req.params, res);
-  if (!params) return;
+  const params = parseRequest(agreementLegalDocumentsParamsSchema, req.params, res);
+  if (res.headersSent) return;
 
   try {
     const documents = await listLegalDocuments({ agreementId: params.agreementId, actor });
