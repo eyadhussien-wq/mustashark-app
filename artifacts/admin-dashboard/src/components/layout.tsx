@@ -13,7 +13,8 @@ import {
   Trash2,
   FilePenLine,
   Star,
-  LogOut,
+  ShieldCheck,
+  LogOut, 
   Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const NAV_ITEMS = [
   { href: "/", label: "الرئيسية", icon: LayoutDashboard },
   { href: "/lawyers", label: "المحامين", icon: Briefcase },
+  { href: "/lawyer-verifications", label: "التحقق المهني", icon: ShieldCheck, badge: "lawyerVerifications" as const },
   { href: "/clients", label: "العملاء", icon: Users },
   { href: "/consultations", label: "الاستشارات", icon: FileText },
   { href: "/offices", label: "المكاتب", icon: Building2 },
@@ -39,7 +41,6 @@ export function Layout({ children }: { children: ReactNode }) {
     query: { enabled: !!token, queryKey: getGetAdminProfileQueryKey() }
   });
 
-  // Live count badge for deletion requests
   const { data: deletionData } = useQuery({
     queryKey: ["admin-deletion-requests-count"],
     queryFn: async () => {
@@ -56,7 +57,6 @@ export function Layout({ children }: { children: ReactNode }) {
   });
   const deletionCount = deletionData?.count ?? 0;
 
-  // Live count badge for profile change requests
   const { data: profileChangesData } = useQuery({
     queryKey: ["admin-profile-changes-count"],
     queryFn: async () => {
@@ -73,7 +73,6 @@ export function Layout({ children }: { children: ReactNode }) {
   });
   const profileChangesCount = profileChangesData?.count ?? 0;
 
-  // Live count badge for pending text reviews
   const { data: reviewsData } = useQuery({
     queryKey: ["admin-reviews-count"],
     queryFn: async () => {
@@ -90,12 +89,30 @@ export function Layout({ children }: { children: ReactNode }) {
   });
   const reviewsCount = reviewsData?.count ?? 0;
 
+  const { data: lawyerVerificationData } = useQuery({
+    queryKey: ["admin-lawyer-verifications-count"],
+    queryFn: async () => {
+      const t = localStorage.getItem("admin_token");
+      if (!t) return { count: 0 };
+      const res = await fetch("/api/admin/lawyer-verifications/pending", {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) return { count: 0 };
+      const data = (await res.json()) as { items?: unknown[] };
+      return { count: data.items?.length ?? 0 };
+    },
+    enabled: !!token,
+    refetchInterval: 30_000,
+  });
+  const lawyerVerificationCount = lawyerVerificationData?.count ?? 0;
+
   if (!token) return null;
 
   const badgeCounts: Record<string, number> = {
     deletion: deletionCount,
     profileChanges: profileChangesCount,
     reviews: reviewsCount,
+    lawyerVerifications: lawyerVerificationCount,
   };
 
   const NavLinks = () => (
@@ -142,7 +159,6 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row w-full">
-      {/* Mobile Header */}
       <header className="md:hidden flex items-center justify-between p-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
         <h1 className="text-xl font-bold text-sidebar-primary">مستشارك</h1>
         <Sheet>
@@ -157,12 +173,10 @@ export function Layout({ children }: { children: ReactNode }) {
         </Sheet>
       </header>
 
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 flex-col bg-sidebar border-l border-sidebar-border shrink-0">
         <NavLinks />
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
