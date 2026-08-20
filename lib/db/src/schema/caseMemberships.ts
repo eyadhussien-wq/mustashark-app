@@ -1,5 +1,6 @@
 import { pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
+import { casesTable } from "./cases";
 
 export const caseMembershipRoleEnum = pgEnum("case_membership_role", [
   "client",
@@ -16,7 +17,7 @@ export const caseMembershipsTable = pgTable(
   "case_memberships",
   {
     id: text("id").primaryKey(),
-    caseId: text("case_id").notNull(),
+    caseId: text("case_id").notNull().references(() => casesTable.id),
     userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
     role: caseMembershipRoleEnum("role").notNull(),
     status: caseMembershipStatusEnum("status").notNull().default("active"),
