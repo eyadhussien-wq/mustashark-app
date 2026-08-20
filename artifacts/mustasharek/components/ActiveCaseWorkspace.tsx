@@ -70,14 +70,14 @@ export function ActiveCaseWorkspace({ role, milestoneId }: { role: ActiveCaseRol
 
       <SectionTitle icon="layers" title="Milestones ومراحل الأتعاب" />
       <View style={styles.card}>
-        {milestones.map((item, index) => (
+        {milestones.map((item) => (
           <View key={item.title} style={styles.milestoneRow}>
             <View style={styles.rowBetween}><Text style={styles.amount}>{item.amount}</Text><Text style={styles.itemTitle}>{item.title}</Text></View>
             <View style={styles.milestoneTrack}><View style={[styles.milestoneFill, { width: `${item.percent}%` }, item.state === "الحالية" && styles.currentFill]} /></View>
             <View style={styles.rowBetween}><Text style={styles.itemText}>{item.percent}% من الأتعاب</Text><Text style={styles.itemText}>{item.state}</Text></View>
-            {isClient && index === 1 && <FundMilestoneButton milestoneId={milestoneId} />}
           </View>
         ))}
+        {isClient && milestoneId ? <FundMilestoneButton milestoneId={milestoneId} /> : null}
       </View>
 
       <SectionTitle icon="credit-card" title="Payments" />
