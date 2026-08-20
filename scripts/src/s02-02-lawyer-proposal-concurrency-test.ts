@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db, lawyerProposalsTable, pool, representationQuoteRequestsTable } from "@workspace/db";
+import {
+  db,
+  lawyerProposalsTable,
+  lawyerVerificationsTable,
+  pool,
+  representationQuoteRequestsTable,
+  usersTable,
+} from "@workspace/db";
 
 const baseUrl = process.env.S02_02_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.S02_02_CLIENT_EMAIL ?? "client@mustashark.com";
@@ -51,6 +59,41 @@ async function postWithoutAuth(path: string, body: unknown) {
   });
 }
 
+async function prepareApprovedLawyerFixture() {
+  const lawyer = await db.query.usersTable.findFirst({
+    where: eq(usersTable.email, lawyerEmail),
+  });
+  assertOk(lawyer, `lawyer fixture user not found: ${lawyerEmail}`);
+
+  const now = new Date();
+  const verification = await db.query.lawyerVerificationsTable.findFirst({
+    where: eq(lawyerVerificationsTable.userId, lawyer.id),
+  });
+
+  if (!verification) {
+    await db.insert(lawyerVerificationsTable).values({
+      id: `s02-02-verification-${crypto.randomUUID()}`,
+      userId: lawyer.id,
+      status: "approved",
+      reviewedAt: now,
+      rejectionReason: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return;
+  }
+
+  await db
+    .update(lawyerVerificationsTable)
+    .set({
+      status: "approved",
+      reviewedAt: now,
+      rejectionReason: null,
+      updatedAt: now,
+    })
+    .where(eq(lawyerVerificationsTable.userId, lawyer.id));
+}
+
 async function createRequest(clientToken: string) {
   const key = `s02-02-request-${Date.now()}-${Math.random()}`;
   const result = await post(
@@ -78,6 +121,7 @@ async function createProposal(requestId: string, lawyerToken: string, key = `s02
 
 const clientToken = await login(clientEmail, clientPassword, "client");
 const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
+await prepareApprovedLawyerFixture();
 
 // Scenario A: concurrent acceptance + replay.
 {
