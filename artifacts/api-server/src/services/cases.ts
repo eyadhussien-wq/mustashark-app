@@ -169,7 +169,17 @@ export const transitionCase = async (input: {
       throw new Error("CASE_ALREADY_CLOSED");
     }
 
-    if (input.actorRole !== "admin" && caseRecord.lawyerId !== input.actorUserId && caseRecord.clientId !== input.actorUserId) {
+    // Completion is a professional-work transition: only the assigned lawyer
+    // or an administrator may perform it. Client membership alone is insufficient.
+    if (input.targetStatus === "completed") {
+      if (input.actorRole !== "admin" && !(input.actorRole === "lawyer" && caseRecord.lawyerId === input.actorUserId)) {
+        throw new Error("FORBIDDEN");
+      }
+    }
+
+    // Closure remains an administrative terminal action until a canonical
+    // client-side closure policy/condition exists in main. Do not invent one.
+    if (input.targetStatus === "closed" && input.actorRole !== "admin") {
       throw new Error("FORBIDDEN");
     }
 
