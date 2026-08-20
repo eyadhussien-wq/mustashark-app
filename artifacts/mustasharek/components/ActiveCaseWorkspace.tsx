@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import colors from "@/constants/colors";
+import { FundMilestoneButton } from "@/components/FundMilestoneButton";
 
 const C = colors.light;
 
@@ -33,7 +34,7 @@ const documents = [
   { icon: "paperclip" as const, title: "مستندات القضية", meta: "4 ملفات" },
 ];
 
-export function ActiveCaseWorkspace({ role }: { role: ActiveCaseRole }) {
+export function ActiveCaseWorkspace({ role, milestoneId }: { role: ActiveCaseRole; milestoneId?: string }) {
   const isClient = role === "client";
 
   return (
@@ -69,11 +70,12 @@ export function ActiveCaseWorkspace({ role }: { role: ActiveCaseRole }) {
 
       <SectionTitle icon="layers" title="Milestones ومراحل الأتعاب" />
       <View style={styles.card}>
-        {milestones.map((item) => (
+        {milestones.map((item, index) => (
           <View key={item.title} style={styles.milestoneRow}>
             <View style={styles.rowBetween}><Text style={styles.amount}>{item.amount}</Text><Text style={styles.itemTitle}>{item.title}</Text></View>
             <View style={styles.milestoneTrack}><View style={[styles.milestoneFill, { width: `${item.percent}%` }, item.state === "الحالية" && styles.currentFill]} /></View>
             <View style={styles.rowBetween}><Text style={styles.itemText}>{item.percent}% من الأتعاب</Text><Text style={styles.itemText}>{item.state}</Text></View>
+            {isClient && index === 1 && <FundMilestoneButton milestoneId={milestoneId} />}
           </View>
         ))}
       </View>
@@ -97,7 +99,7 @@ export function ActiveCaseWorkspace({ role }: { role: ActiveCaseRole }) {
         ))}
       </View>
 
-      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>البيانات المالية والمستندات هنا للعرض فقط في الـFront. التنفيذ الحقيقي والصلاحيات والتحقق ستُربط بالـBackend لاحقًا.</Text></View>
+      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>التمويل الحقيقي لا يحدد المبلغ من الواجهة؛ الـBackend يقرأ المبلغ والعملة من قاعدة البيانات، ويحمي العملية بـIdempotency ومعاملة ذرية.</Text></View>
     </ScrollView>
   );
 }
