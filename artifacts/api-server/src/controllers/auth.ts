@@ -76,6 +76,15 @@ function roleMismatchResponse(role: string) {
   };
 }
 
+function lawyerVerificationPendingResponse() {
+  return {
+    ok: false,
+    error: "lawyer_verification_pending",
+    accountStatus: "pending",
+    message: "تم استلام طلب تسجيل المحامي. لا يمكن استخدام بوابة المحامين قبل التحقق المهني واعتماد الإدارة.",
+  };
+}
+
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
@@ -104,6 +113,8 @@ export async function socialAuth(req: Request, res: Response) {
         authProvider: provider,
         providerId: providerUser.id,
         role,
+        accountStatus: role === "lawyer" ? "pending" : "active",
+        statusReason: role === "lawyer" ? "lawyer_verification_required" : null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -125,6 +136,10 @@ export async function socialAuth(req: Request, res: Response) {
 
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     if (isBlockedAccountStatus(dbUser.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "عذراً، تم إيقاف هذا الحساب. يرجى التواصل مع الدعم." });
+    if (dbUser.role === "lawyer" && dbUser.accountStatus === "pending") {
+      req.log.warn({ userId: dbUser.id, email: dbUser.email }, "lawyer login blocked pending professional verification");
+      return res.status(403).json(lawyerVerificationPendingResponse());
+    }
     if (dbUser.accountStatus !== "active" && dbUser.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
 
     if (dbUser.authProvider === "local" || !dbUser.providerId) {
@@ -198,6 +213,10 @@ export async function localAuth(req: Request, res: Response) {
 
       if (!existing) return res.status(500).json({ ok: false, error: "user_creation_failed" });
       if (isBlockedAccountStatus(existing.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "تم إيقاف هذا الحساب." });
+      if (existing.role === "lawyer" && existing.accountStatus === "pending") {
+        req.log.warn({ userId: existing.id, email: existing.email }, "lawyer local login blocked pending professional verification");
+        return res.status(403).json(lawyerVerificationPendingResponse());
+      }
       if (existing.accountStatus !== "active" && existing.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
 
       if (existing.passwordHash) {
@@ -236,6 +255,9 @@ export async function localAuth(req: Request, res: Response) {
     const phoneCountry = getPhoneCountry(phone);
     const passwordHash = await bcrypt.hash(password, 10);
     const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const isLawyerRegistration = role === "lawyer";
+    const accountStatus = isLawyerRegistration ? "pending" : "active";
+    const statusReason = isLawyerRegistration ? "lawyer_verification_required" : null;
     await db.insert(usersTable).values({
       id: newId,
       name: name.trim(),
@@ -247,11 +269,25 @@ export async function localAuth(req: Request, res: Response) {
       nationality: nationality ?? null,
       role,
       authProvider: "local",
-      accountStatus: "active",
+      accountStatus,
+      statusReason,
       ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    if (isLawyerRegistration) {
+      req.log.info({ userId: newId, email: normalEmail, accountStatus, statusReason }, "lawyer registration created pending professional verification");
+      return res.status(202).json({
+        ok: true,
+        isNew: true,
+        accountStatus: "pending",
+        role: "lawyer",
+        verificationRequired: true,
+        message: "تم إنشاء طلب تسجيل المحامي. لا يمكن الدخول إلى بوابة المحامين حتى تتحقق الإدارة من الصفة المهنية وتعتمد الحساب.",
+        user: { id: newId, name: name.trim(), email: normalEmail, role: "lawyer", accountStatus: "pending" },
+      });
+    }
 
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
     return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, roleUi: ROLE_UI[role], user: {
