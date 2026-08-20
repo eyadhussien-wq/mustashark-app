@@ -38,7 +38,7 @@ type ReviewResponse = {
 
 type ApiFailure = { ok: false; error?: string };
 
-async function readJson<T>(response: Response): Promise<T> {
+async function readJson<T extends object>(response: Response): Promise<T> {
   const data = (await response.json()) as T | ApiFailure;
   if (!response.ok) {
     const error = "error" in data && typeof data.error === "string" ? data.error : "request_failed";
