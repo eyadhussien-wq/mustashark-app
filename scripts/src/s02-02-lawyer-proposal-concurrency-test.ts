@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   db,
@@ -64,13 +65,31 @@ async function prepareApprovedLawyerFixture() {
   });
   assertOk(lawyer, `lawyer fixture user not found: ${lawyerEmail}`);
 
+  const now = new Date();
+  const verification = await db.query.lawyerVerificationsTable.findFirst({
+    where: eq(lawyerVerificationsTable.userId, lawyer.id),
+  });
+
+  if (!verification) {
+    await db.insert(lawyerVerificationsTable).values({
+      id: `s02-02-verification-${crypto.randomUUID()}`,
+      userId: lawyer.id,
+      status: "approved",
+      reviewedAt: now,
+      rejectionReason: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return;
+  }
+
   await db
     .update(lawyerVerificationsTable)
     .set({
       status: "approved",
-      reviewedAt: new Date(),
+      reviewedAt: now,
       rejectionReason: null,
-      updatedAt: new Date(),
+      updatedAt: now,
     })
     .where(eq(lawyerVerificationsTable.userId, lawyer.id));
 }
@@ -100,9 +119,9 @@ async function createProposal(requestId: string, lawyerToken: string, key = `s02
   return result.body.proposal as { id: string; status: string; expiresAt: string };
 }
 
-await prepareApprovedLawyerFixture();
 const clientToken = await login(clientEmail, clientPassword, "client");
 const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
+await prepareApprovedLawyerFixture();
 
 // Scenario A: concurrent acceptance + replay.
 {
