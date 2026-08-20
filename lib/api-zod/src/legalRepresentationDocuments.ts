@@ -8,31 +8,20 @@ export const legalDocumentIdParamsSchema = z.object({ id: z.string().trim().min(
 export const agreementLegalDocumentsParamsSchema = z.object({ agreementId: z.string().trim().min(1).max(200) }).strict();
 
 export const uploadLegalDocumentSchema = z.object({
-  agreementId: z.string().trim().min(1).max(200),
-  documentType: legalDocumentTypeSchema,
-  fileName: z.string().trim().min(1).max(255),
-  mimeType: z.string().trim().max(200).nullable().optional(),
-  storageKey: z.string().trim().min(1).max(2000),
-  content: z.string().min(1),
-  title: z.string().trim().min(1).max(500),
-  courtName: z.string().trim().max(500).nullable().optional(),
-  caseNumberReference: z.string().trim().max(200).nullable().optional(),
-  issuedAt: issuedAtSchema.nullable().optional(),
-  metadata: legalDocumentMetadataSchema,
+  agreementId: z.string().trim().min(1).max(200), documentType: legalDocumentTypeSchema,
+  fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(200).nullable().optional(),
+  storageKey: z.string().trim().min(1).max(2000), content: z.string().min(1), title: z.string().trim().min(1).max(500),
+  courtName: z.string().trim().max(500).nullable().optional(), caseNumberReference: z.string().trim().max(200).nullable().optional(),
+  issuedAt: issuedAtSchema.nullable().optional(), metadata: legalDocumentMetadataSchema,
 }).strict();
 
 export const rejectLegalDocumentSchema = z.object({ rejectionReason: z.string().trim().min(1).max(2000) }).strict();
 
 export const supersedeLegalDocumentSchema = z.object({
-  fileName: z.string().trim().min(1).max(255),
-  mimeType: z.string().trim().max(200).nullable().optional(),
-  storageKey: z.string().trim().min(1).max(2000),
-  content: z.string().min(1),
-  title: z.string().trim().min(1).max(500),
-  courtName: z.string().trim().max(500).nullable().optional(),
-  caseNumberReference: z.string().trim().max(200).nullable().optional(),
-  issuedAt: issuedAtSchema.nullable().optional(),
-  metadata: legalDocumentMetadataSchema,
+  fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(200).nullable().optional(),
+  storageKey: z.string().trim().min(1).max(2000), content: z.string().min(1), title: z.string().trim().min(1).max(500),
+  courtName: z.string().trim().max(500).nullable().optional(), caseNumberReference: z.string().trim().max(200).nullable().optional(),
+  issuedAt: issuedAtSchema.nullable().optional(), metadata: legalDocumentMetadataSchema,
 }).strict();
 
 export type UploadLegalDocumentInput = z.infer<typeof uploadLegalDocumentSchema>;
