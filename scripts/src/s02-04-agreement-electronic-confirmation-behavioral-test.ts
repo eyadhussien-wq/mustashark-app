@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   agreementConfirmationsTable,
   agreementEvidenceTable,
@@ -19,8 +19,6 @@ import {
   publishAgreementVersion,
 } from "../../artifacts/api-server/src/services/agreements";
 
-type ActorRole = "client" | "lawyer";
-
 type Fixture = {
   clientId: string;
   lawyerId: string;
@@ -28,12 +26,8 @@ type Fixture = {
   quoteId: string;
 };
 
-const ids: string[] = [];
-
 function id(prefix: string) {
-  const value = `${prefix}-${crypto.randomUUID()}`;
-  ids.push(value);
-  return value;
+  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 function assertError(error: unknown, expected: string) {
@@ -98,22 +92,36 @@ async function seedFixture(quoteStatus: "accepted" | "funding" | "active" = "acc
 async function cleanupFixture(fixture: Fixture | undefined) {
   if (!fixture) return;
 
-  await db.delete(agreementEvidenceTable).where(eq(agreementEvidenceTable.agreementId, fixture.quoteId));
-  await db.delete(agreementConfirmationsTable).where(eq(agreementConfirmationsTable.agreementId, fixture.quoteId));
-  await db.delete(agreementVersionsTable).where(eq(agreementVersionsTable.agreementId, fixture.quoteId));
-  await db.delete(agreementsTable).where(eq(agreementsTable.id, fixture.quoteId));
+  const agreementRows = await db
+    .select({ id: agreementsTable.id })
+    .from(agreementsTable)
+    .where(eq(agreementsTable.quoteId, fixture.quoteId));
+  const agreementIds = agreementRows.map((row) => row.id);
+
+  if (agreementIds.length > 0) {
+    const confirmationRows = await db
+      .select({ id: agreementConfirmationsTable.id })
+      .from(agreementConfirmationsTable)
+      .where(inArray(agreementConfirmationsTable.agreementId, agreementIds));
+    const confirmationIds = confirmationRows.map((row) => row.id);
+
+    if (confirmationIds.length > 0) {
+      await db.delete(agreementEvidenceTable).where(inArray(agreementEvidenceTable.confirmationId, confirmationIds));
+    }
+    await db.delete(agreementConfirmationsTable).where(inArray(agreementConfirmationsTable.agreementId, agreementIds));
+    await db.delete(agreementVersionsTable).where(inArray(agreementVersionsTable.agreementId, agreementIds));
+    await db.delete(agreementsTable).where(inArray(agreementsTable.id, agreementIds));
+  }
+
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, fixture.quoteId));
   await db.delete(usersTable).where(
-    and(
-      eq(usersTable.id, fixture.clientId),
-      eq(usersTable.id, fixture.lawyerId),
-      eq(usersTable.id, fixture.outsiderId),
-    ),
+    inArray(usersTable.id, [fixture.clientId, fixture.lawyerId, fixture.outsiderId]),
   );
 }
 
 async function run() {
   let fixture: Fixture | undefined;
+  let concurrencyFixture: Fixture | undefined;
 
   try {
     // 1. Create: prove a valid S02.3 quote can create Agreement + Version 1.
@@ -245,10 +253,9 @@ async function run() {
     );
     console.log("- authorization guards: PASS");
 
-    // 8. Concurrency: two simultaneous confirmations for the same actor/version/key
+    // 8. Concurrency: simultaneous confirmations for the same actor/version/key
     // must resolve as one durable confirmation and replays, not leak a unique-violation error.
-    // This is intentionally a DB-backed race test against the real transaction/unique-index behavior.
-    const concurrencyFixture = await seedFixture("accepted");
+    concurrencyFixture = await seedFixture("accepted");
     const concurrencyCreated = await createAgreement({
       quoteId: concurrencyFixture.quoteId,
       content: "S02.4 concurrency content",
@@ -265,7 +272,7 @@ async function run() {
       Array.from({ length: 8 }, () =>
         confirmAgreement({
           agreementId: concurrencyCreated.agreement.id,
-          actorUserId: concurrencyFixture.clientId,
+          actorUserId: concurrencyFixture!.clientId,
           actorRole: "client",
           idempotencyKey: concurrencyKey,
         }),
@@ -273,11 +280,26 @@ async function run() {
     );
 
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-    assert.equal(rejected.length, 0, `concurrent confirmations must not reject: ${rejected.map((r) => String(r.reason)).join(" | ")}`);
+    assert.equal(
+      rejected.length,
+      0,
+      `concurrent confirmations must not reject: ${rejected.map((result) => String(result.reason)).join(" | ")}`,
+    );
 
-    const fulfilled = results.map((result) => (result as PromiseFulfilledResult<Awaited<ReturnType<typeof confirmAgreement>>>).value);
-    assert.equal(fulfilled.filter((result) => !result.replay).length, 1, "exactly one concurrent confirmation may be the winner");
-    assert.equal(fulfilled.filter((result) => result.replay).length, 7, "all other concurrent confirmations must replay");
+    const fulfilled = results.map(
+      (result) =>
+        (result as PromiseFulfilledResult<Awaited<ReturnType<typeof confirmAgreement>>>).value,
+    );
+    assert.equal(
+      fulfilled.filter((result) => !result.replay).length,
+      1,
+      "exactly one concurrent confirmation may be the winner",
+    );
+    assert.equal(
+      fulfilled.filter((result) => result.replay).length,
+      7,
+      "all other concurrent confirmations must replay",
+    );
     assert.ok(fulfilled.every((result) => result.version.id === concurrencyPublished.version.id));
 
     const persistedConfirmations = await db
@@ -290,18 +312,20 @@ async function run() {
           eq(agreementConfirmationsTable.actorUserId, concurrencyFixture.clientId),
         ),
       );
-    assert.equal(persistedConfirmations.length, 1, "concurrency must persist exactly one actor confirmation");
+    assert.equal(
+      persistedConfirmations.length,
+      1,
+      "concurrency must persist exactly one actor confirmation",
+    );
 
     const persistedEvidence = await db
       .select()
       .from(agreementEvidenceTable)
       .where(eq(agreementEvidenceTable.confirmationId, persistedConfirmations[0].id));
     assert.equal(persistedEvidence.length, 1, "concurrency must persist exactly one evidence row");
-
-    await cleanupFixture(concurrencyFixture);
     console.log("- concurrent same-key confirmation/idempotency race: PASS");
 
-    // 9. Evidence: one evidence record per successful confirmation and content hash must match the published version.
+    // 9. Evidence: one evidence record per successful confirmation and matching content hashes.
     const finalConfirmations = await db
       .select()
       .from(agreementConfirmationsTable)
@@ -323,9 +347,8 @@ async function run() {
 
     console.log("S02-04 AGREEMENT ELECTRONIC CONFIRMATION SERVICE BEHAVIORAL TEST PASSED");
   } finally {
-    if (fixture) {
-      await cleanupFixture(fixture).catch(() => undefined);
-    }
+    await cleanupFixture(concurrencyFixture).catch(() => undefined);
+    await cleanupFixture(fixture).catch(() => undefined);
     await pool.end();
   }
 }
