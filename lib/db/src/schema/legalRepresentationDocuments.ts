@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { AnyPgColumn, pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -53,7 +53,10 @@ export const legalRepresentationDocumentsTable = pgTable(
     rejectedAt: timestamp("rejected_at"),
     rejectionReason: text("rejection_reason"),
     supersededAt: timestamp("superseded_at"),
-    supersedesDocumentId: text("supersedes_document_id"),
+    supersedesDocumentId: text("supersedes_document_id").references(
+      (): AnyPgColumn => legalRepresentationDocumentsTable.id,
+      { onDelete: "set null" },
+    ),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
