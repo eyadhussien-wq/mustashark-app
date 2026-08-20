@@ -14,6 +14,7 @@ import representationQuoteRequestsRouter from "./representationQuoteRequests";
 import lawyerProposalsRouter from "./lawyerProposals";
 import agreementsRouter from "./agreements";
 import legalRepresentationDocumentsRouter from "./legalRepresentationDocuments";
+import casesRouter from "./cases";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(representationQuoteRequestsRouter);
 router.use(lawyerProposalsRouter);
 router.use(agreementsRouter);
 router.use(legalRepresentationDocumentsRouter);
+router.use(casesRouter);
 
 export default router;
