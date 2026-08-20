@@ -135,7 +135,7 @@ export async function reviewLawyerVerification(req: Request, res: Response) {
       const [current] = await tx
         .select()
         .from(lawyerVerificationsTable)
-        .where(eq(lawyerVerificationsTable.id, req.params.id))
+        .where(eq(lawyerVerificationsTable.id, String(req.params.id)))
         .limit(1);
       if (!current) throw new Error("VERIFICATION_NOT_FOUND");
       if (current.status !== "pending") throw new Error("VERIFICATION_NOT_PENDING");
