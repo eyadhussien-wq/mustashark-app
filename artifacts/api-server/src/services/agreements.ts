@@ -92,7 +92,7 @@ export const createAgreement = async (input: {
         clientId: quote.clientId,
         lawyerId: quote.lawyerId,
         status: "prepared",
-        currentVersionId: versionId,
+        currentVersionId: null,
       })
       .returning();
 
@@ -109,7 +109,16 @@ export const createAgreement = async (input: {
       })
       .returning();
 
-    return { agreement, version };
+    const [updatedAgreement] = await tx
+      .update(agreementsTable)
+      .set({
+        currentVersionId: version.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(agreementsTable.id, agreement.id))
+      .returning();
+
+    return { agreement: updatedAgreement, version };
   });
 };
 
