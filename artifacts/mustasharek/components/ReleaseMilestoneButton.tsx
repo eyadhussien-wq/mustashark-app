@@ -45,7 +45,10 @@ export function ReleaseMilestoneButton({ milestoneId }: Props) {
     try {
       const result = await releaseMilestone(getAuthToken, releaseRequestId);
       if (result.ok) setMessage("تم الإفراج عن المرحلة بنجاح.");
-      else setMessage(errorMessage(result.error));
+      else {
+        const errorMessageText = result.error instanceof Error ? result.error.message : String(result.error);
+        setMessage(errorMessage(errorMessageText));
+      }
     } catch (error) {
       setMessage(error instanceof Error && error.message === "authentication_required"
         ? "انتهت جلسة الدخول. يرجى تسجيل الدخول مجدداً."
