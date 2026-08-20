@@ -12,6 +12,7 @@ import paymentProofsRouter from "./paymentProofs";
 import consultationDocumentationRouter from "./consultationDocumentation";
 import representationQuoteRequestsRouter from "./representationQuoteRequests";
 import lawyerProposalsRouter from "./lawyerProposals";
+import agreementsRouter from "./agreements";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(paymentProofsRouter);
 router.use(consultationDocumentationRouter);
 router.use(representationQuoteRequestsRouter);
 router.use(lawyerProposalsRouter);
+router.use(agreementsRouter);
 
 export default router;
