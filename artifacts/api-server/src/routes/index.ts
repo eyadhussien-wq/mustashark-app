@@ -16,6 +16,7 @@ import agreementsRouter from "./agreements";
 import legalRepresentationDocumentsRouter from "./legalRepresentationDocuments";
 import casesRouter from "./cases";
 import fundMilestoneRouter from "./fundMilestone";
+import releaseMilestoneRouter from "./releaseMilestone";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(agreementsRouter);
 router.use(legalRepresentationDocumentsRouter);
 router.use(casesRouter);
 router.use(fundMilestoneRouter);
+router.use(releaseMilestoneRouter);
 
 export default router;
