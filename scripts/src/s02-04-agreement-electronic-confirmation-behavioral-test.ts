@@ -171,7 +171,7 @@ async function run() {
       () => publishAgreementVersion({
         agreementId: created.agreement.id,
         versionId: persistedVersions.find((row) => row.version === 1)!.id,
-        actorUserId: fixture.lawyerId,
+        actorUserId: fixture!.lawyerId,
       }),
       "VERSION_NOT_CURRENT",
     );
@@ -231,7 +231,7 @@ async function run() {
 
     // 7. Authorization: outsider cannot read or mutate the agreement.
     await expectError(
-      () => getAgreementById(created.agreement.id, fixture.outsiderId, "client"),
+      () => getAgreementById(created.agreement.id, fixture!.outsiderId, "client"),
       "FORBIDDEN",
     );
     await expectError(
