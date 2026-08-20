@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
+import { requireApprovedLawyer } from "../middlewares/requireApprovedLawyer";
 import {
   createCaseController,
   getCaseController,
@@ -14,6 +15,7 @@ router.post(
   "/agreements/:agreementId/case",
   requireAuth,
   requireClientLawyerOrAdmin,
+  requireApprovedLawyer,
   createCaseController,
 );
 
@@ -28,6 +30,7 @@ router.post(
   "/cases/:id/transition",
   requireAuth,
   requireClientLawyerOrAdmin,
+  requireApprovedLawyer,
   transitionCaseController,
 );
 

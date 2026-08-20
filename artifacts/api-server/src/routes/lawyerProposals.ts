@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
+import { requireApprovedLawyer } from "../middlewares/requireApprovedLawyer";
 import {
   acceptLawyerProposal,
   createLawyerProposal,
@@ -18,6 +19,7 @@ router.post(
   "/representation-quote-requests/:requestId/proposals",
   requireAuth,
   requireLawyer,
+  requireApprovedLawyer,
   createLawyerProposal,
 );
 
@@ -51,6 +53,7 @@ router.post(
   "/representation-quote-requests/:requestId/proposals/:proposalId/withdraw",
   requireAuth,
   requireLawyer,
+  requireApprovedLawyer,
   withdrawLawyerProposal,
 );
 
