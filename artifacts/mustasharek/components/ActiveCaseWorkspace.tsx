@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import colors from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { FundMilestoneButton } from "@/components/FundMilestoneButton";
@@ -59,11 +60,25 @@ const timeline: TimelineItem[] = [
   { icon: "flag", title: "الإغلاق والتسوية", detail: "تُفعل عند اكتمال جميع مراحل العمل.", status: "upcoming" },
 ];
 
-const documents = [
-  { icon: "file-text" as const, title: "اتفاقية التوكيل", meta: "PDF · موقعة" },
-  { icon: "briefcase" as const, title: "ملخص القضية", meta: "آخر تحديث اليوم" },
-  { icon: "paperclip" as const, title: "مستندات القضية", meta: "4 ملفات" },
-];
+type LegalRepresentationDocumentStatus =
+  | "uploaded"
+  | "submitted"
+  | "under_review"
+  | "verified"
+  | "rejected"
+  | "superseded"
+  | string;
+
+type LegalRepresentationDocument = {
+  id: string;
+  documentType: "poa" | "court_proof" | "expert_report" | string;
+  status: LegalRepresentationDocumentStatus;
+  fileName: string;
+  title: string;
+  mimeType?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
 
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
 
@@ -71,13 +86,59 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
   const isClient = role === "client";
   const { getAuthToken } = useAuth();
   const [caseRecord, setCaseRecord] = useState<CaseRecord | null>(null);
+  const [documents, setDocuments] = useState<LegalRepresentationDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(caseId));
   const [error, setError] = useState<string | null>(null);
+
+  const loadDocuments = useCallback(async (agreementId: string) => {
+    setDocumentsLoading(true);
+    setDocumentError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("جلسة الدخول غير متاحة");
+      if (!API_BASE) throw new Error("خدمة المستندات غير مهيأة في هذه البيئة");
+
+      const response = await fetch(
+        `${API_BASE}/agreements/${encodeURIComponent(agreementId)}/legal-representation-documents`,
+        {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        },
+      );
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean;
+        documents?: LegalRepresentationDocument[];
+        error?: string;
+      } | null;
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload.documents)) {
+        if (response.status === 403) throw new Error("ليس لديك صلاحية للوصول إلى مستندات هذه القضية");
+        if (response.status === 404) throw new Error("الاتفاقية غير موجودة");
+        throw new Error(payload?.error ?? "تعذر تحميل مستندات التمثيل القانوني");
+      }
+
+      setDocuments(payload.documents);
+    } catch (loadError) {
+      setDocumentError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [getAuthToken]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (caseRecord?.agreementId) {
+        void loadDocuments(caseRecord.agreementId);
+      }
+    }, [caseRecord?.agreementId, loadDocuments]),
+  );
 
   useEffect(() => {
     let cancelled = false;
     if (!caseId) {
       setCaseRecord(null);
+      setDocuments([]);
       setIsLoading(false);
       setError("معرّف القضية غير موجود");
       return;
@@ -100,7 +161,10 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
           if (response.status === 404) throw new Error("القضية غير موجودة");
           throw new Error(payload?.error ?? "تعذر تحميل بيانات القضية");
         }
-        if (!cancelled) setCaseRecord(payload.case);
+        if (!cancelled) {
+          setCaseRecord(payload.case);
+          void loadDocuments(payload.case.agreementId);
+        }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
       } finally {
@@ -110,7 +174,7 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
 
     void loadCase();
     return () => { cancelled = true; };
-  }, [caseId, getAuthToken]);
+  }, [caseId, getAuthToken, loadDocuments]);
 
   const statusLabel = caseRecord?.status === "active" ? "نشطة" : caseRecord?.status === "completed" ? "مكتملة" : caseRecord?.status === "closed" ? "مغلقة" : caseRecord?.status ?? "—";
   const milestones = caseRecord?.milestones ?? caseRecord?.agreement?.milestones ?? [];
@@ -191,18 +255,33 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
         })}
       </View>
 
-      <SectionTitle icon="folder" title="Documents" />
+      <SectionTitle icon="folder" title="مستندات التمثيل القانوني" />
       <View style={styles.card}>
+        {documentsLoading ? (
+          <View style={styles.documentLoading}>
+            <ActivityIndicator size="small" color={C.gold} />
+            <Text style={styles.itemText}>جاري تحديث حالة المستندات…</Text>
+          </View>
+        ) : null}
         {documents.map((doc) => (
-          <TouchableOpacity key={doc.title} style={styles.documentRow} activeOpacity={0.8}>
+          <TouchableOpacity key={doc.id} style={styles.documentRow} activeOpacity={0.8}>
             <Feather name="chevron-left" size={17} color={C.mutedForeground} />
-            <View style={styles.documentCopy}><Text style={styles.itemTitle}>{doc.title}</Text><Text style={styles.itemText}>{doc.meta}</Text></View>
-            <View style={styles.documentIcon}><Feather name={doc.icon} size={16} color={C.gold} /></View>
+            <View style={styles.documentCopy}>
+              <Text style={styles.itemTitle}>{doc.title}</Text>
+              <Text style={styles.itemText}>{doc.fileName} · {legalDocumentStatusLabel(doc.status)}</Text>
+            </View>
+            <View style={styles.documentIcon}>
+              <Feather name={legalDocumentIcon(doc.documentType)} size={16} color={C.gold} />
+            </View>
           </TouchableOpacity>
         ))}
+        {!documentsLoading && documents.length === 0 ? (
+          <Text style={styles.itemText}>لا توجد مستندات تمثيل قانوني مرتبطة بهذه الاتفاقية.</Text>
+        ) : null}
+        {documentError ? <Text style={styles.documentError}>{documentError}</Text> : null}
       </View>
 
-      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات القضية وQuote وMilestones تأتي الآن من Backend عبر GET /api/cases/:id، مع تمرير JWT الحالي. لا يوجد منطق مالي جديد في الواجهة.</Text></View>
+      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات القضية وQuote وMilestones تأتي الآن من Backend عبر GET /api/cases/:id، ومستندات التمثيل القانوني تأتي من الـ API المخصص مع تمرير JWT الحالي. لا يوجد منطق مالي أو مستندات جديد في الواجهة.</Text></View>
     </ScrollView>
   );
 }
@@ -219,6 +298,27 @@ function milestoneStatusLabel(status: MilestoneStatus): string {
     case "paused": return "متوقفة";
     case "cancelled": return "ملغاة";
     default: return status;
+  }
+}
+
+function legalDocumentStatusLabel(status: LegalRepresentationDocumentStatus): string {
+  switch (status) {
+    case "uploaded": return "مرفوع";
+    case "submitted": return "مُقدّم";
+    case "under_review": return "قيد المراجعة";
+    case "verified": return "معتمد";
+    case "rejected": return "مرفوض";
+    case "superseded": return "مستبدل";
+    default: return status;
+  }
+}
+
+function legalDocumentIcon(documentType: string): keyof typeof Feather.glyphMap {
+  switch (documentType) {
+    case "poa": return "file-text";
+    case "court_proof": return "briefcase";
+    case "expert_report": return "clipboard";
+    default: return "paperclip";
   }
 }
 
@@ -276,6 +376,8 @@ const styles = StyleSheet.create({
   paymentText: { flex: 1, color: C.foreground, fontSize: 10, textAlign: "right", fontFamily: "Inter_500Medium" },
   documentRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.border },
   documentCopy: { flex: 1 },
+  documentLoading: { alignItems: "center", paddingVertical: 8, gap: 4 },
+  documentError: { color: "#B91C1C", fontSize: 10, lineHeight: 17, textAlign: "right", fontFamily: "Inter_400Regular", marginTop: 8 },
   documentIcon: { width: 35, height: 35, borderRadius: 10, backgroundColor: "rgba(201,160,53,.1)", alignItems: "center", justifyContent: "center" },
   notice: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 8, padding: 12, marginTop: 14, borderRadius: 13, backgroundColor: "#FFFCF3", borderWidth: 1, borderColor: "rgba(201,160,53,.25)" },
   noticeText: { flex: 1, color: C.mutedForeground, fontSize: 10, lineHeight: 17, textAlign: "right", fontFamily: "Inter_400Regular" },
