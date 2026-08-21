@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
-import { usePathname, useRouter } from "expo-router";
+import { Href, usePathname, useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { fundMilestone } from "@/lib/finance";
 import colors from "@/constants/colors";
@@ -29,7 +29,7 @@ export function FundMilestoneButton({ milestoneId }: Props) {
       const result = await fundMilestone(getAuthToken, milestoneId);
       if (result.ok) {
         setMessage("تم تسجيل تمويل المرحلة بنجاح.");
-        router.replace(pathname);
+        router.replace(pathname as Href);
       } else {
         setMessage(errorMessage(result.error));
       }

@@ -160,3 +160,6 @@ overrides:
   esbuild: "0.27.3"
   # CVE-2026-12151: undici <6.27.0 WebSocket DoS — force patched version across all transitive deps
   undici: ">=6.27.0"
+
+allowBuilds:
+  esbuild: true
