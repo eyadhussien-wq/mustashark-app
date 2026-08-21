@@ -46,7 +46,7 @@ export async function createMilestoneReleaseRequest(
       })
       .from(representationMilestonesTable)
       .innerJoin(representationQuotesTable, eq(representationQuotesTable.id, representationMilestonesTable.quoteId))
-      .innerJoin(
+      .leftJoin(
         milestoneProofsTable,
         and(
           eq(milestoneProofsTable.milestoneId, representationMilestonesTable.id),
@@ -59,6 +59,7 @@ export async function createMilestoneReleaseRequest(
 
     if (!row) return { error: "milestone_not_found" };
     if (row.quote.clientId !== clientId) return { error: "forbidden" };
+    if (!row.proof) return { error: "proof_not_found" };
     if (row.proof.milestoneId !== row.milestone.id || row.proof.lawyerId !== row.quote.lawyerId) {
       return { error: "forbidden" };
     }
