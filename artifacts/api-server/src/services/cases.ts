@@ -13,10 +13,13 @@ import {
 } from "@workspace/db/schema";
 
 const REQUIRED_DOCUMENT_TYPES = ["poa", "court_proof"] as const;
-const CASE_TERMINAL_STATES = ["closed"] as const;
-const SETTLED_MILESTONE_STATUSES = ["released", "cancelled"] as const;
+type CaseStatus = typeof casesTable.$inferSelect["status"];
+type MilestoneStatus = typeof representationMilestonesTable.$inferSelect["status"];
 
-type CaseTransition = "completed" | "closed";
+const CASE_TERMINAL_STATES: CaseStatus[] = ["closed"];
+const SETTLED_MILESTONE_STATUSES: MilestoneStatus[] = ["released", "cancelled"];
+
+type CaseTransition = Extract<CaseStatus, "completed" | "closed">;
 
 const assertCaseActor = (
   agreement: typeof agreementsTable.$inferSelect,
@@ -223,7 +226,7 @@ export const transitionCase = async (input: {
       .limit(1)
       .for("update");
     if (!caseRecord) throw new Error("CASE_NOT_FOUND");
-    if (CASE_TERMINAL_STATES.includes(caseRecord.status as (typeof CASE_TERMINAL_STATES)[number])) {
+    if (CASE_TERMINAL_STATES.includes(caseRecord.status)) {
       throw new Error("CASE_ALREADY_CLOSED");
     }
 
@@ -251,7 +254,7 @@ export const transitionCase = async (input: {
       .where(
         and(
           eq(agreementsTable.id, caseRecord.agreementId),
-          notInArray(representationMilestonesTable.status, [...SETTLED_MILESTONE_STATUSES]),
+          notInArray(representationMilestonesTable.status, SETTLED_MILESTONE_STATUSES),
         ),
       )
       .for("update");

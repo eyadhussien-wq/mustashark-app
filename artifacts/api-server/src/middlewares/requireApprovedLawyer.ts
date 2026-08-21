@@ -22,11 +22,12 @@ export async function requireApprovedLawyer(req: Request, res: Response, next: N
       .where(eq(lawyerVerificationsTable.userId, authUser.userId))
       .limit(1);
 
-    if (!isApprovedLawyerVerification(verification?.status)) {
+    const verificationStatus = verification?.status ?? null;
+    if (!isApprovedLawyerVerification(verificationStatus)) {
       res.status(403).json({
         ok: false,
         error: "lawyer_not_professionally_approved",
-        verificationStatus: verification?.status ?? "pending",
+        verificationStatus: verificationStatus ?? "pending",
       });
       return;
     }
