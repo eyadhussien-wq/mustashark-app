@@ -1,4 +1,4 @@
-import type { Buffer } from "node:buffer";
+import { Buffer } from "node:buffer";
 
 export type SupportedDocumentMimeType =
   | "application/pdf"
@@ -44,21 +44,23 @@ const SUPPORTED_MIME_TYPES = new Set<SupportedDocumentMimeType>([
 
 const isSupportedMimeType = (
   mimeType: string,
-): mimeType is SupportedDocumentMimeType => SUPPORTED_MIME_TYPES.has(mimeType as SupportedDocumentMimeType);
+): mimeType is SupportedDocumentMimeType =>
+  SUPPORTED_MIME_TYPES.has(mimeType as SupportedDocumentMimeType);
 
 const normalizeCandidate = (candidate: DocumentCandidate): DocumentCandidate => {
   const field = candidate.field.trim();
   const value = candidate.value.trim();
-  const confidence = Math.min(1, Math.max(0, candidate.confidence));
 
   if (!field) throw new Error("PARSER_CANDIDATE_FIELD_REQUIRED");
   if (!value) throw new Error("PARSER_CANDIDATE_VALUE_REQUIRED");
-  if (!Number.isFinite(candidate.confidence)) throw new Error("PARSER_CANDIDATE_CONFIDENCE_INVALID");
+  if (!Number.isFinite(candidate.confidence)) {
+    throw new Error("PARSER_CANDIDATE_CONFIDENCE_INVALID");
+  }
 
   return {
     field,
     value,
-    confidence,
+    confidence: Math.min(1, Math.max(0, candidate.confidence)),
     source: candidate.source,
   };
 };
