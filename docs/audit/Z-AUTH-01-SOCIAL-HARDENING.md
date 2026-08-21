@@ -49,7 +49,7 @@ The existing `pending` lawyer gate remains authoritative until a secure server-s
 
 ## Language UX
 
-The repository already contains `language-splash.tsx` with prominent Arabic/English selection before onboarding. No duplicate language control was introduced in this hardening commit. fileciteturn18file0
+The repository already contains `language-splash.tsx` with prominent Arabic/English selection before onboarding. No duplicate language control was introduced in this hardening commit.
 
 ## Verification target
 
