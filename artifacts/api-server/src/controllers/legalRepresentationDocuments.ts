@@ -21,7 +21,7 @@ function serviceErrorResponse(res: Response, error: unknown) {
   return res.status(status).json({ ok: false, error: errorCode });
 }
 
-function parseRequest<T>(schema: z.ZodType<T>, input: unknown, res: Response): T | null {
+function parseRequest<S extends z.ZodType>(schema: S, input: unknown, res: Response): z.output<S> | null {
   const parsed = schema.safeParse(input ?? {});
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: "invalid_request" });
