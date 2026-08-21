@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
@@ -59,12 +59,19 @@ async function verifyAppleToken(identityToken: string): Promise<{ id: string; em
   } catch { return null; }
 }
 
+const termsSchema = z.object({
+  termsAccepted: z.literal(true),
+  termsAcceptedAt: z.string().datetime({ offset: true }),
+});
+
 const socialSchema = z.object({
   provider: z.enum(["google", "facebook", "apple"]),
   token: z.string().min(1),
   role: z.enum(["client", "lawyer"]).optional().default("client"),
   displayName: z.string().optional(),
   storedEmail: z.string().optional(),
+  termsAccepted: z.boolean().optional(),
+  termsAcceptedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 function roleMismatchResponse(role: string) {
@@ -85,10 +92,22 @@ function lawyerVerificationPendingResponse() {
   };
 }
 
+function validateTermsConsent(termsAccepted: boolean | undefined, termsAcceptedAt: string | undefined) {
+  if (termsAccepted !== true || !termsAcceptedAt) return false;
+  const parsed = termsSchema.safeParse({ termsAccepted, termsAcceptedAt });
+  if (!parsed.success) return false;
+  const acceptedAt = new Date(termsAcceptedAt).getTime();
+  return Number.isFinite(acceptedAt) && acceptedAt <= Date.now() + 60_000;
+}
+
+function auditTermsConsent(req: Request, data: { flow: "social" | "local"; role: "client" | "lawyer"; email: string; termsAcceptedAt: string }) {
+  req.log.info({ auditEvent: "terms_consent", ...data }, "terms and conditions consent accepted");
+}
+
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { provider, token, role, displayName, storedEmail } = parsed.data;
+  const { provider, token, role, displayName, storedEmail, termsAccepted, termsAcceptedAt } = parsed.data;
 
   try {
     let providerUser: { id: string; email: string; name: string } | null = null;
@@ -103,8 +122,24 @@ export async function socialAuth(req: Request, res: Response) {
     if (!providerUser || !providerUser.id) return res.status(401).json({ ok: false, error: "invalid_provider_token" });
     if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني مطلوب. يرجى إعادة المحاولة مع السماح بمشاركة بريدك الإلكتروني." });
 
-    let dbUser = await findUser(provider, providerUser.id, providerUser.email);
+    // Provider identity is authoritative. Email is only a secondary linking key.
+    let dbUser = await findUserByProvider(provider, providerUser.id);
     if (!dbUser) {
+      dbUser = await findUserByEmail(providerUser.email);
+      if (dbUser) {
+        if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json(roleMismatchResponse(dbUser.role));
+        if (!validateTermsConsent(termsAccepted, termsAcceptedAt)) {
+          return res.status(400).json({ ok: false, error: "terms_consent_required", message: "يجب الموافقة على الشروط والأحكام لإكمال التسجيل.", requiresTermsConsent: true });
+        }
+        await db.update(usersTable).set({ authProvider: provider, providerId: providerUser.id, updatedAt: new Date() }).where(eq(usersTable.id, dbUser.id));
+        auditTermsConsent(req, { flow: "social", role, email: providerUser.email, termsAcceptedAt: termsAcceptedAt! });
+      }
+    }
+
+    if (!dbUser) {
+      if (!validateTermsConsent(termsAccepted, termsAcceptedAt)) {
+        return res.status(400).json({ ok: false, error: "terms_consent_required", message: "يجب الموافقة على الشروط والأحكام لإكمال التسجيل.", requiresTermsConsent: true });
+      }
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}`;
       await db.insert(usersTable).values({
         id: newId,
@@ -118,7 +153,8 @@ export async function socialAuth(req: Request, res: Response) {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      dbUser = await findUser(provider, providerUser.id, providerUser.email);
+      auditTermsConsent(req, { flow: "social", role, email: providerUser.email, termsAcceptedAt: termsAcceptedAt! });
+      dbUser = await findUserByProvider(provider, providerUser.id);
     }
 
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
@@ -127,7 +163,7 @@ export async function socialAuth(req: Request, res: Response) {
       const now = new Date();
       if (dbUser.deletionScheduledAt > now) {
         await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, dbUser.id));
-        dbUser = await findUser(provider, providerUser.id, providerUser.email);
+        dbUser = await findUserByProvider(provider, providerUser.id);
         req.log.info({ userId: dbUser?.id }, "soft-deleted account reactivated on social login");
       } else {
         return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
@@ -141,10 +177,6 @@ export async function socialAuth(req: Request, res: Response) {
       return res.status(403).json(lawyerVerificationPendingResponse());
     }
     if (dbUser.accountStatus !== "active" && dbUser.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
-
-    if (dbUser.authProvider === "local" || !dbUser.providerId) {
-      await db.update(usersTable).set({ authProvider: provider, providerId: providerUser.id, updatedAt: new Date() }).where(eq(usersTable.id, dbUser.id));
-    }
 
     if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json(roleMismatchResponse(dbUser.role));
 
@@ -169,8 +201,13 @@ export async function socialAuth(req: Request, res: Response) {
   }
 }
 
-async function findUser(provider: string, providerId: string, email: string) {
-  const rows = await db.select().from(usersTable).where(or(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerId)), eq(usersTable.email, email))).limit(1);
+async function findUserByProvider(provider: string, providerId: string) {
+  const rows = await db.select().from(usersTable).where(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerId))).limit(1);
+  return rows[0] ?? null;
+}
+
+async function findUserByEmail(email: string) {
+  const rows = await db.select().from(usersTable).where(eq(usersTable.email, email.trim().toLowerCase())).limit(1);
   return rows[0] ?? null;
 }
 
@@ -185,13 +222,15 @@ const localAuthSchema = z.object({
   specialization: z.string().max(200).optional(),
   bio: z.string().max(2000).optional(),
   hourlyRate: z.number().positive().optional(),
+  termsAccepted: z.literal(true).optional(),
+  termsAcceptedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 export async function localAuth(req: Request, res: Response) {
   const parsed = localAuthSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
 
-  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate } = parsed.data;
+  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate, termsAccepted, termsAcceptedAt } = parsed.data;
   const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : undefined;
   const normalEmail = email.trim().toLowerCase();
   const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
@@ -212,7 +251,7 @@ export async function localAuth(req: Request, res: Response) {
       }
 
       if (!existing) return res.status(500).json({ ok: false, error: "user_creation_failed" });
-      if (isBlockedAccountStatus(existing.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "تم إيقاف هذا الحساب." });
+      if (isBlockedAccountStatus(existing.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "تم إيقاف الحساب." });
       if (existing.role === "lawyer" && existing.accountStatus === "pending") {
         req.log.warn({ userId: existing.id, email: existing.email }, "lawyer local login blocked pending professional verification");
         return res.status(403).json(lawyerVerificationPendingResponse());
@@ -248,10 +287,14 @@ export async function localAuth(req: Request, res: Response) {
       } });
     }
 
+    if (!validateTermsConsent(termsAccepted, termsAcceptedAt)) {
+      return res.status(400).json({ ok: false, error: "terms_consent_required", message: "يجب الموافقة على الشروط والأحكام لإكمال التسجيل.", requiresTermsConsent: true });
+    }
     if (!name?.trim()) return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
     if (!phone) return res.status(400).json({ ok: false, error: "phone_required", message: "رقم الهاتف مطلوب لإنشاء الحساب" });
     if (!isSupportedPhone(phone)) return res.status(400).json({ ok: false, error: "invalid_phone", message: "رقم الهاتف غير صالح. استخدم رقمًا قطريًا يبدأ +974 أو أردنيًا يبدأ +962 وبالطول الصحيح." });
 
+    auditTermsConsent(req, { flow: "local", role, email: normalEmail, termsAcceptedAt: termsAcceptedAt! });
     const phoneCountry = getPhoneCountry(phone);
     const passwordHash = await bcrypt.hash(password, 10);
     const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

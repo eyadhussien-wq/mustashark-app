@@ -8,51 +8,23 @@ import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 import { useAuth } from "@/contexts/AuthContext";
 
 const C = colors.light;
-
 export default function Login() {
-  const router = useRouter(); const insets = useSafeAreaInsets(); const { login } = useAuth();
-  const params = useLocalSearchParams<{ role?: string }>();
-  const role = (params.role === "lawyer" ? "lawyer" : "client") as "client" | "lawyer";
-  const isLawyer = role === "lawyer";
+  const router = useRouter(); const insets = useSafeAreaInsets(); const { login } = useAuth(); const params = useLocalSearchParams<{ role?: string }>(); const role = (params.role === "lawyer" ? "lawyer" : "client") as "client" | "lawyer"; const isLawyer = role === "lawyer";
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [showPass, setShowPass] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [notRegistered, setNotRegistered] = useState(false);
-
-  async function handleLogin() {
-    setError(""); setNotRegistered(false); setLoading(true);
-    try { await login(email, password, role); router.replace("/"); }
-    catch (e: any) { const msg: string = e.message ?? "حدث خطأ"; setError(msg); if (msg.includes("غير مسجّل")) setNotRegistered(true); }
-    finally { setLoading(false); }
-  }
-
+  async function handleLogin() { setError(""); setNotRegistered(false); setLoading(true); try { await login(email, password, role); router.replace("/"); } catch (e: any) { const msg: string = e.message ?? "حدث خطأ"; setError(msg); if (msg.includes("غير مسجّل")) setNotRegistered(true); } finally { setLoading(false); } }
   function goRegister() { const target = isLawyer ? "/auth/register-lawyer" : "/auth/register-client"; router.push({ pathname: target as any, params: { prefillEmail: email } }); }
-
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.background }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 20), paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 24) }]} keyboardShouldPersistTaps="handled">
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}><Feather name="arrow-right" size={22} color={C.foreground} /></TouchableOpacity>
-        <View style={styles.header}>
-          <View style={[styles.iconWrap, isLawyer && styles.iconWrapLawyer]}><Feather name={isLawyer ? "briefcase" : "user"} size={28} color={isLawyer ? C.navy : C.gold} /></View>
-          <Text style={styles.title}>{isLawyer ? "دخول المحامي" : "دخول العميل"}</Text>
-          <Text style={styles.sub}>مرحباً بعودتك في مستشارك</Text>
-        </View>
+        <View style={styles.header}><View style={[styles.iconWrap, isLawyer && styles.iconWrapLawyer]}><Feather name={isLawyer ? "briefcase" : "user"} size={28} color={isLawyer ? C.navy : C.gold} /></View><Text style={styles.title}>{isLawyer ? "دخول المحامي" : "دخول العميل"}</Text><Text style={styles.sub}>مرحباً بعودتك في مستشارك</Text></View>
         {!!error && <View style={[styles.errorBox, notRegistered && styles.errorBoxWide]}><View style={styles.errorTop}><Feather name="alert-circle" size={14} color={C.destructive} /><Text style={styles.errorText}>{error}</Text></View>{notRegistered && <TouchableOpacity style={styles.registerNowBtn} onPress={goRegister}><Text style={styles.registerNowText}>{isLawyer ? "تسجيل محامٍ جديد ←" : "إنشاء حساب الآن ←"}</Text></TouchableOpacity>}</View>}
-        <View style={styles.form}>
-          <View style={styles.field}><Text style={styles.label}>البريد الإلكتروني</Text><View style={styles.inputRow}><Feather name="mail" size={16} color={C.mutedForeground} /><TextInput style={styles.input} placeholder="email@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} placeholderTextColor={C.mutedForeground} /></View></View>
-          <View style={styles.field}><Text style={styles.label}>كلمة المرور</Text><View style={styles.inputRow}><Feather name="lock" size={16} color={C.mutedForeground} /><TextInput style={styles.input} placeholder="••••••••" value={password} onChangeText={setPassword} secureTextEntry={!showPass} placeholderTextColor={C.mutedForeground} /><TouchableOpacity onPress={() => setShowPass(!showPass)}><Feather name={showPass ? "eye-off" : "eye"} size={16} color={C.mutedForeground} /></TouchableOpacity></View></View>
-        </View>
+        <View style={styles.form}><View style={styles.field}><Text style={styles.label}>البريد الإلكتروني</Text><View style={styles.inputRow}><Feather name="mail" size={16} color={C.mutedForeground} /><TextInput style={styles.input} placeholder="email@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} placeholderTextColor={C.mutedForeground} /></View></View><View style={styles.field}><Text style={styles.label}>كلمة المرور</Text><View style={styles.inputRow}><Feather name="lock" size={16} color={C.mutedForeground} /><TextInput style={styles.input} placeholder="••••••••" value={password} onChangeText={setPassword} secureTextEntry={!showPass} placeholderTextColor={C.mutedForeground} /><TouchableOpacity onPress={() => setShowPass(!showPass)}><Feather name={showPass ? "eye-off" : "eye"} size={16} color={C.mutedForeground} /></TouchableOpacity></View></View></View>
         <TouchableOpacity style={[styles.loginBtn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginText}>دخول</Text>}</TouchableOpacity>
-        <View style={styles.actionLinksRow}>
-          <TouchableOpacity onPress={() => router.push(isLawyer ? "/auth/register-lawyer" : "/auth/register-client")}><Text style={styles.registerLink}>{isLawyer ? "تسجيل محامٍ جديد" : "إنشاء حساب"}</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push("/auth/forgot-password")}><Text style={styles.forgotText}>نسيت كلمة المرور؟</Text></TouchableOpacity>
-        </View>
-        <SocialLoginButtons role={role} />
+        <View style={styles.actionLinksRow}><TouchableOpacity onPress={() => router.push(isLawyer ? "/auth/register-lawyer" : "/auth/register-client")}><Text style={styles.registerLink}>{isLawyer ? "تسجيل محامٍ جديد" : "إنشاء حساب"}</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push("/auth/forgot-password")}><Text style={styles.forgotText}>نسيت كلمة المرور؟</Text></TouchableOpacity></View>
+        <SocialLoginButtons role={role} requireTermsConsent />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, paddingHorizontal: 24 }, backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 20 }, header: { alignItems: "center", gap: 10, marginBottom: 28 },
-  iconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEF9EC", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(201,160,53,0.2)" }, iconWrapLawyer: { backgroundColor: "#EEF2F8", borderColor: "rgba(27,58,107,0.15)" }, title: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground }, sub: { fontSize: 14, color: C.mutedForeground, fontFamily: "Inter_400Regular" },
-  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 16 }, errorBoxWide: { flexDirection: "column", gap: 10 }, errorTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 }, errorText: { color: C.destructive, fontFamily: "Inter_500Medium", fontSize: 13, flex: 1, textAlign: "right", lineHeight: 20 }, registerNowBtn: { backgroundColor: C.navy, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, alignSelf: "stretch", alignItems: "center" }, registerNowText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 13 },
-  form: { gap: 16, marginBottom: 20 }, field: { gap: 7 }, label: { fontSize: 13, color: C.foreground, fontFamily: "Inter_600SemiBold", textAlign: "right" }, inputRow: { minHeight: 48, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card }, input: { flex: 1, fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular", textAlign: "right" }, loginBtn: { height: 50, borderRadius: 12, backgroundColor: C.navy, alignItems: "center", justifyContent: "center", marginBottom: 18 }, loginText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" }, actionLinksRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 26 }, registerLink: { color: C.navy, fontFamily: "Inter_600SemiBold", fontSize: 13 }, forgotText: { color: C.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 13 },
-});
+const styles = StyleSheet.create({ container: { flexGrow: 1, paddingHorizontal: 24 }, backBtn: { alignSelf: "flex-end", padding: 4, marginBottom: 20 }, header: { alignItems: "center", gap: 10, marginBottom: 28 }, iconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEF9EC", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(201,160,53,0.2)" }, iconWrapLawyer: { backgroundColor: "#EEF2F8", borderColor: "rgba(27,58,107,0.15)" }, title: { fontSize: 24, fontFamily: "Inter_700Bold", color: C.foreground }, sub: { fontSize: 14, color: C.mutedForeground, fontFamily: "Inter_400Regular" }, errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 16 }, errorBoxWide: { flexDirection: "column", gap: 10 }, errorTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 }, errorText: { color: C.destructive, fontFamily: "Inter_500Medium", fontSize: 13, flex: 1, textAlign: "right", lineHeight: 20 }, registerNowBtn: { backgroundColor: C.navy, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, alignSelf: "stretch", alignItems: "center" }, registerNowText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 13 }, form: { gap: 16, marginBottom: 20 }, field: { gap: 7 }, label: { fontSize: 13, color: C.foreground, fontFamily: "Inter_600SemiBold", textAlign: "right" }, inputRow: { minHeight: 48, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card }, input: { flex: 1, fontSize: 14, color: C.foreground, fontFamily: "Inter_400Regular", textAlign: "right" }, loginBtn: { height: 50, borderRadius: 12, backgroundColor: C.navy, alignItems: "center", justifyContent: "center", marginBottom: 18 }, loginText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" }, actionLinksRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 26 }, registerLink: { color: C.navy, fontFamily: "Inter_600SemiBold", fontSize: 13 }, forgotText: { color: C.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 13 } });
