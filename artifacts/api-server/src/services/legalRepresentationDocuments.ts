@@ -8,6 +8,7 @@ import {
 
 type DocumentActorRole = "client" | "lawyer" | "admin";
 type LegalDocumentType = "poa" | "court_proof" | "expert_report";
+type LegalDocumentMetadata = Record<string, unknown>;
 
 type Actor = {
   userId: string;
@@ -80,7 +81,7 @@ export const uploadLegalDocument = async (input: {
   courtName?: string | null;
   caseNumberReference?: string | null;
   issuedAt?: Date | null;
-  metadata?: unknown;
+  metadata?: LegalDocumentMetadata | null;
 }) => {
   return db.transaction(async (tx) => {
     const agreement = await getAgreement(tx, input.agreementId);
@@ -279,7 +280,7 @@ export const supersedeLegalDocument = async (input: {
   courtName?: string | null;
   caseNumberReference?: string | null;
   issuedAt?: Date | null;
-  metadata?: unknown;
+  metadata?: LegalDocumentMetadata | null;
 }) => {
   return db.transaction(async (tx) => {
     const previous = await getDocument(tx, input.documentId);
