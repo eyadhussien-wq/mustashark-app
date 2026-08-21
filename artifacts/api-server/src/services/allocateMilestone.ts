@@ -48,21 +48,21 @@ export async function allocateMilestone(
     if (!row.escrow) return { error: "escrow_account_not_found" };
 
     const amount = row.milestone.amount;
+    const now = new Date();
     const [updatedEscrow] = await tx
       .update(escrowAccountsTable)
       .set({
         allocatedAmount: sql`${escrowAccountsTable.allocatedAmount} + ${amount}`,
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .where(and(
         eq(escrowAccountsTable.id, row.escrow.id),
-        sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.allocatedAmount} - ${escrowAccountsTable.releasedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`,
+        sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.allocatedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`,
       ))
       .returning();
 
     if (!updatedEscrow) return { error: "insufficient_unallocated_funds" };
 
-    const now = new Date();
     const [transaction] = await tx
       .insert(escrowTransactionsTable)
       .values({
