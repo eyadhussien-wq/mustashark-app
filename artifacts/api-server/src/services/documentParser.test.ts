@@ -3,6 +3,7 @@ import test from "node:test";
 import { Buffer } from "node:buffer";
 import {
   DOCUMENT_PARSER_MAX_FILE_BYTES,
+  JORDAN_BAR_ASSOCIATION_ID_FIELDS,
   parseDocument,
   type DocumentParserProvider,
 } from "./documentParser";
@@ -43,6 +44,43 @@ test("returns normalized candidates from the injected AI provider", async () => 
       },
     ],
   });
+});
+
+test("passes the Jordan Bar Association ID target fields to the provider", async () => {
+  let receivedDocumentType: string | undefined;
+  let receivedTargetFields: readonly string[] | undefined;
+
+  const provider: DocumentParserProvider = {
+    async analyze(input) {
+      receivedDocumentType = input.documentType;
+      receivedTargetFields = input.targetFields;
+      return [
+        { field: "bar_registration_number", value: "JBA-12345", confidence: 0.98, source: "ocr" },
+        { field: "full_name_ar", value: "إياد حسين", confidence: 0.96, source: "vision" },
+        { field: "full_name_en", value: "Eyad Hussein", confidence: 0.95, source: "vision" },
+        { field: "national_number", value: "9900000000", confidence: 0.91, source: "ocr" },
+      ];
+    },
+  };
+
+  const result = await parseDocument(
+    {
+      ...validInput,
+      fileName: "jordan-bar-id.jpg",
+      mimeType: "image/jpeg",
+      documentType: "jordan_bar_association_id",
+    },
+    provider,
+  );
+
+  assert.equal(receivedDocumentType, "jordan_bar_association_id");
+  assert.deepEqual(receivedTargetFields, JORDAN_BAR_ASSOCIATION_ID_FIELDS);
+  assert.deepEqual(result.candidates.map(({ field, value }) => ({ field, value })), [
+    { field: "bar_registration_number", value: "JBA-12345" },
+    { field: "full_name_ar", value: "إياد حسين" },
+    { field: "full_name_en", value: "Eyad Hussein" },
+    { field: "national_number", value: "9900000000" },
+  ]);
 });
 
 test("accepts supported image and PDF MIME types", async () => {
