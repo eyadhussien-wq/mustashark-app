@@ -16,38 +16,40 @@ This phase hardens the existing Google, Facebook, and Apple social-login flow wi
 
 ### Fail-closed mobile social authentication
 
-`artifacts/mustasharek/hooks/useSocialAuth.ts` now:
+`artifacts/mustasharek/hooks/useSocialAuth.ts` now requires the backend to verify the provider identity and issue the canonical JWT. Network failure, non-2xx responses, and successful responses without a server JWT are authentication failures.
 
-- requires `EXPO_PUBLIC_DOMAIN` before attempting social session creation;
-- treats network failure as authentication failure;
-- treats non-2xx backend responses as authentication failure;
-- rejects a successful HTTP response that does not contain a valid server JWT;
-- no longer returns a provider profile that can be consumed as an authenticated session without a backend-issued JWT;
-- keeps Apple first-login email persistence only as an input to server verification, never as a replacement for Apple identity verification.
+### Provider-first account linking
 
-## Existing account-linking rule requiring the next backend patch
+`artifacts/api-server/src/controllers/auth.ts` now resolves social users in this order:
 
-The current backend lookup combines `(provider, providerId)` and email in one `OR` query. The required hardening is:
+1. Match the authoritative `(provider, providerId)` pair.
+2. If no provider identity exists, match the verified provider email as a secondary linking key.
+3. Before linking a provider to an email-matched account, enforce `Role Mismatch Protection`.
+4. Only after the role check succeeds is `authProvider/providerId` attached to the existing account.
+5. If no provider or email match exists, create a new account only after mandatory terms consent.
 
-1. Match `(provider, providerId)` first.
-2. If no provider identity exists, allow email-based linking only when the verified provider email matches an existing account and the requested portal role matches the existing account role.
-3. Reject role mismatch before changing `authProvider` or `providerId`.
-4. Never use email alone as the canonical social identity.
-5. Do not create a second account when a verified provider identity is already attached to the existing user.
+Email is never the canonical social identity, and a role mismatch is rejected before provider mutation.
 
-This backend change must be made without a migration.
+### Mandatory terms consent
+
+New local and social registrations now require:
+
+- `termsAccepted: true`
+- `termsAcceptedAt` as an offset-aware ISO timestamp that is not materially in the future.
+
+The API rejects missing/false consent for new registrations. Consent is recorded as a structured server audit log event (`terms_consent`) because this phase is explicitly prohibited from changing the database schema. Existing account logins do not require a new consent record merely to authenticate.
+
+The mobile registration flows expose an explicit consent checkbox and send the timestamp captured at the moment the user accepts the terms. Social login also exposes the consent control on the login screen because a social login can create a new account when no existing identity is found.
 
 ## Lawyer verification boundary
 
 The current application already captures a lawyer document locally in `lawyer-auth.tsx`, but the selected image is not yet transmitted to a secure backend storage/audit service. Therefore this branch does **not** pretend that document storage or fast-track verification is implemented.
 
-The next implementation must establish a server-side upload contract and audit trail using infrastructure already present in the repository. If that requires a schema/storage migration, it must be stopped and reviewed separately rather than bypassing the production-data safety rule.
-
-Until that contract exists, the existing `pending` lawyer gate remains authoritative.
+The existing `pending` lawyer gate remains authoritative until a secure server-side document-storage contract is established.
 
 ## Language UX
 
-The repository already contains `language-splash.tsx` with prominent Arabic/English selection before onboarding. No duplicate language control was introduced in this hardening commit.
+The repository already contains `language-splash.tsx` with prominent Arabic/English selection before onboarding. No duplicate language control was introduced in this hardening commit. fileciteturn18file0
 
 ## Verification target
 
@@ -55,11 +57,14 @@ Before merge:
 
 - Typecheck mobile and API server.
 - Run the existing workspace tests/CI.
-- Add/execute social-auth regression coverage for:
+- Add/execute regression coverage for:
   - backend unavailable;
   - backend returns 4xx/5xx;
   - backend returns `ok: true` without JWT;
   - provider identity match;
   - email-link role mismatch;
   - existing local account linking;
-  - Apple relay email.
+  - Apple relay email;
+  - missing/false terms consent;
+  - invalid/future `termsAcceptedAt`;
+  - valid consent on new client/lawyer registration.
