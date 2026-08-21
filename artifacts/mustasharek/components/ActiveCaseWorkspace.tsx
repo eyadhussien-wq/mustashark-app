@@ -10,6 +10,15 @@ const C = colors.light;
 
 export type ActiveCaseRole = "client" | "lawyer";
 type CaseStatus = "active" | "completed" | "closed" | string;
+type MilestoneStatus = "awaiting_deposit" | "funded" | "in_progress" | "proof_submitted" | "under_review" | "released" | "disputed" | "paused" | "cancelled" | string;
+type CaseMilestone = {
+  id: string;
+  title: string;
+  stage: "stage_1" | "stage_2" | "stage_3" | string;
+  percentage: string | number;
+  amount: string | number;
+  status: MilestoneStatus;
+};
 type CaseRecord = {
   id: string;
   agreementId: string;
@@ -19,6 +28,21 @@ type CaseRecord = {
   completedAt?: string | null;
   closedAt?: string | null;
   updatedAt?: string | null;
+  agreement?: {
+    id: string;
+    status: string;
+    quote: {
+      id: string;
+      title: string;
+      description?: string | null;
+      totalAmount: string | number;
+      currency: string;
+      status: string;
+      fundingMode?: string | null;
+    };
+    milestones: CaseMilestone[];
+  };
+  milestones: CaseMilestone[];
 };
 
 type TimelineItem = {
@@ -33,12 +57,6 @@ const timeline: TimelineItem[] = [
   { icon: "shield", title: "الوكالة والمستندات", detail: "المستندات الأساسية مكتملة وتحت المراجعة.", status: "done" },
   { icon: "briefcase", title: "تنفيذ القضية", detail: "المرحلة الحالية: إعداد ومتابعة الإجراءات القانونية.", status: "current" },
   { icon: "flag", title: "الإغلاق والتسوية", detail: "تُفعل عند اكتمال جميع مراحل العمل.", status: "upcoming" },
-];
-
-const milestones = [
-  { title: "البدء", percent: 30, amount: "1,350 ر.ق", state: "مكتملة" },
-  { title: "الجلسات والإجراءات", percent: 40, amount: "1,800 ر.ق", state: "الحالية" },
-  { title: "الحكم والختام", percent: 30, amount: "1,350 ر.ق", state: "قادمة" },
 ];
 
 const documents = [
@@ -95,6 +113,11 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
   }, [caseId, getAuthToken]);
 
   const statusLabel = caseRecord?.status === "active" ? "نشطة" : caseRecord?.status === "completed" ? "مكتملة" : caseRecord?.status === "closed" ? "مغلقة" : caseRecord?.status ?? "—";
+  const milestones = caseRecord?.milestones ?? caseRecord?.agreement?.milestones ?? [];
+  const quote = caseRecord?.agreement?.quote;
+  const totalAmount = quote?.totalAmount ?? "—";
+  const currency = quote?.currency ?? "QAR";
+  const selectedMilestone = milestoneId ? milestones.find((milestone) => milestone.id === milestoneId) : null;
 
   if (isLoading) {
     return <View style={styles.centerState}><ActivityIndicator size="large" color={C.gold} /><Text style={styles.stateText}>جاري تحميل بيانات القضية…</Text></View>;
@@ -137,23 +160,35 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
 
       <SectionTitle icon="layers" title="Milestones ومراحل الأتعاب" />
       <View style={styles.card}>
-        {milestones.map((item) => (
-          <View key={item.title} style={styles.milestoneRow}>
-            <View style={styles.rowBetween}><Text style={styles.amount}>{item.amount}</Text><Text style={styles.itemTitle}>{item.title}</Text></View>
-            <View style={styles.milestoneTrack}><View style={[styles.milestoneFill, { width: `${item.percent}%` }, item.state === "الحالية" && styles.currentFill]} /></View>
-            <View style={styles.rowBetween}><Text style={styles.itemText}>{item.percent}% من الأتعاب</Text><Text style={styles.itemText}>{item.state}</Text></View>
-          </View>
-        ))}
-        {isClient && milestoneId ? <FundMilestoneButton milestoneId={milestoneId} /> : null}
-        {isClient && milestoneId ? <ReleaseMilestoneButton milestoneId={milestoneId} /> : null}
+        {milestones.map((item) => {
+          const percent = Number(item.percentage);
+          const amount = Number(item.amount);
+          const isSelected = selectedMilestone?.id === item.id;
+          return (
+            <View key={item.id} style={styles.milestoneRow}>
+              <View style={styles.rowBetween}><Text style={styles.amount}>{Number.isFinite(amount) ? `${amount.toLocaleString()} ${currency === "QAR" ? "ر.ق" : currency}` : `${item.amount} ${currency}`}</Text><Text style={styles.itemTitle}>{item.title}</Text></View>
+              <View style={styles.milestoneTrack}><View style={[styles.milestoneFill, { width: `${Math.max(0, Math.min(100, percent || 0))}%` }, item.status !== "released" && item.status !== "cancelled" && styles.currentFill]} /></View>
+              <View style={styles.rowBetween}><Text style={styles.itemText}>{Number.isFinite(percent) ? `${percent}% من الأتعاب` : `${item.percentage}% من الأتعاب`}</Text><Text style={styles.itemText}>{milestoneStatusLabel(item.status)}</Text></View>
+              {isClient && (!milestoneId || isSelected) && item.status === "awaiting_deposit" ? <FundMilestoneButton milestoneId={item.id} /> : null}
+              {isClient && (!milestoneId || isSelected) ? <ReleaseMilestoneButton milestoneId={item.id} /> : null}
+            </View>
+          );
+        })}
+        {milestones.length === 0 ? <Text style={styles.itemText}>لا توجد مراحل مالية مرتبطة بهذه القضية.</Text> : null}
       </View>
 
       <SectionTitle icon="credit-card" title="Payments" />
       <View style={styles.card}>
-        <View style={styles.rowBetween}><Text style={styles.totalAmount}>4,500 ر.ق</Text><Text style={styles.itemTitle}>إجمالي الأتعاب</Text></View>
-        <View style={styles.paymentRow}><Feather name="check-circle" size={17} color={C.success} /><Text style={styles.paymentText}>1,350 ر.ق · دفعة البدء · مدفوعة</Text></View>
-        <View style={styles.paymentRow}><Feather name="clock" size={17} color={C.gold} /><Text style={styles.paymentText}>1,800 ر.ق · المرحلة الحالية · بانتظار الاستحقاق</Text></View>
-        <View style={styles.paymentRow}><Feather name="lock" size={17} color={C.mutedForeground} /><Text style={styles.paymentText}>1,350 ر.ق · المرحلة الختامية · محجوزة</Text></View>
+        <View style={styles.rowBetween}><Text style={styles.totalAmount}>{Number.isFinite(Number(totalAmount)) ? `${Number(totalAmount).toLocaleString()} ${currency === "QAR" ? "ر.ق" : currency}` : `${totalAmount} ${currency}`}</Text><Text style={styles.itemTitle}>إجمالي الأتعاب</Text></View>
+        {milestones.map((item) => {
+          const amount = Number(item.amount);
+          return (
+            <View key={`payment-${item.id}`} style={styles.paymentRow}>
+              <Feather name={item.status === "released" ? "check-circle" : item.status === "awaiting_deposit" ? "lock" : "clock"} size={17} color={item.status === "released" ? C.success : item.status === "awaiting_deposit" ? C.mutedForeground : C.gold} />
+              <Text style={styles.paymentText}>{Number.isFinite(amount) ? `${amount.toLocaleString()}` : item.amount} {currency === "QAR" ? "ر.ق" : currency} · {item.title} · {milestoneStatusLabel(item.status)}</Text>
+            </View>
+          );
+        })}
       </View>
 
       <SectionTitle icon="folder" title="Documents" />
@@ -167,9 +202,24 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
         ))}
       </View>
 
-      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات الحالة في هذه الشاشة تأتي الآن من Backend عبر GET /api/cases/:id، مع تمرير JWT الحالي لتطبيق صلاحيات Admin/Client/Lawyer.</Text></View>
+      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات القضية وQuote وMilestones تأتي الآن من Backend عبر GET /api/cases/:id، مع تمرير JWT الحالي. لا يوجد منطق مالي جديد في الواجهة.</Text></View>
     </ScrollView>
   );
+}
+
+function milestoneStatusLabel(status: MilestoneStatus): string {
+  switch (status) {
+    case "awaiting_deposit": return "بانتظار الإيداع";
+    case "funded": return "مموّلة";
+    case "in_progress": return "قيد التنفيذ";
+    case "proof_submitted": return "تم تقديم الإثبات";
+    case "under_review": return "قيد المراجعة";
+    case "released": return "مُفرج عنها";
+    case "disputed": return "متنازع عليها";
+    case "paused": return "متوقفة";
+    case "cancelled": return "ملغاة";
+    default: return status;
+  }
 }
 
 function SectionTitle({ icon, title }: { icon: keyof typeof Feather.glyphMap; title: string }) {
