@@ -8,6 +8,14 @@ export type SupportedDocumentMimeType =
 
 export type DocumentCandidateSource = "ocr" | "vision" | "metadata" | "text";
 
+export type DocumentParserDocumentType = "generic" | "jordan_bar_association_id";
+
+export type JordanBarAssociationField =
+  | "bar_registration_number"
+  | "full_name_ar"
+  | "full_name_en"
+  | "national_number";
+
 export type DocumentCandidate = {
   field: string;
   value: string;
@@ -19,9 +27,12 @@ export type DocumentParserInput = {
   file: Buffer;
   fileName: string;
   mimeType: SupportedDocumentMimeType;
+  documentType?: DocumentParserDocumentType;
 };
 
-export type DocumentParserProviderInput = DocumentParserInput;
+export type DocumentParserProviderInput = DocumentParserInput & {
+  targetFields: readonly string[];
+};
 
 export type DocumentParserProvider = {
   analyze: (
@@ -32,6 +43,13 @@ export type DocumentParserProvider = {
 export type DocumentParserResult = {
   candidates: DocumentCandidate[];
 };
+
+export const JORDAN_BAR_ASSOCIATION_ID_FIELDS: readonly JordanBarAssociationField[] = [
+  "bar_registration_number",
+  "full_name_ar",
+  "full_name_en",
+  "national_number",
+];
 
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
@@ -65,6 +83,13 @@ const normalizeCandidate = (candidate: DocumentCandidate): DocumentCandidate => 
   };
 };
 
+const getTargetFields = (
+  documentType: DocumentParserDocumentType,
+): readonly string[] =>
+  documentType === "jordan_bar_association_id"
+    ? JORDAN_BAR_ASSOCIATION_ID_FIELDS
+    : [];
+
 const defaultProvider: DocumentParserProvider = {
   async analyze() {
     throw new Error("DOCUMENT_PARSER_PROVIDER_NOT_CONFIGURED");
@@ -77,6 +102,10 @@ const defaultProvider: DocumentParserProvider = {
  * This service intentionally has no database imports and no persistence side effects.
  * A provider performs the actual OCR/vision/model inference; this layer validates
  * and normalizes the model output into reviewable candidates for the human-in-the-loop.
+ *
+ * The Jordan Bar Association ID profile exposes the four fields needed by the
+ * lawyer-registration review screen. The provider remains responsible for OCR/
+ * vision extraction; this service never writes the extracted values anywhere.
  */
 export const parseDocument = async (
   input: DocumentParserInput,
@@ -98,7 +127,12 @@ export const parseDocument = async (
     throw new Error("UNSUPPORTED_DOCUMENT_MIME_TYPE");
   }
 
-  const candidates = await provider.analyze(input);
+  const documentType = input.documentType ?? "generic";
+  const candidates = await provider.analyze({
+    ...input,
+    documentType,
+    targetFields: getTargetFields(documentType),
+  });
 
   return {
     candidates: candidates.map(normalizeCandidate),
