@@ -16,6 +16,8 @@ import agreementsRouter from "./agreements";
 import legalRepresentationDocumentsRouter from "./legalRepresentationDocuments";
 import casesRouter from "./cases";
 import fundMilestoneRouter from "./fundMilestone";
+import createMilestoneProofRouter from "./createMilestoneProof";
+import createMilestoneReleaseRequestRouter from "./createMilestoneReleaseRequest";
 import releaseMilestoneRouter from "./releaseMilestone";
 import refundMilestoneRouter from "./refundMilestone";
 
@@ -38,6 +40,8 @@ router.use(agreementsRouter);
 router.use(legalRepresentationDocumentsRouter);
 router.use(casesRouter);
 router.use(fundMilestoneRouter);
+router.use(createMilestoneProofRouter);
+router.use(createMilestoneReleaseRequestRouter);
 router.use(releaseMilestoneRouter);
 router.use(refundMilestoneRouter);
 
