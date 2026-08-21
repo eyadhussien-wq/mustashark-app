@@ -15,6 +15,11 @@ const reviewSchema = z.object({
   rejectionReason: z.string().trim().max(1000).optional().nullable(),
 });
 
+type LawyerVerificationWrite = Pick<
+  typeof lawyerVerificationsTable.$inferInsert,
+  "licenseNumber" | "barAssociation" | "documentStorageKey" | "status" | "reviewedBy" | "reviewedAt" | "rejectionReason" | "updatedAt"
+>;
+
 export async function submitLawyerVerification(req: Request, res: Response) {
   const user = req.authUser;
   if (!user || user.role !== "lawyer") {
@@ -34,11 +39,11 @@ export async function submitLawyerVerification(req: Request, res: Response) {
       .limit(1);
 
     const now = new Date();
-    const values = {
+    const values: LawyerVerificationWrite = {
       licenseNumber: parsed.data.licenseNumber,
       barAssociation: parsed.data.barAssociation,
       documentStorageKey: parsed.data.documentStorageKey,
-      status: "pending" as const,
+      status: "pending",
       reviewedBy: null,
       reviewedAt: null,
       rejectionReason: null,
