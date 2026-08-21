@@ -112,9 +112,40 @@ S01-05/S01-06 controls include server-side source of truth, idempotency, double-
 - S02.3 Accept & Pay
 - S02.4 Agreement & Electronic Confirmation
 - S02.5 POA / Court Proof Upload
-- S02.6 Active Case Workspace
+- S02.6 Active Case Workspace — **CLOSED**
 - S02.7 Milestones & Escrow Release
+- S02.7.5 Active Case Final State & Notification Synchronization — **CLOSED / PR #80 merged**
+- S02.7.6 Audit Trail / Activity Log — **TEMPORARILY BLOCKED**: no ready case-specific Backend Audit Trail API; no mocks or architectural bypass.
+- S02.7.7 Investor Attachments Sync — **ALREADY SATISFIED** by existing document APIs/UI; no artificial change introduced.
 - S02.8 Admin Monitoring & Intervention
+
+### S03 — Real Estate Opportunities
+
+#### S03.1 — Real Estate Opportunities Catalog UI — **CLOSED / PR #81 merged**
+
+Frontend-only opportunity catalog for the Jordanian market presentation, including:
+- Property details and location
+- Property type
+- Expected yield
+- Profit margin
+- Opportunity value
+
+Future API/data integration is permitted only after verification of real authoritative APIs and data sources. No fabricated investment data is permitted.
+
+### S04 — **NEAR FUTURE / FROZEN**
+
+S04 is temporarily frozen. No implementation branch or production work begins until the freeze is explicitly lifted and the architecture/API contract is approved.
+
+### S05 — Lawyer Smart Safety Shield
+
+Strategic future track for intelligent lawyer safety and verification:
+- Lawyer identity and accreditation verification
+- Account and document safety indicators
+- Detection of abnormal or conflicting states before sensitive actions
+- Clear user/admin warnings when intervention is required
+- **Future API integration:** connect only to approved, authoritative APIs after availability and source-of-truth contracts are verified
+
+No Backend, Schema, Migration, or financial-core change is implied by the roadmap item.
 
 ### T02 — Dispute & Resolution
 
@@ -203,6 +234,9 @@ Continuous Security Gate · IDOR/Ownership · Financial Authorization · Dispute
 ### Phase 3 — Production Readiness
 Payment Provider Integration · Tax/E-Invoicing · Payout Rails · Monitoring · Resilience/Recovery · Performance QA · Security/Privacy · Compliance · Final Production QA
 
+### Phase 3+ — Strategic Expansion
+S03 Real Estate Opportunities · S04 Frozen / Near Future · S05 Lawyer Smart Safety Shield with future verified API integrations.
+
 ## 08 — GLOBAL EXECUTION PROTOCOL
 
 ```text
@@ -226,4 +260,4 @@ MASTER ROADMAP
 
 ## Canonical lineage
 
-This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47. It is a governance specification, not proof that every listed item is implemented.
+This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status and strategic S04/S05 tracks. It is a governance specification, not proof that every listed item is implemented.
