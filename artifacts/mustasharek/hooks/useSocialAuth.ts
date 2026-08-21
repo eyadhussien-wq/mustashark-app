@@ -15,10 +15,9 @@ export interface SocialProfile {
   id: string;
   name: string;
   email: string;
-  jwt?: string;
+  jwt: string;
 }
 
-// ── Stored Apple emails (Apple only returns email on first login) ─────────────
 const APPLE_EMAILS_KEY = "mustasharek_apple_emails_v1";
 
 async function getAppleStoredEmail(appleUserId: string): Promise<string> {
@@ -40,7 +39,6 @@ async function saveAppleEmail(appleUserId: string, email: string) {
   } catch {}
 }
 
-// ── Parse fragment or query string from a redirect URL ───────────────────────
 function parseFragment(url: string): Record<string, string> {
   const hash = url.split("#")[1] ?? url.split("?")[1] ?? "";
   return Object.fromEntries(
@@ -51,23 +49,24 @@ function parseFragment(url: string): Record<string, string> {
   );
 }
 
-// ── Backend auth call ─────────────────────────────────────────────────────────
-// Returns null  → server not configured / network unreachable → graceful local fallback
-// Throws        → server returned intentional 4xx/5xx (e.g. role mismatch, terminated account)
-//                 → MUST propagate; do NOT fall back to local login
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
   : "";
 
+/**
+ * Production social authentication is fail-closed.
+ * A provider token is never sufficient to create a local session: the API
+ * must verify the provider identity and issue the canonical JWT first.
+ */
 async function callBackendAuth(
   provider: SocialProvider,
   token: string,
   opts?: { role?: PortalRole; displayName?: string; storedEmail?: string },
-): Promise<{ jwt: string; user: Record<string, unknown> } | null> {
-  if (!API_BASE) return null; // No server configured — demo/offline mode
+): Promise<{ jwt: string; user: Record<string, unknown> }> {
+  if (!API_BASE) {
+    throw new Error("تعذر تهيئة خدمة تسجيل الدخول الآمن. يرجى المحاولة مرة أخرى.");
+  }
 
-  // Separate fetch from response handling so network errors return null
-  // while intentional server rejections always throw.
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/auth/social`, {
@@ -82,42 +81,36 @@ async function callBackendAuth(
       }),
     });
   } catch {
-    // Network error — server unreachable; fall back to local
-    return null;
+    throw new Error("تعذر الاتصال بخدمة تسجيل الدخول. لم يتم إنشاء جلسة دخول.");
   }
 
+  const data = await res.json().catch(() => ({})) as {
+    ok?: boolean;
+    jwt?: string;
+    user?: Record<string, unknown>;
+    message?: string;
+    error?: string;
+  };
+
   if (!res.ok) {
-    // Intentional rejection (role mismatch, soft-deleted/expired account, etc.)
-    // Must throw so the caller never proceeds with local login.
-    const body = await res.json().catch(() => ({})) as {
-      message?: string;
-      error?: string;
-    };
     throw new Error(
-      body.message ?? body.error ?? "فشل التحقق من الخادم. يرجى المحاولة مجدداً.",
+      data.message ?? data.error ?? "فشل التحقق من الخادم. يرجى المحاولة مجدداً.",
     );
   }
 
-  const data = await res.json() as {
-    ok: boolean;
-    jwt?: string;
-    user?: Record<string, unknown>;
-  };
-  if (!data.ok || !data.jwt) return null;
+  if (!data.ok || !data.jwt) {
+    throw new Error("تعذر إنشاء جلسة دخول آمنة. لم يمنح الخادم رمز جلسة صالحاً.");
+  }
+
   return { jwt: data.jwt, user: data.user ?? {} };
 }
-
-// ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useSocialAuth() {
   const [loading, setLoading] = useState<SocialProvider | null>(null);
 
-  // ── Google ────────────────────────────────────────────────────────────────
   const loginWithGoogle = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
     if (!OAUTH.google.clientId) {
-      throw new Error(
-        "لم يتم ضبط Google Client ID بعد.\nأضف EXPO_PUBLIC_GOOGLE_CLIENT_ID في متغيرات البيئة.",
-      );
+      throw new Error("لم يتم ضبط Google Client ID بعد.\nأضف EXPO_PUBLIC_GOOGLE_CLIENT_ID في متغيرات البيئة.");
     }
     setLoading("google");
     try {
@@ -128,43 +121,35 @@ export function useSocialAuth() {
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&response_type=token` +
         `&scope=${encodeURIComponent("openid profile email")}`;
-
       const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
       if (result.type !== "success") throw new Error("تم إلغاء تسجيل الدخول");
-
       const params = parseFragment(result.url);
       const accessToken = params["access_token"];
       if (!accessToken) throw new Error("لم يتم استلام رمز الوصول من Google");
 
-      // Get basic profile info from Google
       const infoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
+      if (!infoRes.ok) throw new Error("تعذر التحقق من حساب Google");
       const info = await infoRes.json() as Record<string, string>;
+      if (!info.sub || !info.email) throw new Error("تعذر قراءة هوية حساب Google");
 
-      const profile: SocialProfile = {
-        provider: "google",
-        id: info.sub ?? "",
-        name: info.name ?? info.email ?? "",
-        email: info.email ?? "",
-      };
-
-      // Verify with backend → get JWT and enforce the selected portal role
       const backend = await callBackendAuth("google", accessToken, { role });
-      if (backend?.jwt) profile.jwt = backend.jwt;
-
-      return profile;
+      return {
+        provider: "google",
+        id: info.sub,
+        name: info.name ?? info.email,
+        email: info.email,
+        jwt: backend.jwt,
+      };
     } finally {
       setLoading(null);
     }
   }, []);
 
-  // ── Facebook ──────────────────────────────────────────────────────────────
   const loginWithFacebook = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
     if (!OAUTH.facebook.appId) {
-      throw new Error(
-        "لم يتم ضبط Facebook App ID بعد.\nأضف EXPO_PUBLIC_FACEBOOK_APP_ID في متغيرات البيئة.",
-      );
+      throw new Error("لم يتم ضبط Facebook App ID بعد.\nأضف EXPO_PUBLIC_FACEBOOK_APP_ID في متغيرات البيئة.");
     }
     setLoading("facebook");
     try {
@@ -175,45 +160,35 @@ export function useSocialAuth() {
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&response_type=token` +
         `&scope=${encodeURIComponent("email,public_profile")}`;
-
       const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
       if (result.type !== "success") throw new Error("تم إلغاء تسجيل الدخول");
-
       const params = parseFragment(result.url);
       const accessToken = params["access_token"];
       if (!accessToken) throw new Error("لم يتم استلام رمز الوصول من Facebook");
 
-      // Get basic profile info from Facebook
       const infoRes = await fetch(
         `https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`,
       );
+      if (!infoRes.ok) throw new Error("تعذر التحقق من حساب Facebook");
       const info = await infoRes.json() as Record<string, string>;
+      if (!info.id || !info.email) throw new Error("تعذر قراءة هوية حساب Facebook");
 
-      const profile: SocialProfile = {
-        provider: "facebook",
-        id: info.id ?? "",
-        name: info.name ?? "",
-        email: info.email ?? "",
-      };
-
-      // Verify with backend → get JWT and enforce the selected portal role
       const backend = await callBackendAuth("facebook", accessToken, { role });
-      if (backend?.jwt) profile.jwt = backend.jwt;
-
-      return profile;
+      return {
+        provider: "facebook",
+        id: info.id,
+        name: info.name ?? info.email,
+        email: info.email,
+        jwt: backend.jwt,
+      };
     } finally {
       setLoading(null);
     }
   }, []);
 
-  // ── Apple ─────────────────────────────────────────────────────────────────
   const loginWithApple = useCallback(async (role: PortalRole = "client"): Promise<SocialProfile> => {
-    if (Platform.OS !== "ios") {
-      throw new Error("تسجيل الدخول بـ Apple متاح على أجهزة iOS فقط");
-    }
-
-    const isAvailable = await AppleAuthentication.isAvailableAsync();
-    if (!isAvailable) {
+    if (Platform.OS !== "ios") throw new Error("تسجيل الدخول بـ Apple متاح على أجهزة iOS فقط");
+    if (!(await AppleAuthentication.isAvailableAsync())) {
       throw new Error("تسجيل الدخول بـ Apple غير متاح على هذا الجهاز (يتطلب iOS 13+)");
     }
 
@@ -225,40 +200,30 @@ export function useSocialAuth() {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-
       const { user: appleUserId, identityToken, email, fullName } = credential;
-
       if (!identityToken) throw new Error("لم يتم استلام رمز التحقق من Apple");
 
-      // Apple only sends email + name on FIRST login — persist them
       const displayName = [fullName?.givenName, fullName?.familyName]
         .filter(Boolean)
         .join(" ")
         .trim();
-
       let resolvedEmail = email ?? "";
-      if (email) {
-        await saveAppleEmail(appleUserId, email);
-      } else {
-        resolvedEmail = await getAppleStoredEmail(appleUserId);
-      }
+      if (email) await saveAppleEmail(appleUserId, email);
+      else resolvedEmail = await getAppleStoredEmail(appleUserId);
 
-      const profile: SocialProfile = {
+      const backend = await callBackendAuth("apple", identityToken, {
+        role,
+        displayName: displayName || undefined,
+        storedEmail: resolvedEmail || undefined,
+      });
+
+      return {
         provider: "apple",
         id: appleUserId,
         name: displayName || resolvedEmail.split("@")[0] || "مستخدم Apple",
         email: resolvedEmail,
+        jwt: backend.jwt,
       };
-
-      // Verify identityToken with backend → get JWT and enforce the selected portal role
-      const backend = await callBackendAuth("apple", identityToken, {
-        role,
-        displayName: profile.name,
-        storedEmail: resolvedEmail,
-      });
-      if (backend?.jwt) profile.jwt = backend.jwt;
-
-      return profile;
     } finally {
       setLoading(null);
     }
