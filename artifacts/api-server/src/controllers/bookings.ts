@@ -65,31 +65,61 @@ export const createBooking = async (req: Request, res: Response) => {
 export const confirmBooking = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.body;
-    if (!bookingId) return res.status(400).json({ ok: false, error: "bookingId_is_required" });
+    if (!bookingId) return res.status(400).json({ ok: false, error: "booking_id_is_required" });
     const authUser = req.authUser!;
+
     const updatedBooking = await db.transaction(async (tx) => {
       const [booking] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.lawyerId !== authUser.id && authUser.role !== "admin") throw new Error("FORBIDDEN");
       if (booking.status !== "pending" || booking.paymentStatus !== "paid" || booking.escrowStatus !== "held") throw new Error("INVALID_STATE");
+
       assertT01Transition(getT01State(booking), "SCHEDULED");
-      const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
-      const [updated] = await tx.update(bookingsTable).set({ status: "accepted", googleMeetLink, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "pending"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held"))).returning();
+
+      const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber?.toLowerCase()}` : null;
+
+      const [updated] = await tx.update(bookingsTable).set({
+        status: "accepted",
+        googleMeetLink,
+        updatedAt: new Date()
+      }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "pending"))).returning();
+
       if (!updated) throw new Error("ALREADY_PROCESSED");
+
       const grossAmount = booking.price;
       const commissionRate = PLATFORM_COMMISSION_RATE;
       const commissionAmount = String((Number(grossAmount) * Number(commissionRate)).toFixed(2));
-      await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId, grossAmount, commissionRate, commissionAmount, status: "pending" }).onConflictDoNothing();
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id, metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true } });
+
+      await tx.insert(platformDuesTable).values({
+        id: crypto.randomUUID(),
+        bookingId,
+        officeId: booking.officeId,
+        lawyerId: booking.lawyerId,
+        grossAmount,
+        commissionRate,
+        commissionAmount,
+        status: "pending"
+      }).onConflictDoNothing();
+
+      await tx.insert(consultationEventsTable).values({
+        id: crypto.randomUUID(),
+        bookingId,
+        eventType: "LAWYER_ACCEPTED",
+        actorId: authUser.id,
+        metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true }
+      });
+
       return updated;
     });
+
     return res.json({ ok: true, booking: updatedBooking });
   } catch (error: any) {
     if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
     if (error?.message === "INVALID_STATE") return res.status(409).json({ ok: false, error: "payment_and_escrow_required_before_acceptance" });
     if (error?.message === "ALREADY_PROCESSED") return res.status(409).json({ ok: false, error: "already_processed_or_invalid_state" });
-    console.error("Confirm Booking Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
+    console.error("Confirm Booking Error:", error);
+    return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
 

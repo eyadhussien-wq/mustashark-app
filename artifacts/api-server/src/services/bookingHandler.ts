@@ -23,7 +23,6 @@ export async function handleBookingConfirmation(params: ConfirmBookingParams) {
 
     // الخطوة 2: إرسال إيميل آمن ومستقل للعميل (بدون كشف إيميل أو هاتف المحامي)
     const clientEmailBody = `مرحباً ${params.clientName}،\n\nتم تأكيد موعد استشارتك القانونية.\nنوع الاستشارة: ${params.type.toUpperCase()}\nموعد الجلسة: ${params.scheduledTime}\n${meetingUrl ? `رابط الانضمام للمكالمة: ${meetingUrl}` : 'ستتم المراسلة عبر الشات داخل التطبيق.'}\n\nشكراً لاستخدامك منصة مستشارك.`;
-    
     await communicationService.sendEmailNotification(
       params.clientEmail,
       'تأكيد حجز الاستشارة القانونية - مستشارك',
