@@ -90,6 +90,7 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(caseId));
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async (agreementId: string) => {
@@ -126,16 +127,7 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
     }
   }, [getAuthToken]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (caseRecord?.agreementId) {
-        void loadDocuments(caseRecord.agreementId);
-      }
-    }, [caseRecord?.agreementId, loadDocuments]),
-  );
-
-  useEffect(() => {
-    let cancelled = false;
+  const loadCase = useCallback(async (showLoading: boolean) => {
     if (!caseId) {
       setCaseRecord(null);
       setDocuments([]);
@@ -144,37 +136,55 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
       return;
     }
 
-    const loadCase = async () => {
+    if (showLoading) {
       setIsLoading(true);
-      setError(null);
-      try {
-        const token = await getAuthToken();
-        if (!token) throw new Error("جلسة الدخول غير متاحة");
-        if (!API_BASE) throw new Error("خدمة القضايا غير مهيأة في هذه البيئة");
+    } else {
+      setIsRefreshing(true);
+    }
 
-        const response = await fetch(`${API_BASE}/cases/${encodeURIComponent(caseId)}`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        });
-        const payload = await response.json().catch(() => null) as { ok?: boolean; case?: CaseRecord; error?: string } | null;
-        if (!response.ok || !payload?.ok || !payload.case) {
-          if (response.status === 403) throw new Error("ليس لديك صلاحية للوصول إلى هذه القضية");
-          if (response.status === 404) throw new Error("القضية غير موجودة");
-          throw new Error(payload?.error ?? "تعذر تحميل بيانات القضية");
-        }
-        if (!cancelled) {
-          setCaseRecord(payload.case);
-          void loadDocuments(payload.case.agreementId);
-        }
-      } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
-      } finally {
-        if (!cancelled) setIsLoading(false);
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("جلسة الدخول غير متاحة");
+      if (!API_BASE) throw new Error("خدمة القضايا غير مهيأة في هذه البيئة");
+
+      const response = await fetch(`${API_BASE}/cases/${encodeURIComponent(caseId)}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      const payload = await response.json().catch(() => null) as { ok?: boolean; case?: CaseRecord; error?: string } | null;
+      if (!response.ok || !payload?.ok || !payload.case) {
+        if (response.status === 403) throw new Error("ليس لديك صلاحية للوصول إلى هذه القضية");
+        if (response.status === 404) throw new Error("القضية غير موجودة");
+        throw new Error(payload?.error ?? "تعذر تحميل بيانات القضية");
       }
-    };
 
-    void loadCase();
-    return () => { cancelled = true; };
+      setCaseRecord(payload.case);
+      void loadDocuments(payload.case.agreementId);
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      if (showLoading) {
+        setIsLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
+    }
   }, [caseId, getAuthToken, loadDocuments]);
+
+  useEffect(() => {
+    void loadCase(true);
+  }, [loadCase]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadCase(false);
+      const refreshInterval = setInterval(() => {
+        void loadCase(false);
+      }, 15000);
+
+      return () => clearInterval(refreshInterval);
+    }, [loadCase]),
+  );
 
   const statusLabel = caseRecord?.status === "active" ? "نشطة" : caseRecord?.status === "completed" ? "مكتملة" : caseRecord?.status === "closed" ? "مغلقة" : caseRecord?.status ?? "—";
   const milestones = caseRecord?.milestones ?? caseRecord?.agreement?.milestones ?? [];
@@ -196,12 +206,14 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
       <View style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={styles.caseBadge}><Feather name="briefcase" size={15} color={C.gold} /><Text style={styles.caseBadgeText}>قضية {statusLabel}</Text></View>
+          <View style={styles.liveState}><View style={styles.liveDot} /><Text style={styles.liveText}>{isRefreshing ? "جاري المزامنة" : "مزامنة تلقائية"}</Text></View>
           <Text style={styles.kicker}>{isClient ? "مساحة العميل" : "مساحة المحامي"}</Text>
         </View>
         <Text style={styles.heroTitle}>القضية #{caseRecord.id}</Text>
         <Text style={styles.heroMeta}>{isClient ? `المحامي: ${caseRecord.lawyerId}` : `العميل: ${caseRecord.clientId}`} · الحالة: {statusLabel}</Text>
         <View style={styles.progressTrack}><View style={[styles.progressFill, caseRecord.status === "closed" && styles.closedProgress]} /></View>
         <Text style={styles.progressText}>الحالة التشغيلية: {statusLabel}</Text>
+        {caseRecord.updatedAt ? <Text style={styles.updatedText}>آخر تحديث من الخادم: {new Date(caseRecord.updatedAt).toLocaleString()}</Text> : null}
       </View>
 
       <SectionTitle icon="activity" title="Timeline القضية" />
@@ -281,7 +293,7 @@ export function ActiveCaseWorkspace({ role, caseId, milestoneId }: { role: Activ
         {documentError ? <Text style={styles.documentError}>{documentError}</Text> : null}
       </View>
 
-      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات القضية وQuote وMilestones تأتي الآن من Backend عبر GET /api/cases/:id، ومستندات التمثيل القانوني تأتي من الـ API المخصص مع تمرير JWT الحالي. لا يوجد منطق مالي أو مستندات جديد في الواجهة.</Text></View>
+      <View style={styles.notice}><Feather name="shield" size={16} color={C.gold} /><Text style={styles.noticeText}>بيانات القضية وQuote وMilestones تُعاد مزامنتها من Backend عبر GET /api/cases/:id عند فتح الشاشة وكل 15 ثانية، ومستندات التمثيل القانوني تُحدّث عبر الـ API المخصص مع JWT الحالي. لا يوجد منطق مالي أو Schema أو Migration جديد في الواجهة.</Text></View>
     </ScrollView>
   );
 }
@@ -341,6 +353,9 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   caseBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(201,160,53,.12)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 10 },
   caseBadgeText: { color: C.gold, fontSize: 10, fontFamily: "Inter_700Bold" },
+  liveState: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 7, paddingVertical: 5, borderRadius: 8, backgroundColor: "rgba(255,255,255,.08)" },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
+  liveText: { color: "rgba(255,255,255,.72)", fontSize: 8, fontFamily: "Inter_600SemiBold" },
   kicker: { color: "rgba(255,255,255,.65)", fontSize: 10, fontFamily: "Inter_600SemiBold" },
   heroTitle: { color: "#fff", fontSize: 19, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 13 },
   heroMeta: { color: "rgba(255,255,255,.68)", fontSize: 10, textAlign: "right", marginTop: 5, fontFamily: "Inter_400Regular" },
@@ -348,6 +363,7 @@ const styles = StyleSheet.create({
   progressFill: { width: "100%", height: "100%", backgroundColor: C.gold, borderRadius: 8 },
   closedProgress: { backgroundColor: C.success },
   progressText: { color: C.gold, fontSize: 10, textAlign: "right", marginTop: 7, fontFamily: "Inter_600SemiBold" },
+  updatedText: { color: "rgba(255,255,255,.5)", fontSize: 8, textAlign: "right", marginTop: 4, fontFamily: "Inter_400Regular" },
   sectionTitle: { flexDirection: "row-reverse", alignItems: "center", gap: 7, marginTop: 20, marginBottom: 9 },
   sectionTitleText: { color: C.foreground, fontSize: 14, fontFamily: "Inter_700Bold", textAlign: "right" },
   card: { backgroundColor: C.card, borderRadius: 15, borderWidth: 1, borderColor: C.border, padding: 14 },
