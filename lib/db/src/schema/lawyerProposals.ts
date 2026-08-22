@@ -2,7 +2,7 @@ import { pgEnum, pgTable, text, timestamp, numeric, index, check } from "drizzle
 import { sql } from "drizzle-orm";
 import { usersTable } from "./users.ts";
 import { representationQuoteRequestsTable } from "./representationQuoteRequests.ts";
-import { quoteCurrencyEnum } from "./representationFinance";
+import { quoteCurrencyEnum } from "./representationFinance.ts";
 
 export const lawyerProposalStatusEnum = pgEnum("lawyer_proposal_status", [
   "draft",
