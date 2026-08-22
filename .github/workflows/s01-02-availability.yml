@@ -39,6 +39,10 @@ jobs:
       - name: Provision database
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
         run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
+        run: node ./scripts/seed-ci-test-users.mjs
       - name: Apply S01-02 migration
         env: {DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test}
         run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
@@ -49,7 +53,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_02_test
           NODE_ENV: production
-          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
           PORT: "8081"
           SESSION_SECRET: s01-02-ci-test-secret
         run: pnpm --filter @workspace/api-server start >/tmp/s01-02-api.log 2>&1 &
