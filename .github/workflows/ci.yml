@@ -39,8 +39,8 @@ jobs:
       - name: Build admin dashboard
         run: pnpm --filter @workspace/admin-dashboard build
       - name: Verify Expo dependency alignment
-        working-directory: artifacts/mustasharek
         continue-on-error: true
+        working-directory: artifacts/mustasharek
         run: pnpm exec expo install --check
 
   security-db-guard:
@@ -91,6 +91,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./scripts/seed-ci-test-users.mjs
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -99,7 +104,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           NODE_ENV: production
-          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
           PORT: "8081"
           SESSION_SECRET: ci-auth-smoke-test-secret
         run: |
@@ -161,6 +165,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./scripts/seed-ci-test-users.mjs
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -169,7 +178,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           NODE_ENV: production
-          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
           PORT: "8081"
           SESSION_SECRET: ci-concurrency-test-secret
         run: |
@@ -255,6 +263,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./scripts/seed-ci-test-users.mjs
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -263,7 +276,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           NODE_ENV: production
-          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
           PORT: "8081"
           SESSION_SECRET: ci-x1-cancel-test-secret
         run: |
