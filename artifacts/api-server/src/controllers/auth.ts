@@ -47,7 +47,6 @@ function getUniqueViolationConstraint(err: unknown): string | null {
   return null;
 }
 
-const PROVIDER_IDENTITY_UNIQUE_CONSTRAINT = "users_auth_provider_provider_id_uq";
 const EMAIL_UNIQUE_CONSTRAINT = "users_email_unique";
 
 export async function socialAuth(req: Request, res: Response) {
@@ -66,20 +65,12 @@ export async function socialAuth(req: Request, res: Response) {
       if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني الموثق من مزود الهوية مطلوب لإنشاء حساب جديد." });
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
-        await db.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() });
+        const inserted = await db.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() }).onConflictDoNothing({ target: [usersTable.authProvider, usersTable.providerId] }).returning();
+        dbUser = inserted[0] ?? await findUserByProvider(provider, providerUser.id);
       } catch (err) {
         const constraint = getUniqueViolationConstraint(err);
-        if (!constraint) throw err;
-        if (constraint === PROVIDER_IDENTITY_UNIQUE_CONSTRAINT) {
-          dbUser = await findUserByProvider(provider, providerUser.id);
-        } else if (constraint === EMAIL_UNIQUE_CONSTRAINT) {
-          // PostgreSQL may report the email index for the same-provider concurrent winner.
-          // Recovery is safe only if the exact provider identity now exists; never link by email.
-          dbUser = await findUserByProvider(provider, providerUser.id);
-          if (!dbUser) return res.status(409).json({ ok: false, error: "email_conflict" });
-        } else {
-          throw err;
-        }
+        if (constraint === EMAIL_UNIQUE_CONSTRAINT) return res.status(409).json({ ok: false, error: "email_conflict" });
+        throw err;
       }
       if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     }
