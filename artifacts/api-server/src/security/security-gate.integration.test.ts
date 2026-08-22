@@ -103,6 +103,29 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
   }
 });
 
+test("#3b Provider Identity: email collision never auto-links an unrelated local account", async () => {
+  const id = `security-gate-email-owner-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const providerId = `security-gate-conflict-provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const email = `${id}@example.test`;
+  createdUserIds.push(id);
+  await db.insert(usersTable).values({ id, name: "Existing Local Owner", email, passwordHash: await bcrypt.hash("Gate-Only-Password-123!", 10), role: "client", authProvider: "local", providerId: null, accountStatus: "active", createdAt: new Date(), updatedAt: new Date() });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Conflicting OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+  try {
+    const req = { body: { provider: "google", token: "synthetic-security-gate-conflict-token", role: "client" }, log: { error() {}, warn() {}, info() {} } } as any;
+    const res = responseMock();
+    await socialAuth(req, res as any);
+
+    assert.equal(res.result.statusCode, 409, JSON.stringify(res.result.body));
+    assert.equal(res.result.body?.error, "email_conflict");
+    const providerRows = await db.select({ id: usersTable.id }).from(usersTable).where(and(eq(usersTable.authProvider, "google"), eq(usersTable.providerId, providerId)));
+    assert.equal(providerRows.length, 0, "email conflict must not create or link a social identity");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 after(async () => {
   for (const id of createdUserIds) await db.delete(usersTable).where(eq(usersTable.id, id));
   await pool.end();
