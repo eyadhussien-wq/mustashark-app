@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const adminAuditLogsTable = pgTable("admin_audit_logs", {
   id: text("id").primaryKey(),
