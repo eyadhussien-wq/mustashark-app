@@ -1,62 +1,90 @@
 import bcrypt from "bcryptjs";
-import { db, pool, usersTable } from "@workspace/db";
+import { execFileSync } from "node:child_process";
 
-const password = "test1234";
-const passwordHash = await bcrypt.hash(password, 10);
-const now = new Date();
-
-const fixtures = [
-  {
-    id: "ci-fixture-client",
-    name: "CI Test Client",
-    email: "client@mustashark.com",
-    phone: "+962790000001",
-    phoneCountry: "jordan",
-    role: "client",
-    authProvider: "local",
-    accountStatus: "active",
-  },
-  {
-    id: "ci-fixture-lawyer",
-    name: "CI Test Lawyer",
-    email: "lawyer@mustashark.com",
-    phone: "+962790000002",
-    phoneCountry: "jordan",
-    role: "lawyer",
-    authProvider: "local",
-    accountStatus: "active",
-    specialization: "general",
-  },
-];
-
-for (const fixture of fixtures) {
-  await db
-    .insert(usersTable)
-    .values({
-      ...fixture,
-      passwordHash,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: usersTable.email,
-      set: {
-        name: fixture.name,
-        passwordHash,
-        phone: fixture.phone,
-        phoneCountry: fixture.phoneCountry,
-        role: fixture.role,
-        authProvider: fixture.authProvider,
-        providerId: null,
-        accountStatus: fixture.accountStatus,
-        statusReason: null,
-        specialization: fixture.specialization ?? null,
-        deletedAt: null,
-        deletionScheduledAt: null,
-        updatedAt: now,
-      },
-    });
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL must be set for CI auth fixture provisioning.");
 }
 
-await pool.end();
+const passwordHash = await bcrypt.hash("test1234", 10);
+
+// Keep this fixture independent from @workspace/db runtime imports. The CI
+// job runs Node directly against TypeScript workspace sources, while the DB
+// package intentionally exposes source modules whose extensionless imports
+// are not valid under Node's ESM resolver. psql talks directly to the
+// isolated PostgreSQL service and never touches production infrastructure.
+const sql = `
+INSERT INTO users (
+  id,
+  name,
+  email,
+  password_hash,
+  phone,
+  phone_country,
+  role,
+  auth_provider,
+  account_status,
+  specialization,
+  deleted_at,
+  deletion_scheduled_at,
+  status_reason,
+  created_at,
+  updated_at
+) VALUES
+  (
+    'ci-fixture-client',
+    'CI Test Client',
+    'client@mustashark.com',
+    :'password_hash',
+    '+962790000001',
+    'jordan',
+    'client',
+    'local',
+    'active',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NOW(),
+    NOW()
+  ),
+  (
+    'ci-fixture-lawyer',
+    'CI Test Lawyer',
+    'lawyer@mustashark.com',
+    :'password_hash',
+    '+962790000002',
+    'jordan',
+    'lawyer',
+    'local',
+    'active',
+    'general',
+    NULL,
+    NULL,
+    NULL,
+    NOW(),
+    NOW()
+  )
+ON CONFLICT (email) DO UPDATE SET
+  name = EXCLUDED.name,
+  password_hash = EXCLUDED.password_hash,
+  phone = EXCLUDED.phone,
+  phone_country = EXCLUDED.phone_country,
+  role = EXCLUDED.role,
+  auth_provider = EXCLUDED.auth_provider,
+  provider_id = NULL,
+  account_status = EXCLUDED.account_status,
+  specialization = EXCLUDED.specialization,
+  deleted_at = NULL,
+  deletion_scheduled_at = NULL,
+  status_reason = NULL,
+  updated_at = NOW();
+`;
+
+execFileSync(
+  "psql",
+  [databaseUrl, "-v", "ON_ERROR_STOP=1", "-v", `password_hash=${passwordHash}`],
+  { input: sql, stdio: ["pipe", "inherit", "inherit"] },
+);
+
 console.log("CI auth fixtures provisioned in the isolated PostgreSQL database.");
