@@ -103,10 +103,7 @@ jobs:
           DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
           SECURITY_TEST_DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
           NODE_ENV: test
-        run: >
-          pnpm --filter @workspace/api-server exec vitest run
-          src/security/security-gate.integration.test.ts
-          --reporter=verbose
+        run: pnpm --filter @workspace/api-server test:security-gate
 
       - name: Run API typecheck
         run: pnpm --filter @workspace/api-server typecheck
