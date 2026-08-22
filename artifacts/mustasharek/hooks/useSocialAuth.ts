@@ -1,6 +1,5 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { useCallback, useState } from "react";
 import OAUTH from "@/constants/oauth";
@@ -16,27 +15,6 @@ export interface SocialProfile {
   name: string;
   email: string;
   jwt?: string;
-}
-
-const APPLE_EMAILS_KEY = "mustasharek_apple_emails_v1";
-
-async function getAppleStoredEmail(appleUserId: string): Promise<string> {
-  try {
-    const raw = await AsyncStorage.getItem(APPLE_EMAILS_KEY);
-    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-    return map[appleUserId] ?? "";
-  } catch {
-    return "";
-  }
-}
-
-async function saveAppleEmail(appleUserId: string, email: string) {
-  try {
-    const raw = await AsyncStorage.getItem(APPLE_EMAILS_KEY);
-    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-    map[appleUserId] = email;
-    await AsyncStorage.setItem(APPLE_EMAILS_KEY, JSON.stringify(map));
-  } catch {}
 }
 
 function parseFragment(url: string): Record<string, string> {
@@ -56,7 +34,7 @@ const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
 async function callBackendAuth(
   provider: SocialProvider,
   token: string,
-  opts?: { role?: PortalRole; displayName?: string; storedEmail?: string },
+  opts?: { role?: PortalRole; displayName?: string },
 ): Promise<{ jwt: string; user: Record<string, unknown> }> {
   if (!API_BASE) {
     throw new Error("خدمة المصادقة غير مهيأة. لا يمكن تسجيل الدخول بدون الخادم.");
@@ -72,7 +50,6 @@ async function callBackendAuth(
         token,
         role: opts?.role ?? "client",
         displayName: opts?.displayName,
-        storedEmail: opts?.storedEmail,
       }),
     });
   } catch {
@@ -158,11 +135,8 @@ export function useSocialAuth() {
       const { user: appleUserId, identityToken, email, fullName } = credential;
       if (!identityToken) throw new Error("لم يتم استلام رمز التحقق من Apple");
       const displayName = [fullName?.givenName, fullName?.familyName].filter(Boolean).join(" ").trim();
-      let resolvedEmail = email ?? "";
-      if (email) await saveAppleEmail(appleUserId, email);
-      else resolvedEmail = await getAppleStoredEmail(appleUserId);
-      const profile: SocialProfile = { provider: "apple", id: appleUserId, name: displayName || resolvedEmail.split("@")[0] || "مستخدم Apple", email: resolvedEmail };
-      const backend = await callBackendAuth("apple", identityToken, { role, displayName: profile.name, storedEmail: resolvedEmail });
+      const profile: SocialProfile = { provider: "apple", id: appleUserId, name: displayName || email?.split("@")[0] || "مستخدم Apple", email: email ?? "" };
+      const backend = await callBackendAuth("apple", identityToken, { role, displayName: profile.name });
       profile.jwt = backend.jwt;
       return profile;
     } finally {
