@@ -22,9 +22,9 @@ process.env.GOOGLE_CLIENT_ID = "security-gate-test-client";
 const { db, pool, usersTable } = await import("@workspace/db");
 const { eq, and, sql } = await import("drizzle-orm");
 const bcrypt = (await import("bcryptjs")).default;
-const { signToken } = await import("../lib/jwt.ts");
-const { requireAdmin } = await import("../middlewares/requireAdmin.ts");
-const { localAuth, socialAuth } = await import("../controllers/auth.ts");
+const { signToken } = await import("../lib/jwt");
+const { requireAdmin } = await import("../middlewares/requireAdmin");
+const { localAuth, socialAuth } = await import("../controllers/auth");
 
 const createdUserIds: string[] = [];
 
