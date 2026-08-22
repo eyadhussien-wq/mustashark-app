@@ -145,6 +145,8 @@ export default function LawyerAuth() {
         ...form,
         experience: parseInt(form.experience) || 1,
         hourlyRate: parseInt(form.hourlyRate) || 150,
+        termsAccepted: true,
+        termsAcceptedAt: new Date().toISOString(),
       });
       router.replace("/");
     } catch (e: any) {
