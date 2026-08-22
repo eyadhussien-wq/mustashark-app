@@ -355,7 +355,7 @@ function RegisterForm({
         </View>
         <View>
           <Text style={styles.sectionTitle}>انضم كمحامٍ معتمد</Text>
-          <Text style={styles.sectionSub}>أكمل بياناتك للانضمام إلى شبكة مستشارك</Text>
+          <Text style={styles.sectionSub}>أكمل بياناتك للانضمام إلى شبكة مستشارك[cite: 2]</Text>
         </View>
       </View>
 
