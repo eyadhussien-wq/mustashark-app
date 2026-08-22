@@ -142,7 +142,14 @@ export default function LawyerAuth() {
     setRegLoading(true);
     try {
       await registerLawyer({
-        ...form,
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        country: form.country,
+        specialization: form.specialization,
+        licenseNumber: form.licenseNumber,
+        bio: form.bio,
         experience: parseInt(form.experience) || 1,
         hourlyRate: parseInt(form.hourlyRate) || 150,
         termsAccepted: true,
