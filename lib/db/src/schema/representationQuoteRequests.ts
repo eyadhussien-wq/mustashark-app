@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 import { representationQuotesTable } from "./representationFinance";
 
 export const representationQuoteRequestStatusEnum = pgEnum("representation_quote_request_status", [
