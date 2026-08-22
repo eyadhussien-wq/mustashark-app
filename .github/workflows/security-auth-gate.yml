@@ -1,0 +1,58 @@
+name: Security Auth Verification Gate
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  auth-security-gate:
+    name: Z-AUTH #1 #2 #3 adversarial verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_security_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_security_test"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      SECURITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_security_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Provision isolated Test DB schema
+        env:
+          DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
+        run: pnpm --filter @workspace/db push
+      - name: Assert Test DB identity and schema isolation
+        env:
+          DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
+        run: |
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/mustashark_security_test"
+          psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT current_database();"
+      - name: Run adversarial Security Gate tests #1 #2 #3
+        run: pnpm --filter @workspace/api-server test:security-gate
+      - name: Run API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
