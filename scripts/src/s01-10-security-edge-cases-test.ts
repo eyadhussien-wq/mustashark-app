@@ -1,8 +1,40 @@
 import assert from "node:assert/strict";
-import presentationSecurity from "../../artifacts/mustasharek/lib/security/presentationSecurity";
-import retrySafety from "../../artifacts/mustasharek/lib/security/retrySafety";
-import agendaPresentation from "../../artifacts/mustasharek/lib/agenda/agendaPresentation";
+import * as presentationSecurityModule from "../../artifacts/mustasharek/lib/security/presentationSecurity";
+import * as retrySafetyModule from "../../artifacts/mustasharek/lib/security/retrySafety";
+import * as agendaPresentationModule from "../../artifacts/mustasharek/lib/agenda/agendaPresentation";
 import type { AgendaItem } from "../../artifacts/mustasharek/lib/agenda/agendaTypes";
+
+type PresentationSecurityApi = {
+  authorizeAgendaPresentation: typeof import("../../artifacts/mustasharek/lib/security/presentationSecurity").authorizeAgendaPresentation;
+  canRenderSensitiveAgendaField: typeof import("../../artifacts/mustasharek/lib/security/presentationSecurity").canRenderSensitiveAgendaField;
+  safeTimeZone: typeof import("../../artifacts/mustasharek/lib/security/presentationSecurity").safeTimeZone;
+};
+
+type RetrySafetyApi = {
+  buildRetryKey: typeof import("../../artifacts/mustasharek/lib/security/retrySafety").buildRetryKey;
+  decideRetry: typeof import("../../artifacts/mustasharek/lib/security/retrySafety").decideRetry;
+};
+
+type AgendaPresentationApi = {
+  formatAgendaTime: typeof import("../../artifacts/mustasharek/lib/agenda/agendaPresentation").formatAgendaTime;
+  formatDateKey: typeof import("../../artifacts/mustasharek/lib/agenda/agendaPresentation").formatDateKey;
+  toAgendaReadModel: typeof import("../../artifacts/mustasharek/lib/agenda/agendaPresentation").toAgendaReadModel;
+};
+
+const presentationSecurity =
+  "default" in presentationSecurityModule
+    ? (presentationSecurityModule.default as PresentationSecurityApi)
+    : (presentationSecurityModule as unknown as PresentationSecurityApi);
+
+const retrySafety =
+  "default" in retrySafetyModule
+    ? (retrySafetyModule.default as RetrySafetyApi)
+    : (retrySafetyModule as unknown as RetrySafetyApi);
+
+const agendaPresentation =
+  "default" in agendaPresentationModule
+    ? (agendaPresentationModule.default as AgendaPresentationApi)
+    : (agendaPresentationModule as unknown as AgendaPresentationApi);
 
 const {
   authorizeAgendaPresentation,
