@@ -3,43 +3,51 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq, and, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
 
 const appleJwksClient = jwksClient({ jwksUri: "https://appleid.apple.com/auth/keys", cache: true, cacheMaxAge: 600_000, rateLimit: true });
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID ?? process.env.EXPO_PUBLIC_FACEBOOK_APP_ID ?? "";
+const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET ?? "";
+const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID ?? "com.mustasharek.app";
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[\s()-]/g, "");
 }
-
 function getPhoneCountry(phone: string): string | null {
   if (phone.startsWith("+974")) return "qatar";
   if (phone.startsWith("+962")) return "jordan";
   return null;
 }
-
 function isSupportedPhone(phone: string): boolean {
   return /^\+974\d{8}$/.test(phone) || /^\+9627\d{8}$/.test(phone);
 }
-
 function isBlockedAccountStatus(status: string | null | undefined): boolean {
   return status === "suspended" || status === "blocked" || status === "rejected" || status === "terminated";
 }
 
 async function verifyGoogleToken(accessToken: string): Promise<{ id: string; email: string; name: string } | null> {
+  if (!GOOGLE_CLIENT_ID) return null;
   try {
     const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
     if (!res.ok) return null;
     const data = await res.json() as Record<string, string>;
-    if (!data.email_verified || data.email_verified === "false") return null;
+    if (!data.sub || !data.email || data.email_verified !== "true" || data.aud !== GOOGLE_CLIENT_ID) return null;
     return { id: data.sub, email: data.email, name: data.name ?? data.email };
   } catch { return null; }
 }
 
 async function verifyFacebookToken(accessToken: string): Promise<{ id: string; email: string; name: string } | null> {
+  if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) return null;
   try {
+    const appAccessToken = `${FACEBOOK_APP_ID}|${FACEBOOK_APP_SECRET}`;
+    const debugRes = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appAccessToken)}`);
+    if (!debugRes.ok) return null;
+    const debugBody = await debugRes.json() as { data?: { app_id?: string; is_valid?: boolean } };
+    if (!debugBody.data?.is_valid || debugBody.data.app_id !== FACEBOOK_APP_ID) return null;
     const res = await fetch(`https://graph.facebook.com/me?fields=id,name,email&access_token=${encodeURIComponent(accessToken)}`);
     if (!res.ok) return null;
     const data = await res.json() as Record<string, string>;
@@ -54,8 +62,13 @@ async function verifyAppleToken(identityToken: string): Promise<{ id: string; em
     if (!decoded || typeof decoded === "string" || !decoded.header.kid) return null;
     const signingKey = await appleJwksClient.getSigningKey(decoded.header.kid);
     const publicKey = signingKey.getPublicKey();
-    const verified = jwt.verify(identityToken, publicKey, { algorithms: ["RS256"], issuer: "https://appleid.apple.com" }) as jwt.JwtPayload;
-    return { id: verified.sub ?? "", email: verified.email ?? "", name: (verified as any).name ?? "" };
+    const verified = jwt.verify(identityToken, publicKey, {
+      algorithms: ["RS256"],
+      issuer: "https://appleid.apple.com",
+      audience: APPLE_CLIENT_ID,
+    }) as jwt.JwtPayload;
+    if (!verified.sub) return null;
+    return { id: verified.sub, email: verified.email ?? "", name: (verified as any).name ?? "" };
   } catch { return null; }
 }
 
@@ -64,9 +77,7 @@ const socialSchema = z.object({
   token: z.string().min(1),
   role: z.enum(["client", "lawyer"]).optional().default("client"),
   displayName: z.string().optional(),
-  storedEmail: z.string().optional(),
 });
-
 function roleMismatchResponse(role: string) {
   return {
     ok: false,
@@ -75,7 +86,6 @@ function roleMismatchResponse(role: string) {
     message: role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء.",
   };
 }
-
 function lawyerVerificationPendingResponse() {
   return {
     ok: false,
@@ -88,23 +98,22 @@ function lawyerVerificationPendingResponse() {
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { provider, token, role, displayName, storedEmail } = parsed.data;
-
+  const { provider, token, role, displayName } = parsed.data;
   try {
     let providerUser: { id: string; email: string; name: string } | null = null;
     if (provider === "google") providerUser = await verifyGoogleToken(token);
     else if (provider === "facebook") providerUser = await verifyFacebookToken(token);
     else {
       providerUser = await verifyAppleToken(token);
-      if (providerUser && !providerUser.email && storedEmail) providerUser.email = storedEmail;
       if (providerUser && !providerUser.name && displayName) providerUser.name = displayName;
     }
-
     if (!providerUser || !providerUser.id) return res.status(401).json({ ok: false, error: "invalid_provider_token" });
-    if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني مطلوب. يرجى إعادة المحاولة مع السماح بمشاركة بريدك الإلكتروني." });
 
-    let dbUser = await findUser(provider, providerUser.id, providerUser.email);
+    // Never authenticate an account by email alone. A social token can only authenticate
+    // an existing identity when its verified provider subject is already linked in the DB.
+    let dbUser = await findUserByProvider(provider, providerUser.id);
     if (!dbUser) {
+      if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني الموثق من مزود الهوية مطلوب لإنشاء حساب جديد." });
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}`;
       await db.insert(usersTable).values({
         id: newId,
@@ -118,22 +127,20 @@ export async function socialAuth(req: Request, res: Response) {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      dbUser = await findUser(provider, providerUser.id, providerUser.email);
+      dbUser = await findUserByProvider(provider, providerUser.id);
     }
-
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
 
     if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
       const now = new Date();
       if (dbUser.deletionScheduledAt > now) {
         await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, dbUser.id));
-        dbUser = await findUser(provider, providerUser.id, providerUser.email);
+        dbUser = await findUserByProvider(provider, providerUser.id);
         req.log.info({ userId: dbUser?.id }, "soft-deleted account reactivated on social login");
       } else {
         return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
       }
     }
-
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     if (isBlockedAccountStatus(dbUser.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "عذراً، تم إيقاف هذا الحساب. يرجى التواصل مع الدعم." });
     if (dbUser.role === "lawyer" && dbUser.accountStatus === "pending") {
@@ -142,10 +149,13 @@ export async function socialAuth(req: Request, res: Response) {
     }
     if (dbUser.accountStatus !== "active" && dbUser.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
 
+    // Implicit local/social linking is an account-takeover risk. Do not mutate a local
+    // account here. A future link endpoint must authenticate the existing account and
+    // independently verify the second provider identity before linking it.
     if (dbUser.authProvider === "local" || !dbUser.providerId) {
-      await db.update(usersTable).set({ authProvider: provider, providerId: providerUser.id, updatedAt: new Date() }).where(eq(usersTable.id, dbUser.id));
+      req.log.warn({ userId: dbUser.id, provider }, "social login refused implicit local-account linking");
+      return res.status(403).json({ ok: false, error: "account_link_required", message: "لا يمكن ربط حساب اجتماعي بحساب محلي أثناء تسجيل الدخول. استخدم مسار الربط الموثق من داخل الحساب." });
     }
-
     if (dbUser.role !== "admin" && dbUser.role !== role) return res.status(403).json(roleMismatchResponse(dbUser.role));
 
     const jwtToken = signToken({ userId: dbUser.id, email: dbUser.email, role: (dbUser.role ?? "client") as "client" | "lawyer" | "admin", provider });
@@ -169,9 +179,9 @@ export async function socialAuth(req: Request, res: Response) {
   }
 }
 
-async function findUser(provider: string, providerId: string, email: string) {
-  const rows = await db.select().from(usersTable).where(or(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerId)), eq(usersTable.email, email))).limit(1);
-  return rows[0] ?? null;
+async function findUserByProvider(provider: string, providerId: string) {
+  const rows = await db.select().from(usersTable).where(eq(usersTable.authProvider, provider as any)).limit(100);
+  return rows.find((row) => row.providerId === providerId) ?? null;
 }
 
 const localAuthSchema = z.object({
@@ -190,16 +200,13 @@ const localAuthSchema = z.object({
 export async function localAuth(req: Request, res: Response) {
   const parsed = localAuthSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-
   const { email, password, name, country, nationality, role, specialization, bio, hourlyRate } = parsed.data;
   const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : undefined;
   const normalEmail = email.trim().toLowerCase();
   const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
-
   try {
     const rows = await db.select().from(usersTable).where(eq(usersTable.email, normalEmail)).limit(1);
     let existing = rows[0] ?? null;
-
     if (existing) {
       if (existing.deletedAt && existing.deletionScheduledAt) {
         const now = new Date();
@@ -210,7 +217,6 @@ export async function localAuth(req: Request, res: Response) {
           return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
         }
       }
-
       if (!existing) return res.status(500).json({ ok: false, error: "user_creation_failed" });
       if (isBlockedAccountStatus(existing.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "تم إيقاف هذا الحساب." });
       if (existing.role === "lawyer" && existing.accountStatus === "pending") {
@@ -218,7 +224,6 @@ export async function localAuth(req: Request, res: Response) {
         return res.status(403).json(lawyerVerificationPendingResponse());
       }
       if (existing.accountStatus !== "active" && existing.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
-
       if (existing.passwordHash) {
         const match = await bcrypt.compare(password, existing.passwordHash);
         if (!match) {
@@ -229,9 +234,7 @@ export async function localAuth(req: Request, res: Response) {
         req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
         return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
       }
-
       if (existing.role !== "admin" && existing.role !== role) return res.status(403).json(roleMismatchResponse(existing.role));
-
       const jwtToken = signToken({ userId: existing.id, email: existing.email, role: (existing.role ?? "client") as "client" | "lawyer" | "admin", provider: "local" });
       return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, roleUi: ROLE_UI[existing.role as keyof typeof ROLE_UI], user: {
         id: existing.id,
@@ -247,11 +250,9 @@ export async function localAuth(req: Request, res: Response) {
         hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null,
       } });
     }
-
     if (!name?.trim()) return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
     if (!phone) return res.status(400).json({ ok: false, error: "phone_required", message: "رقم الهاتف مطلوب لإنشاء الحساب" });
     if (!isSupportedPhone(phone)) return res.status(400).json({ ok: false, error: "invalid_phone", message: "رقم الهاتف غير صالح. استخدم رقمًا قطريًا يبدأ +974 أو أردنيًا يبدأ +962 وبالطول الصحيح." });
-
     const phoneCountry = getPhoneCountry(phone);
     const passwordHash = await bcrypt.hash(password, 10);
     const newId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -275,7 +276,6 @@ export async function localAuth(req: Request, res: Response) {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
     if (isLawyerRegistration) {
       req.log.info({ userId: newId, email: normalEmail, accountStatus, statusReason }, "lawyer registration created pending professional verification");
       return res.status(202).json({
@@ -288,7 +288,6 @@ export async function localAuth(req: Request, res: Response) {
         user: { id: newId, name: name.trim(), email: normalEmail, role: "lawyer", accountStatus: "pending" },
       });
     }
-
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
     return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, roleUi: ROLE_UI[role], user: {
       id: newId,
