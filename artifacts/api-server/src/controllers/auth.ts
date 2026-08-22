@@ -35,7 +35,15 @@ const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]
 function roleMismatchResponse(role: string) { return { ok: false, error: "role_mismatch", roleUi: ROLE_UI[role as keyof typeof ROLE_UI], message: role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." }; }
 function lawyerVerificationPendingResponse() { return { ok: false, error: "lawyer_verification_pending", accountStatus: "pending", message: "تم استلام طلب تسجيل المحامي. لا يمكن استخدام بوابة المحامين قبل التحقق المهني واعتماد الإدارة." }; }
 
-function isUniqueViolation(err: unknown): boolean { return typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "23505"; }
+type DatabaseError = { code?: string; constraint?: string };
+function getUniqueViolationConstraint(err: unknown): string | null {
+  if (typeof err !== "object" || err === null) return null;
+  const dbError = err as DatabaseError;
+  return dbError.code === "23505" ? dbError.constraint ?? null : null;
+}
+
+const PROVIDER_IDENTITY_UNIQUE_CONSTRAINT = "users_auth_provider_provider_id_uq";
+const EMAIL_UNIQUE_CONSTRAINT = "users_email_unique";
 
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
@@ -55,13 +63,21 @@ export async function socialAuth(req: Request, res: Response) {
       try {
         await db.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() });
       } catch (err) {
-        if (!isUniqueViolation(err)) throw err;
-        // The provider identity was claimed concurrently. The DB unique constraint is
-        // authoritative; reload the winner rather than creating or returning a duplicate.
+        const constraint = getUniqueViolationConstraint(err);
+        if (!constraint) throw err;
+        if (constraint === PROVIDER_IDENTITY_UNIQUE_CONSTRAINT) {
+          dbUser = await findUserByProvider(provider, providerUser.id);
+        } else if (constraint === EMAIL_UNIQUE_CONSTRAINT) {
+          // A same-provider concurrent winner may surface the email constraint first.
+          // Recovery is safe only if the exact provider identity now exists; never link by email.
+          dbUser = await findUserByProvider(provider, providerUser.id);
+          if (!dbUser) return res.status(409).json({ ok: false, error: "email_conflict" });
+        } else {
+          throw err;
+        }
       }
-      dbUser = await findUserByProvider(provider, providerUser.id);
+      if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     }
-    if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
 
     if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
       const now = new Date();
