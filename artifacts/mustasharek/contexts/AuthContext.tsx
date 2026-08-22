@@ -24,8 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncDeletionStatus = useCallback(async (jwt: string, base: User) => { if (!API_BASE || base.role !== "lawyer") return; try { const res = await fetch(`${API_BASE}/profile/deletion-status`, { headers: { Authorization: `Bearer ${jwt}` } }); if (!res.ok) return; const status = await res.json() as { deletionPendingRequest?: boolean; deletionRejectionNote?: string | null }; await persist({ ...base, deletionPendingRequest: status.deletionPendingRequest ?? false, deletionRejectionNote: status.deletionRejectionNote ?? undefined }); } catch {} }, [persist]);
 
   const login = useCallback(async (emailRaw: string, passwordRaw: string, expectedRole?: "client" | "lawyer") => {
-    if (!emailRaw.trim() || !passwordRaw) throw new Error("يرجى تعبئة البريد الإلكتروني وكلمة المرور");
-    const api = await requireApi(); const email = normalizeEmail(emailRaw); await AsyncStorage.multiRemove([JWT_KEY, SESSION_KEY]).catch(() => {});
+    if (!emailRaw.trim() || !passwordRaw) throw new Error("يرجى تعبئة البريد الإلكتروني وكلمة المرور"); const api = await requireApi(); const email = normalizeEmail(emailRaw); await AsyncStorage.multiRemove([JWT_KEY, SESSION_KEY]).catch(() => {});
     let res: Response; try { res = await fetch(`${api}/auth/local-auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: passwordRaw.trim(), ...(expectedRole ? { role: expectedRole } : {}) }) }); } catch { throw new Error("تعذر الاتصال بخدمة تسجيل الدخول. لا يمكن المتابعة بدون الخادم."); }
     if (!res.ok) { const body = await res.json().catch(() => ({})) as { error?: string; message?: string }; if (body.error === "role_mismatch") throw new Error(body.message ?? roleMismatch(expectedRole ?? "client")); if (body.error === "social_account_only") throw new Error("هذا الحساب مرتبط بتسجيل دخول اجتماعي. يرجى استخدام Google أو Apple للدخول."); if (body.error === "account_permanently_deleted") throw new Error(body.message ?? "تم حذف هذا الحساب نهائياً ولا يمكن استعادته."); if (body.error === "account_terminated") throw new Error(body.message ?? "تم إيقاف هذا الحساب. يرجى التواصل مع الدعم."); if (body.error === "lawyer_verification_pending") throw new Error(body.message ?? "حساب المحامي قيد التحقق من الإدارة."); if (res.status === 401) throw new Error("بيانات تسجيل الدخول غير صحيحة"); throw new Error(body.message ?? body.error ?? "تعذر تسجيل الدخول. يرجى المحاولة مرة أخرى."); }
     const data = await res.json() as { ok: boolean; jwt?: string; userId?: string; user?: Record<string, unknown> }; if (!data.ok || !data.jwt) throw new Error("لم يُصدر الخادم جلسة مصادقة صالحة."); const p = data.user ?? {}; const role = p.role as UserRole; if (expectedRole && role !== expectedRole) { await AsyncStorage.multiRemove([JWT_KEY, SESSION_KEY]); throw new Error(roleMismatch(expectedRole)); }
@@ -38,10 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithSocial = useCallback(async (profile: SocialProfile, role: UserRole) => {
     if (!profile.jwt) throw new Error("لم تُكمل المصادقة مع الخادم. لا يمكن تسجيل الدخول بدون JWT صادر من الخادم.");
-    const api = await requireApi(); let res: Response; try { res = await fetch(`${api}/auth/social`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: profile.provider, token: profile.jwt, role }) }); } catch { throw new Error("تعذر الاتصال بخدمة المصادقة."); }
-    if (!res.ok) await jsonError(res, "فشل تسجيل الدخول الاجتماعي."); const data = await res.json() as { ok: boolean; jwt?: string; user?: Record<string, unknown> }; if (!data.ok || !data.jwt) throw new Error("لم يُصدر الخادم جلسة مصادقة صالحة."); const p = data.user ?? {}; const serverRole = p.role as UserRole; if (serverRole !== role && serverRole !== "admin") throw new Error(roleMismatch(role as "client" | "lawyer"));
-    const base: User = { id: (p.id as string) ?? "", name: (p.name as string) ?? profile.name, email: (p.email as string) ?? normalizeEmail(profile.email), phone: (p.phone as string | null) ?? "", role: serverRole, country: (p.country as User["country"] | null) ?? "qatar", socialProvider: (p.authProvider as string) ?? profile.provider, specialization: (p.specialization as string | null) ?? null, bio: (p.bio as string | null) ?? null, hourlyRate: (p.hourlyRate as number | null) ?? null, deletionRejectionNote: (p.deletionRejectionNote as string | null) ?? undefined };
-    await persist(base, data.jwt); await syncDeletionStatus(data.jwt, base);
+    const userId = decodeJwtUserId(profile.jwt);
+    if (!userId) throw new Error("رمز المصادقة الاجتماعي ليس JWT صالحاً صادرًا من الخادم.");
+    if (role !== "client" && role !== "lawyer" && role !== "admin") throw new Error("نوع البوابة غير صالح.");
+    const base: User = { id: userId, name: profile.name, email: normalizeEmail(profile.email), phone: "", role, country: "qatar", socialProvider: profile.provider };
+    await persist(base, profile.jwt);
+    await syncDeletionStatus(profile.jwt, base);
   }, [persist, syncDeletionStatus]);
 
   const registerClient = useCallback(async (data: RegisterClientData) => {
