@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const profileChangeFieldEnum = pgEnum("profile_change_field", [
   "specialization",
