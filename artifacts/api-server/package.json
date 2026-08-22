@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types --test src/services/documentParser.test.ts src/services/clientFileUploadHub.test.ts src/services/quickActions.test.ts src/services/export/exportService.test.ts"
+    "test": "node --experimental-strip-types --test src/services/documentParser.test.ts src/services/clientFileUploadHub.test.ts src/services/quickActions.test.ts src/services/export/exportService.test.ts",
+    "test:security-gate": "node --experimental-strip-types --test src/security/security-gate.integration.test.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

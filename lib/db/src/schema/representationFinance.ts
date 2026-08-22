@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, numeric, integer, boolean } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const quoteCurrencyEnum = pgEnum("quote_currency", ["QAR", "JOD"]);
 export const representationQuoteStatusEnum = pgEnum("representation_quote_status", [
