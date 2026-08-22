@@ -9,7 +9,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { bookingsTable } from "./bookings.ts";
 import { officesTable } from "./offices.ts";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const dueStatusEnum = pgEnum("due_status", [
   "pending",
