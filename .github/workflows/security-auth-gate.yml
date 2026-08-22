@@ -79,6 +79,28 @@ jobs:
           DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
         run: pnpm --filter @workspace/db push
 
+      - name: DIAGNOSTIC — inspect users indexes in isolated Test DB
+        env:
+          DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${DATABASE_URL}" = \
+            "postgresql://postgres:postgres@localhost:5432/mustashark_security_test"
+
+          echo "=== Z-AUTH #3 DIAGNOSTIC: pg_indexes for public.users ==="
+          psql "${DATABASE_URL}" \
+            -v ON_ERROR_STOP=1 \
+            -P pager=off \
+            -c "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'users' ORDER BY indexname;"
+
+          echo "=== Z-AUTH #3 DIAGNOSTIC: unique indexes for public.users ==="
+          psql "${DATABASE_URL}" \
+            -v ON_ERROR_STOP=1 \
+            -P pager=off \
+            -c "SELECT i.indexname, i.indexdef FROM pg_indexes i WHERE i.schemaname = 'public' AND i.tablename = 'users' AND EXISTS (SELECT 1 FROM pg_index x JOIN pg_class c ON c.oid = x.indexrelid WHERE c.relname = i.indexname AND x.indisunique) ORDER BY i.indexname;"
+
       - name: Assert Test DB identity and schema isolation
         env:
           DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
