@@ -35,11 +35,16 @@ const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]
 function roleMismatchResponse(role: string) { return { ok: false, error: "role_mismatch", roleUi: ROLE_UI[role as keyof typeof ROLE_UI], message: role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." }; }
 function lawyerVerificationPendingResponse() { return { ok: false, error: "lawyer_verification_pending", accountStatus: "pending", message: "تم استلام طلب تسجيل المحامي. لا يمكن استخدام بوابة المحامين قبل التحقق المهني واعتماد الإدارة." }; }
 
-type DatabaseError = { code?: string; constraint?: string };
+type DatabaseErrorLike = { code?: unknown; constraint?: unknown; cause?: unknown };
 function getUniqueViolationConstraint(err: unknown): string | null {
-  if (typeof err !== "object" || err === null) return null;
-  const dbError = err as DatabaseError;
-  return dbError.code === "23505" ? dbError.constraint ?? null : null;
+  let current: unknown = err;
+  for (let depth = 0; depth < 2; depth += 1) {
+    if (typeof current !== "object" || current === null) return null;
+    const dbError = current as DatabaseErrorLike;
+    if (dbError.code === "23505") return typeof dbError.constraint === "string" ? dbError.constraint : null;
+    current = dbError.cause;
+  }
+  return null;
 }
 
 const PROVIDER_IDENTITY_UNIQUE_CONSTRAINT = "users_auth_provider_provider_id_uq";
@@ -68,7 +73,7 @@ export async function socialAuth(req: Request, res: Response) {
         if (constraint === PROVIDER_IDENTITY_UNIQUE_CONSTRAINT) {
           dbUser = await findUserByProvider(provider, providerUser.id);
         } else if (constraint === EMAIL_UNIQUE_CONSTRAINT) {
-          // A same-provider concurrent winner may surface the email constraint first.
+          // PostgreSQL may report the email index for the same-provider concurrent winner.
           // Recovery is safe only if the exact provider identity now exists; never link by email.
           dbUser = await findUserByProvider(provider, providerUser.id);
           if (!dbUser) return res.status(409).json({ ok: false, error: "email_conflict" });
