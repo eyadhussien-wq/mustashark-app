@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
@@ -115,18 +115,24 @@ export async function socialAuth(req: Request, res: Response) {
     if (!dbUser) {
       if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني الموثق من مزود الهوية مطلوب لإنشاء حساب جديد." });
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}`;
-      await db.insert(usersTable).values({
-        id: newId,
-        name: providerUser.name || providerUser.email.split("@")[0],
-        email: providerUser.email,
-        authProvider: provider,
-        providerId: providerUser.id,
-        role,
-        accountStatus: role === "lawyer" ? "pending" : "active",
-        statusReason: role === "lawyer" ? "lawyer_verification_required" : null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      try {
+        await db.insert(usersTable).values({
+          id: newId,
+          name: providerUser.name || providerUser.email.split("@")[0],
+          email: providerUser.email,
+          authProvider: provider,
+          providerId: providerUser.id,
+          role,
+          accountStatus: role === "lawyer" ? "pending" : "active",
+          statusReason: role === "lawyer" ? "lawyer_verification_required" : null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } catch (insertErr) {
+        const code = typeof insertErr === "object" && insertErr !== null && "code" in insertErr ? String((insertErr as { code?: unknown }).code) : "";
+        if (code !== "23505") throw insertErr;
+        req.log.info({ provider, providerId: providerUser.id }, "social identity insert raced; reloading existing identity");
+      }
       dbUser = await findUserByProvider(provider, providerUser.id);
     }
     if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
@@ -180,8 +186,8 @@ export async function socialAuth(req: Request, res: Response) {
 }
 
 async function findUserByProvider(provider: string, providerId: string) {
-  const rows = await db.select().from(usersTable).where(eq(usersTable.authProvider, provider as any)).limit(100);
-  return rows.find((row) => row.providerId === providerId) ?? null;
+  const rows = await db.select().from(usersTable).where(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerId))).limit(1);
+  return rows[0] ?? null;
 }
 
 const localAuthSchema = z.object({
@@ -208,6 +214,20 @@ export async function localAuth(req: Request, res: Response) {
     const rows = await db.select().from(usersTable).where(eq(usersTable.email, normalEmail)).limit(1);
     let existing = rows[0] ?? null;
     if (existing) {
+      // Security invariant: prove control of the local credential before changing any
+      // deletion/account-status fields. Knowledge of an email address alone must never
+      // reactivate a soft-deleted account.
+      if (existing.passwordHash) {
+        const match = await bcrypt.compare(password, existing.passwordHash);
+        if (!match) {
+          await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
+          return res.status(401).json({ ok: false, error: "invalid_credentials", message: "كلمة المرور غير صحيحة" });
+        }
+      } else {
+        req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
+        return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
+      }
+
       if (existing.deletedAt && existing.deletionScheduledAt) {
         const now = new Date();
         if (existing.deletionScheduledAt > now) {
@@ -224,16 +244,6 @@ export async function localAuth(req: Request, res: Response) {
         return res.status(403).json(lawyerVerificationPendingResponse());
       }
       if (existing.accountStatus !== "active" && existing.role !== "admin") return res.status(403).json({ ok: false, error: "account_not_active", message: "عذراً، لا يمكن تسجيل الدخول بهذا الحساب حالياً." });
-      if (existing.passwordHash) {
-        const match = await bcrypt.compare(password, existing.passwordHash);
-        if (!match) {
-          await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
-          return res.status(401).json({ ok: false, error: "invalid_credentials", message: "كلمة المرور غير صحيحة" });
-        }
-      } else {
-        req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
-        return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
-      }
       if (existing.role !== "admin" && existing.role !== role) return res.status(403).json(roleMismatchResponse(existing.role));
       const jwtToken = signToken({ userId: existing.id, email: existing.email, role: (existing.role ?? "client") as "client" | "lawyer" | "admin", provider: "local" });
       return res.json({ ok: true, jwt: jwtToken, userId: existing.id, isNew: false, roleUi: ROLE_UI[existing.role as keyof typeof ROLE_UI], user: {
