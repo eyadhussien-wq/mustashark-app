@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, pgEnum, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, pgEnum, numeric, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -32,7 +32,9 @@ export const usersTable = pgTable("users", {
   deletionRejectionNote: text("deletion_rejection_note"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("users_auth_provider_provider_id_uq").on(table.authProvider, table.providerId),
+]);
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true, updatedAt: true });
 export const selectUserSchema = createSelectSchema(usersTable);
