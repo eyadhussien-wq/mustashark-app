@@ -10,9 +10,6 @@ const app: Express = express();
 const allowedOrigins = [
   "https://mustasharek.com",
   "https://admin.mustasharek.com",
-  /^https:\/\/[^/]+\.replit\.dev(?::\d+)?$/,
-  /^https:\/\/[^/]+\.replit\.app(?::\d+)?$/,
-  /^http:\/\/localhost:\d+$/,
   /^http:\/\/127\.0\.0\.1:\d+$/,
 ];
 
