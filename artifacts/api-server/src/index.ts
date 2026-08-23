@@ -15,8 +15,6 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Replit's external proxy must be able to reach the API process from outside
-// the workspace, so bind explicitly to all interfaces.
 app.listen(port, "0.0.0.0", (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
