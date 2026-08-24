@@ -124,7 +124,25 @@ export async function submitReview(req: Request, res: Response) {
       "review submitted securely",
     );
     return res.status(201).json({ ok: true });
-  } catch (err) {
+  } catch (err: unknown) {
+    const dbError = err as {
+      code?: unknown;
+      constraint?: unknown;
+      cause?: {
+        code?: unknown;
+        constraint?: unknown;
+      };
+    };
+    const code = dbError.code ?? dbError.cause?.code;
+    const constraint = dbError.constraint ?? dbError.cause?.constraint;
+
+    if (
+      code === "23505" &&
+      constraint === "lawyer_reviews_client_consultation_unique"
+    ) {
+      return res.status(409).json({ ok: false, error: "already_reviewed" });
+    }
+
     req.log.error(err, "submitReview failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
