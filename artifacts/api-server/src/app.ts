@@ -84,6 +84,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 app.use(pinoHttp({ logger }));
-app.use(router);
+app.use("/api", router);
 
 export default app;
