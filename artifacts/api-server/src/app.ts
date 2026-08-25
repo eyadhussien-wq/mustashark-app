@@ -13,6 +13,12 @@ const allowedOrigins = [
   /^http:\/\/127\.0\.0\.1:\d+$/,
 ];
 
+// CI/API behavioral tests run in NODE_ENV=test and use localhost:3000.
+// Keep localhost out of production/development CORS allowlists.
+if (process.env.NODE_ENV === "test") {
+  allowedOrigins.push("http://localhost:3000");
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
