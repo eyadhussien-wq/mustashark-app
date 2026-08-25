@@ -2,18 +2,13 @@
 
 ## Purpose
 
-D02 is not a late visual-polish step. It is the **design foundation attached to every user-facing build stage**.
-
-The complete surface-level inventory is maintained in:
-
-`docs/design/D02-SURFACE-MASTER-MAP.md`
-
-That document is the canonical screen/surface expansion for Client, Lawyer/N1, Admin, Shared surfaces and all current/future lifecycle families.
+D02 is the mandatory design foundation attached to every user-facing build stage. The integration/control layer is now `docs/architecture/MAP-X-CROSS-MAP-INTEGRATION.md`.
 
 Rule:
 
 ```text
 Build Stage / Roadmap ID
+→ MAP-X intersection
 → User Surface
 → D02 foundation
 → UI states
@@ -21,9 +16,11 @@ Build Stage / Roadmap ID
 → Accessibility
 → Security/financial messaging presentation
 → Visual QA
+→ Tests / CI
+→ Verify Main
 ```
 
-A functional roadmap item that exposes a user interface must declare its D02 dependency before implementation closure.
+A functional roadmap item that exposes a user interface must declare its D02 dependency and MAP-X intersection before implementation closure.
 
 ## 01 — Canonical D02 foundation
 
@@ -42,99 +39,68 @@ A functional roadmap item that exposes a user interface must declare its D02 dep
 
 ## 02 — Canonical surface coverage
 
-D02 coverage is now mandatory across the complete application surface inventory:
+D02 coverage is mandatory across Client, Lawyer/N1, Admin and Shared surfaces. The full row-by-row surface map is maintained in `docs/design/D02-SURFACE-MASTER-MAP.md`.
 
-- Client surfaces: authentication, onboarding, home, profile, discovery, consultation, proposal, scheduling, payment presentation, workspace, documents, messages, notifications, history, cancellation, refund, transfer, representation and disputes.
-- Lawyer/N1 surfaces: the complete `N1.01–N1.40 Mustashark Lawyer Digital Office`, including dashboard/command center, clients, intake, consultations, workbench, memoranda, documents, matters, courtroom mode, meeting mode, financial center, reconciliation, BI, tasks, notifications, search, templates, profile, availability, archive, security, mobile/desktop modes, office/firma settings and future integrations.
-- Admin surfaces: authentication, command center, users, lawyer verification, consultation operations, scheduling, disputes, financial/reconciliation, documents, audit/security, reports and settings.
-- Shared surfaces: navigation, search, notifications, documents, payments/status presentation, consent, conflict/error/unauthorized states, support, RTL/i18n/accessibility.
+## 03 — MAP-X integration rule
 
-For the full row-by-row mapping use `docs/design/D02-SURFACE-MASTER-MAP.md`.
+D02 remains the design authority for visible behavior. `MAP-X-CROSS-MAP-INTEGRATION.md` is the control plane that connects D02 with role maps, lifecycle maps, N1, C3, domain/data/security and repository evidence.
 
-## 03 — Client surface family X
+No D02 item is considered closed until its MAP-X trace exists.
 
-Every client-facing build item is D02-bound. The detailed baseline remains:
+## 04 — Client surface family X
 
-| Build surface | Roadmap/lifecycle | Required D02 mapping |
-|---|---|---|
-| Client login / sign-in | X/7 + Auth foundation | D02-01,02,03,04,05,06,08,09 |
-| Client registration / onboarding | X/7 | D02-01,02,03,04,05,06,08,09 |
-| Client home / command surface | X/1, X/2 | D02-01,02,03,05,06,08,09 |
-| Client profile / account | X/7 | D02-01,03,05,06,08,09 |
-| Lawyer discovery / profile | X/2 + T01 | D02-01,02,03,05,06,08,09 |
-| Consultation request | X/2, X/3 + T01-01 | D02-03,04,05,08,09 |
-| Proposal review / acceptance | X/2, X/3 + T01-02/03 | D02-04,05,06,08,09 |
-| Scheduling / calendar / booking | S01 | D02-01,03,04,05,08,09 |
-| Payment / payment proof presentation | T01-05 | D02-04,05,08,09; financial/security messaging must follow C3 |
-| Consultation workspace | T01 | D02-01,03,05,06,08,09 |
-| Documents / upload / preview | T01-04/06 + D02-07 | D02-04,05,07,08,09 |
-| Client messages / communication | X/2/X/3 + T01 | D02-03,04,05,08,09 |
-| Client history / archive | X/2 | D02-01,03,05,07,08,09 |
-| Refund / cancellation / transfer presentation | C-stage + T01/S01 | D02-04,05,08,09; semantics governed by C3 |
+Every client-facing build item is D02-bound and MAP-X-bound: authentication, onboarding, home, profile, discovery, consultation, proposals, scheduling, payment presentation, consultation workspace, documents, messages, notifications, history, cancellation, refund, transfer, representation and disputes.
 
-## 04 — Lawyer surface family Y / N1
+## 05 — Lawyer surface family Y / N1
 
-All N1 capabilities are D02-bound. N1 defines **what the Lawyer Digital Office does**; D02 defines **how every visible surface behaves and looks**.
+All N1 capabilities are D02-bound. N1 defines **what the Lawyer Digital Office does**; D02 defines **how every visible surface behaves and looks**; MAP-X binds both to lifecycle, security, data and verification.
 
-The complete N1.01–N1.40 surface-by-surface mapping is maintained in `D02-SURFACE-MASTER-MAP.md`.
+The complete N1.01–N1.40 mapping is maintained in `D02-SURFACE-MASTER-MAP.md` and `docs/roadmap/N1-LAWYER-DIGITAL-OFFICE.md`.
 
-## 05 — Functional lifecycle D02 mapping
+## 06 — Functional lifecycle D02 mapping
 
-### T01 — Consultation
-Every visible T01 step is D02-bound.
+T01 Consultation, S01 Smart Scheduling, S02 Legal Representation, T02 Dispute/Resolution, S03 Real Estate Opportunities and future S04/S05 services are D02-bound. Financial/legal lifecycle behavior additionally requires C3 mapping.
 
-### S01 — Smart Scheduling
-Calendar, availability, booking, upcoming consultations, timezone and conflict states are D02-bound.
+## 07 — Cross-system X/Y/Z/W D02 rule
 
-### S02 — Legal Representation
-Quote → proposal → acceptance → agreement/consent → POA/court proof → active matter → closure is D02-bound; legal documents and court presentation use D02-07.
-
-### T02 — Dispute / Resolution
-All visible dispute states use D02 semantic alerts, status indicators, destructive-action confirmation and deterministic presentation.
-
-### S03 — Real Estate Opportunities
-Catalog/detail UI is D02-bound; D02 does not authorize or imply investment claims.
-
-### S04/S05/Future services
-Any future user-facing surface must declare D02 mapping before implementation.
-
-## 06 — Cross-system X/Y/Z/W D02 rule
-
-- **X/4 = Client D02 foundation**: every client-facing surface.
-- **Y/4 = Lawyer D02 foundation**: every lawyer-facing surface and N1 mode.
-- **Z/4 = Admin D02 foundation**: every admin-facing operational surface.
-- **W/4 = Cross-system D02 foundation**: shared surfaces crossing Client/Lawyer/Admin.
+- X/4 = Client D02 foundation.
+- Y/4 = Lawyer D02 foundation.
+- Z/4 = Admin D02 foundation.
+- W/4 = Cross-system D02 foundation.
 
 D02-06 is mandatory whenever a surface is role-specific.
 
-## 07 — State-specific design requirement
+## 08 — State-specific design requirement
 
-Every stateful UI must define visual treatment for at least:
+Every stateful UI must define visual treatment for:
 
 `idle → loading → success → empty → error → disabled → pressed → pending → conflict → unauthorized`
 
-Financial/legal/security-sensitive surfaces additionally define:
+Financial/legal/security-sensitive surfaces additionally define applicable domain states such as:
 
-`held → released → refunded → disputed → cancelled → reconciliation mismatch`
+`held → released → refunded → disputed → cancelled → reconciliation mismatch → blocked → under review`
 
-The UI state is presentation only; authoritative state remains the backend/data model and applicable C3 controls.
+The UI state is presentation only; authoritative state remains the backend/data/state model and applicable C3 controls.
 
-## 08 — Build closure rule
+## 09 — Build closure rule
 
 A user-facing roadmap item cannot be `CLOSED / VERIFIED` until:
 
 1. functional evidence exists;
-2. its D02 mapping is declared;
-3. required D02 primitives are reused rather than duplicated;
-4. RTL/LTR and device behavior are verified;
-5. accessibility and security-sensitive messaging are reviewed;
-6. visual regression/QA evidence exists;
-7. CI and final verification pass.
+2. MAP-X intersection is registered;
+3. D02 mapping is declared;
+4. required D02 primitives are reused;
+5. RTL/LTR and device behavior are verified;
+6. accessibility and security-sensitive messaging are reviewed;
+7. visual regression/QA evidence exists;
+8. CI and final verification pass;
+9. final diff audit and Verify Main are complete.
 
-## 09 — Traceability record
+## 10 — Traceability record
 
 ```text
 Roadmap ID
+→ MAP-X ID
 → X/Y/Z/W placement
 → N1 placement if applicable
 → T/S lifecycle placement
@@ -149,4 +115,4 @@ Roadmap ID
 → Verify Main
 ```
 
-This crosswalk and `D02-SURFACE-MASTER-MAP.md` together form the canonical bridge between **what Mustashark builds** and **how every surface presents and behaves**.
+This crosswalk remains the canonical D02 bridge; MAP-X provides the cross-map control plane.
