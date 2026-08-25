@@ -1,4 +1,12 @@
-# MUSTASHAREK — MASTER AUDIT MAP
+# MUSTASHARK — MASTER AUDIT MAP
+
+## 00 — MAP-X Control Plane
+
+The cross-map integration/control system is:
+
+`docs/architecture/MAP-X-CROSS-MAP-INTEGRATION.md`
+
+MAP-X binds this audit map to D02, C-stages, X/Y/Z/W, N1, T/S lifecycle, domain/data/security, implementation and verification evidence. It does not replace the namespace authority of this map.
 
 ## 01 — Audit Chain
 
@@ -29,12 +37,14 @@ Admin Oversight
   ↓
 Audit Log
   ↓
+MAP-X
+  ↓
 D02
 ```
 
 ## 02 — Financial Isolation Gate
 
-No financial effect may occur before the applicable controls pass:
+No financial effect may occur before applicable controls pass:
 
 - Idempotency Key
 - Atomic Transaction
@@ -45,8 +55,9 @@ No financial effect may occur before the applicable controls pass:
 - Retry Safety
 - Network Failure Recovery
 - Financial State Lock
+- External Provider / Reconciliation boundary where applicable
 
-The gate is a runtime safety boundary, not a documentation-only checklist.
+The gate is a runtime safety boundary, not documentation-only.
 
 ## 03 — Financial Audit Integrity
 
@@ -80,33 +91,23 @@ Z/1 Navigation · Z/2 Monitoring · Z/3 Administrative Actions · Z/4 Reports/An
 ### W — Cross-System
 W/1 Shared Navigation · W/2 Shared Services · W/3 Shared Actions · W/4 D02 · W/5 Cross-System Security · W/6 Admin Control · W/7 Identity & Access · W/8 Office↔Lawyer Revenue · W/9 Affiliate/Referral — DEFERRED
 
-**N1 cross-system overlay:** N1.06, N1.13, N1.14, N1.16, N1.20, N1.24, N1.28, N1.29, N1.35, N1.39–N1.40 map to W where they cross role/system boundaries.
-
 ## 05 — Lifecycle Mapping
 
 ### T01 Consultation
 Create → Review/Proposal → Accept/Start → Documents → Payment → Financial Protection → Handover → Scope Review → Archive → Recovery → Final Gate
 
-**N1:** Intake, Consultation Management, Marketplace, Meetings, Secure Communication, Relationship Lifecycle, Notifications, Client Conversion.
-
 ### S01 Smart Scheduling
 Availability → Calendar → Booking Transaction → Real-Time Availability → Upcoming Consultations → Timezone → D02 → Security/Edge Cases → Tests → CI/QA
-
-**N1:** N1.12, N1.20, N1.26, N1.30, N1.32, N1.39.
 
 ### S02 Legal Representation
 Quote → Proposal → Accept/Pay → Agreement → POA/Court Proof → Active Case → Milestones/Escrow → Admin Monitoring
 
-**N1:** N1.09–N1.15, N1.19, N1.27, N1.32.
-
 ### T02 Dispute/Resolution
 Architecture/Data → Data Model → State Machine → Financial Safety → Admin API → Resolution Controls → Authorization → Dashboard → Tests/Idempotency → CI/Security → Verify Main
 
-**N1:** matter/document/communication/security surfaces affected by dispute state transitions.
-
 ## 06 — N1 Lawyer Digital Office Audit Matrix
 
-`N1` is a separate product namespace and does not consume C-stage financial/legal foundation IDs.
+`N1` is a separate product namespace and does not consume C-stage financial/legal foundation IDs. MAP-X provides the cross-map intersection.
 
 | N1 group | Primary audit placement | Lifecycle | D02 / Security impact |
 |---|---|---|---|
@@ -138,9 +139,9 @@ Architecture/Data → Data Model → State Machine → Financial Safety → Admi
 - Race-condition protection
 - Financial tamper protection
 - Immutable financial audit log
-- **N1 matter/client confidentiality isolation**
-- **N1 lawyer/staff permission boundaries**
-- **N1 public-profile vs private-office separation**
+- N1 matter/client confidentiality isolation
+- N1 lawyer/staff permission boundaries
+- N1 public-profile vs private-office separation
 
 ## 08 — State Transition Audit Rule
 
@@ -153,26 +154,38 @@ A state-changing endpoint must:
 5. enforce optimistic concurrency/version expectations where applicable;
 6. perform the transition atomically;
 7. record the corresponding audit event;
-8. apply idempotency at the same transactional boundary when the operation requires it;
+8. apply idempotency at the same transactional boundary when required;
 9. expose deterministic conflict/replay behavior;
-10. have integration/concurrency evidence before closure.
-
-For N1 this additionally applies to client assignment, matter state, document state, consultation state, appointment state, and any financial entitlement state.
+10. have integration/concurrency evidence before closure;
+11. declare its MAP-X intersection and D02 mapping when user-facing.
 
 ## 09 — PR/Task Mapping Rule
 
-Every implementation must declare its original roadmap ID, for example:
+Every implementation must declare its roadmap identity and cross-map trace, for example:
 
-`N1.08 → Legal Memorandum Studio → repository files → API/service → UI → tests → CI → verification evidence`
+`N1.08 → MX-LAWYER-03 → Legal Memorandum Studio → D02-07/08/09/10 → repository files → API/service → UI → tests → CI → verification evidence`
 
-A task without a roadmap ID is not accepted into implementation.
+A task without a roadmap ID and MAP-X trace is not accepted into implementation.
 
 ## 10 — Closure Rule
 
-`CLOSED / VERIFIED` requires repository evidence, tests, security review, CI, final diff audit, and verification on the target branch.
+`CLOSED / VERIFIED` requires repository evidence, tests, security review, CI, final diff audit, D02 verification where applicable, MAP-X trace completeness and verification on the target branch.
 
 N1 architecture publication itself does not imply implementation completion.
 
-## Canonical lineage
+## 11 — Canonical Lineage
 
-This map consolidates the Master Audit X/Y/Z/W and Financial Isolation / Audit Integrity controls established in the historical governance work (#32, #35, #36, #47), and now explicitly maps the N1 Lawyer Digital Office architecture into the existing audit system without consuming or colliding with C-stage identifiers.
+```text
+Governance / Legal-Regulatory decisions
+→ C3 for financial/legal authority
+→ T/S lifecycle
+→ X/Y/Z/W + N1 role/product architecture
+→ MAP-X cross-map control plane
+→ D02 presentation foundation
+→ Domain/Data/State/Security
+→ Repository implementation
+→ Tests / Runtime evidence
+→ Verify Main
+```
+
+This map consolidates the Master Audit X/Y/Z/W and Financial Isolation / Audit Integrity controls and now explicitly participates in MAP-X without consuming or colliding with C-stage, N1 or D02 identifiers.
