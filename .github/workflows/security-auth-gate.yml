@@ -77,7 +77,7 @@ jobs:
       - name: Provision isolated Test DB schema
         env:
           DATABASE_URL: ${{ env.SECURITY_TEST_DATABASE_URL }}
-        run: pnpm --filter @workspace/db push
+        run: pnpm --filter @workspace/db exec drizzle-kit push --config ./drizzle.config.ts
 
       - name: Assert Test DB identity and schema isolation
         env:
