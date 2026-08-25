@@ -54,7 +54,7 @@ jobs:
         # api-server now declares vitest. The branch lockfile predates that
         # declaration, so resolve the dev dependency without weakening any
         # runtime/security guard or database isolation check.
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Guard against production database
         shell: bash
