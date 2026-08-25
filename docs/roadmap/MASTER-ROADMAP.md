@@ -8,11 +8,12 @@
 ## 00 — MASTER SYSTEM
 
 ```text
-MUSTASHAREK
+MUSTASHARK
 ├── MASTER AUDIT — X / Y / Z / W
 ├── MASTER AUDIT MAP
 ├── UX RESCUE
 ├── FUNCTIONAL LIFECYCLES
+├── N1 — LAWYER DIGITAL OFFICE
 ├── D02 — DESIGN SYSTEM
 ├── SUPPORTING ARCHITECTURE
 ├── QA / TEST REGISTRY
@@ -40,6 +41,7 @@ MUSTASHAREK
 - Y/6 Admin Relationship
 - Y/7 Identity & Access
 - Y/8 Office / Staff / Revenue
+- **N1 — Lawyer Digital Office overlays Y/1–Y/8 as the canonical lawyer product architecture.**
 
 ### Z — Admin
 - Z/1 Navigation
@@ -60,6 +62,7 @@ MUSTASHAREK
 - W/7 Identity & Access
 - W/8 Office ↔ Lawyer Revenue
 - W/9 Affiliate / Referral — DEFERRED
+- **N1 cross-system capabilities map to W where they cross Client/Lawyer/Admin boundaries.**
 
 ## 02 — FUNCTIONAL LIFECYCLES
 
@@ -86,6 +89,8 @@ T01-05 financial subcomponents:
 - T01-05-F3 Automated Invoicing
 - T01-05-F4 Payout Engine
 
+**N1 placement:** N1.04 Client Intake, N1.05 Consultation Management, N1.06 Consultation Marketplace, N1.12 Meetings, N1.13 Secure Communication, N1.14 Relationship Lifecycle, N1.20 Notifications, N1.24 Client Conversion.
+
 ### S01 — Smart Scheduling
 
 ```text
@@ -106,6 +111,8 @@ S01-01 Existing Scheduling Audit
 
 S01-05/S01-06 controls include server-side source of truth, idempotency, double-booking protection, optimistic/concurrent conflict protection, race protection, and lock recovery.
 
+**N1 placement:** N1.12 Meetings & Appointments, N1.20 Notifications, N1.26 Professional Availability, N1.30 Mobile Command Mode, N1.32 Court/Meeting Quick Access, N1.39 Cross-Platform Continuity.
+
 ### S02 — Legal Representation
 - S02.1 Request Quote
 - S02.2 Lawyer Proposal & 24h Expiry
@@ -118,6 +125,8 @@ S01-05/S01-06 controls include server-side source of truth, idempotency, double-
 - S02.7.6 Audit Trail / Activity Log — **TEMPORARILY BLOCKED**: no ready case-specific Backend Audit Trail API; no mocks or architectural bypass.
 - S02.7.7 Investor Attachments Sync — **ALREADY SATISFIED** by existing document APIs/UI; no artificial change introduced.
 - S02.8 Admin Monitoring & Intervention
+
+**N1 placement:** N1.09 Documents, N1.10 Matter/Case Management, N1.11 Courtroom Mode, N1.14 Relationship Lifecycle, N1.15 Legal Services Expansion, N1.19 Tasks, N1.27 Archive, N1.32 Court/Meeting Quick Access.
 
 ### S03 — Real Estate Opportunities
 
@@ -164,7 +173,57 @@ T02-01 Architecture & Data Audit
 → T02 CLOSED
 ```
 
-## 03 — D02 DESIGN SYSTEM
+**N1 placement:** N1.09, N1.10, N1.13, N1.19, N1.20, N1.28, N1.29 wherever lawyer-visible dispute/matter data is legitimately exposed.
+
+## 03 — N1 — MUSTASHARK LAWYER DIGITAL OFFICE
+
+**Official product architecture namespace:** `N1`
+
+N1 is independent from the `C1/C2/C3/...` financial/legal foundation sequence. It is the canonical architecture for the Lawyer Dashboard evolving into a **Digital Law Office / Lawyer Command Center**.
+
+Core capability groups:
+
+- N1.01–N1.02 Professional Identity / Command Center / Digital Law Office
+- N1.03–N1.06 Clients, Intake, Consultation and Marketplace
+- N1.07–N1.15 Legal Workbench, Memoranda, Documents, Matters, Court and Relationship Lifecycle
+- N1.16–N1.18 Financial Center, Business Intelligence and Reputation
+- N1.19–N1.20 Tasks and Notifications
+- N1.21–N1.24 Search, AI Future, Templates and Client Conversion
+- N1.25–N1.27 Marketplace Profile, Availability and Archive
+- N1.28–N1.29 Audit/Security and Confidentiality/Privacy
+- N1.30–N1.32 Mobile, Desktop and Court/Meeting modes
+- N1.33–N1.35 External integrations, Investment/Business future domain, Ecosystem
+- N1.36–N1.40 Office Settings, Law Firm Mode, Operating Intelligence, Continuity and Digital Office Core
+
+### N1 build allocation
+
+- **Phase 2.5 — Case & Consultation Experience:** N1.01–N1.06, N1.12, N1.20, N1.25, N1.26, N1.30
+- **Phase 2.6 — Documents & Handover:** N1.07–N1.15, N1.19, N1.27, N1.31, N1.32, N1.39
+- **Phase 2.7 — Financial & Payment Experience:** N1.16 plus financial visibility required by N1.18/N1.20; all governed by C3
+- **Phase 2.8 — Security & Role Boundaries:** N1.28–N1.29 and cross-cutting authorization/privacy hardening
+- **Phase 3 — Production Readiness:** N1.17, N1.18, N1.23, N1.24, N1.33, N1.36, N1.38
+- **Phase 3+ — Strategic Expansion:** N1.15, N1.21–N1.22, N1.34–N1.35, N1.37, advanced N1.40
+
+N1 product strategy:
+
+```text
+Lawyer joins Mustashark
+→ Professional Profile
+→ Client Discovery / Consultation
+→ Client Intake
+→ Legal Workbench
+→ Memorandum / Document
+→ Matter / Case
+→ Engagement / POA / Representation where legally applicable
+→ Client Communication
+→ Tasks / Meetings / Court
+→ Financial Entitlements / Settlement
+→ Mustashark becomes the Lawyer's Digital Office
+```
+
+N1 does not change C3 regulatory meaning, custody, payout, escrow, provider authority, or professional legal responsibility.
+
+## 04 — D02 DESIGN SYSTEM
 
 D02 is the single official design-system map.
 
@@ -179,7 +238,9 @@ D02 is the single official design-system map.
 - D02-09 Visual QA
 - D02-10 Tests / CI / Final Review
 
-## 04 — SUPPORTING ARCHITECTURE
+**N1/D02 overlay:** lawyer office information architecture, role-specific navigation, matter/document cards, professional typography, court-ready document presentation, mobile/desktop continuity, RTL/i18n and visual QA.
+
+## 05 — SUPPORTING ARCHITECTURE
 
 - Domain / Data Registry
 - State Machine Registry
@@ -190,8 +251,12 @@ D02 is the single official design-system map.
 - Observability & Operations
 - Resilience & Recovery
 - Architecture Decision Records
+- **N1 Lawyer Domain/Data/State/Permission Registry**
+- **N1 Client↔Lawyer Relationship Registry**
+- **N1 Matter/Case State Registry**
+- **N1 Document Scope/Confidentiality Registry**
 
-## 05 — QA / TEST REGISTRY
+## 06 — QA / TEST REGISTRY
 
 - Unit Tests
 - Integration Tests
@@ -207,44 +272,49 @@ D02 is the single official design-system map.
 - Typecheck
 - CI
 - Real Preview
+- Visual QA
+- Accessibility/RTL/i18n QA
 - Final Verification
 
-## 06 — ROADMAP ↔ REPOSITORY VALIDATION
+**N1-specific:** every capability must be traceable to its Y/X/Z/W placement, lifecycle impact, D02 impact, security/permission model, and repository evidence.
+
+## 07 — ROADMAP ↔ REPOSITORY VALIDATION
 
 Every roadmap item must map to repository reality:
 
-`Roadmap ID → Feature → Repository Files → Database Tables → API/Service → UI → Branch → PR → Tests → CI → Production Status → Classification → Verification Evidence`
+`Roadmap ID → Feature → Database Tables → API/Service → UI → Repository Files → Branch → PR → Tests → CI → Production Status → Classification → Verification Evidence`
 
 No unmapped feature is ready for implementation or merge.
 
-## 07 — DEVELOPMENT PHASES
+## 08 — DEVELOPMENT PHASES
 
 ### Phase 2.5 — Case & Consultation Experience
-T01 · S01 · S02
+T01 · S01 · S02 · **N1 Lawyer Digital Office Core (consultation/client/availability/profile surfaces)**
 
 ### Phase 2.6 — Documents & Handover
-T01-04 · T01-06 · Secure Document Vault · Document Preview · Dynamic Watermarking
+T01-04 · T01-06 · Secure Document Vault · Document Preview · Dynamic Watermarking · **N1 legal workbench/document/matter/court surfaces**
 
 ### Phase 2.7 — Financial & Payment Experience
-T01-05 · Hold · Commission/Tax · Invoicing · Payout · Financial Isolation Gate · Financial Audit Integrity · Reconciliation
+T01-05 · Hold · Commission/Tax · Invoicing · Payout · Financial Isolation Gate · Financial Audit Integrity · Reconciliation · **N1.16 Financial Center visibility governed by C3**
 
 ### Phase 2.8 — Security & Role Boundaries
-Continuous Security Gate · IDOR/Ownership · Financial Authorization · Dispute/Refund Protection · Encryption · Immutable Financial Audit Log
+Continuous Security Gate · IDOR/Ownership · Financial Authorization · Dispute/Refund Protection · Encryption · Immutable Financial Audit Log · **N1.28–N1.29**
 
 ### Phase 3 — Production Readiness
-Payment Provider Integration · Tax/E-Invoicing · Payout Rails · Monitoring · Resilience/Recovery · Performance QA · Security/Privacy · Compliance · Final Production QA
+Payment Provider Integration · Tax/E-Invoicing · Payout Rails · Monitoring · Resilience/Recovery · Performance QA · Security/Privacy · Compliance · Final Production QA · **N1 intelligence/business/office operations**
 
 ### Phase 3+ — Strategic Expansion
-S03 Real Estate Opportunities · S04 Frozen / Near Future · S05 Lawyer Smart Safety Shield with future verified API integrations.
+S03 Real Estate Opportunities · S04 Frozen / Near Future · S05 Lawyer Smart Safety Shield · **N1 advanced AI/search, law-firm mode, ecosystem, external integrations and future services**
 
-## 08 — GLOBAL EXECUTION PROTOCOL
+## 09 — GLOBAL EXECUTION PROTOCOL
 
 ```text
 MASTER ROADMAP
 → ROADMAP-REGISTRY
 → MASTER AUDIT MAP
-→ DOMAIN / DATA / STATE / SECURITY CLASSIFICATION
+→ N1 / DOMAIN / DATA / STATE / SECURITY CLASSIFICATION
 → FUNCTIONAL LIFECYCLE PLACEMENT
+→ D02 PLACEMENT
 → REPOSITORY AUDIT
 → IMPLEMENTATION
 → TYPECHECK
@@ -260,4 +330,4 @@ MASTER ROADMAP
 
 ## Canonical lineage
 
-This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status and strategic S04/S05 tracks. It is a governance specification, not proof that every listed item is implemented.
+This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, and the new N1 Lawyer Digital Office architecture. It is a governance specification, not proof that every listed item is implemented.
