@@ -26,6 +26,9 @@ Roadmap ID
 → Official Name
 → Legacy Name (if any)
 → Classification
+→ X/Y/Z/W Placement
+→ Lifecycle Placement
+→ D02-01…D02-10 Design Placement
 → Repository Files
 → Database Tables
 → API / Service
@@ -66,45 +69,65 @@ N1 is a separate product namespace. It does not consume or rename C-stage financ
 
 ## 03 — N1 Traceability Baseline
 
-| Roadmap ID | Scope | Primary placement | Verification expectation |
-|---|---|---|---|
-| N1.01–N1.02 | Lawyer identity / Digital Law Office / Command Center | Y/1, Y/7 | auth, ownership, UX, typecheck/CI |
-| N1.03–N1.06 | Clients / Intake / Consultation / Marketplace | Y/2, Y/7 + X/W | ownership, scope, service/API/E2E |
-| N1.07–N1.15 | Workbench / Memorandum / Documents / Matters / Court / Relationship | Y/2–Y/5 + X/W; T01/S02 | confidentiality, state, documents, E2E |
-| N1.16–N1.18 | Financial Center / BI / Reputation | Y/8 + W/8; C3 | financial authorization, reconciliation, audit |
-| N1.19–N1.20 | Tasks / Notifications | Y/3 + W; T01/S01/S02/T02 | state, retry, notification tests |
-| N1.21–N1.24 | Search / AI future / Templates / Client Conversion | Y/2/Y/3 + X/W | scoped access, AI guardrails, E2E |
-| N1.25–N1.27 | Marketplace Profile / Availability / Archive | Y/1/Y/2/Y/7; T01/S01/S02 | public/private separation, retention |
-| N1.28–N1.29 | Audit/Security / Confidentiality/Privacy | Y/5/Y/7 + W/5 | security, IDOR, privacy, audit |
-| N1.30–N1.32 | Mobile / Desktop / Court & Meeting modes | Y/1/Y/4; S01/S02 | visual, RTL, accessibility, security |
-| N1.33–N1.35 | External integrations / Investment future / Ecosystem | W + Y/2/Y/6 | regulatory/API source verification |
-| N1.36–N1.40 | Office settings / Law Firm / Intelligence / Continuity / Core | Y/8 + W/8 | RBAC, revenue, performance, E2E |
+| Roadmap ID | Scope | Primary placement | D02 | Verification expectation |
+|---|---|---|---|---|
+| N1.01–N1.02 | Lawyer identity / Digital Law Office / Command Center | Y/1, Y/7 | D02-01/02/03/05/06/08/09 | auth, ownership, UX, typecheck/CI |
+| N1.03–N1.06 | Clients / Intake / Consultation / Marketplace | Y/2, Y/7 + X/W | D02-01/03/04/05/06/08/09 | ownership, scope, service/API/E2E |
+| N1.07–N1.15 | Workbench / Memorandum / Documents / Matters / Court / Relationship | Y/2–Y/5 + X/W; T01/S02 | D02-03/04/05/06/07/08/09 | confidentiality, state, documents, E2E |
+| N1.16–N1.18 | Financial Center / BI / Reputation | Y/8 + W/8; C3 | D02-04/05/06/08/09 | financial authorization, reconciliation, audit |
+| N1.19–N1.20 | Tasks / Notifications | Y/3 + W; T01/S01/S02/T02 | D02-04/05/06/08/09 | state, retry, notification tests |
+| N1.21–N1.24 | Search / AI future / Templates / Client Conversion | Y/2/Y/3 + X/W | D02-03/04/05/06/08/09 | scoped access, AI guardrails, E2E |
+| N1.25–N1.27 | Marketplace Profile / Availability / Archive | Y/1/Y/2/Y/7; T01/S01/S02 | D02-01/02/03/05/06/07/08/09 | public/private separation, retention |
+| N1.28–N1.29 | Audit/Security / Confidentiality/Privacy | Y/5/Y/7 + W/5 | D02-04/05/06/08/09 | security, IDOR, privacy, audit |
+| N1.30–N1.32 | Mobile / Desktop / Court & Meeting modes | Y/1/Y/4; S01/S02 | D02-01/03/05/07/08/09/10 | visual, RTL, accessibility, security |
+| N1.33–N1.35 | External integrations / Investment future / Ecosystem | W + Y/2/Y/6 | D02-01/03/05/06/08/09 | regulatory/API source verification |
+| N1.36–N1.40 | Office settings / Law Firm / Intelligence / Continuity / Core | Y/8 + W/8 | D02-01/03/05/06/08/09 | RBAC, revenue, performance, E2E |
 
-## 04 — N1 Build Phase Mapping
+## 04 — Client D02 Traceability Baseline
 
-- **Phase 2.5:** N1.01–N1.06, N1.12, N1.20, N1.25, N1.26, N1.30
-- **Phase 2.6:** N1.07–N1.15, N1.19, N1.27, N1.31, N1.32, N1.39
-- **Phase 2.7:** N1.16 plus required N1.18/N1.20 financial visibility; governed by C3
-- **Phase 2.8:** N1.28–N1.29 and cross-cutting security/privacy
-- **Phase 3:** N1.17, N1.18, N1.23, N1.24, N1.33, N1.36, N1.38
-- **Phase 3+:** N1.15, N1.21–N1.22, N1.34–N1.35, N1.37, advanced N1.40
+Every client-facing build item is now explicitly D02-bound. This includes the client login/registration journey, account surfaces, discovery, consultation, scheduling, payment presentation, documents, communication, archive and financial-state presentation.
 
-## 05 — S01 Traceability Baseline
-
-| Roadmap ID | Scope | Verification expectation |
+| Client surface | Audit/Lifecycle | D02 foundation |
 |---|---|---|
-| S01-03 | Lawyer interactive calendar | Typecheck/tests/CI |
-| S01-04 | Client booking calendar | API contract + auth + tests |
-| S01-05 | Booking transaction | Atomicity + idempotency + double-booking protection |
-| S01-06 | Real-time availability / transition hardening | Concurrency + optimistic conflict + replay + CI |
-| S01-07 | Upcoming consultations | API/UI integration + notifications |
-| S01-08 | Timezone/localization | deterministic time tests |
-| S01-09 | Calendar UX/D02 | visual QA |
-| S01-10 | Security/edge cases | security + race/retry tests |
-| S01-11 | Tests/typecheck | green typecheck + test evidence |
-| S01-12 | CI/final QA | green CI + final audit |
+| Client Login / Sign-in | X/7 | D02-01/02/03/04/05/06/08/09 |
+| Registration / Onboarding | X/7 | D02-01/02/03/04/05/06/08/09 |
+| Home / Client Command Surface | X/1/X/2 | D02-01/02/03/05/06/08/09 |
+| Profile / Account | X/7 | D02-01/03/05/06/08/09 |
+| Lawyer Discovery / Profile | X/2 + T01 | D02-01/02/03/05/06/08/09 |
+| Consultation Request | X/2/X/3 + T01-01 | D02-03/04/05/08/09 |
+| Proposal Review / Acceptance | X/2/X/3 + T01-02/03 | D02-04/05/06/08/09 |
+| Scheduling / Booking | S01 | D02-01/03/04/05/08/09 |
+| Payment / Payment Proof | T01-05 + C3 | D02-04/05/08/09 |
+| Consultation Workspace | T01 | D02-01/03/05/06/08/09 |
+| Documents / Upload / Preview | T01-04/06 | D02-04/05/07/08/09 |
+| Messages / Communication | X/2/X/3 + T01 | D02-03/04/05/08/09 |
+| History / Archive | X/2 | D02-01/03/05/07/08/09 |
+| Cancel / Refund / Transfer presentation | C-stage + T01/S01 | D02-04/05/08/09 + C3 semantics |
 
-## 06 — Financial Governance
+## 05 — Build Phase D02 Gate
+
+- Phase 2.5: all client/lawyer consultation, profile, availability and command surfaces require D02 mapping before closure.
+- Phase 2.6: document, matter, handover, courtroom and communication surfaces require D02-07 and D02-08 where applicable.
+- Phase 2.7: financial/payment UI requires D02 mapping plus C3 financial semantics; D02 does not define financial authority.
+- Phase 2.8: security/role-boundary UI requires semantic security messaging and D02-09/10 evidence.
+- Phase 3+: every new user-facing feature must declare D02 mapping before implementation acceptance.
+
+## 06 — S01 Traceability Baseline
+
+| Roadmap ID | Scope | D02 | Verification expectation |
+|---|---|---|---|
+| S01-03 | Lawyer interactive calendar | D02-01/03/04/05/08/09 | Typecheck/tests/CI |
+| S01-04 | Client booking calendar | D02-01/03/04/05/08/09 | API contract + auth + tests |
+| S01-05 | Booking transaction | D02-04/05/08/09 | Atomicity + idempotency + double-booking protection |
+| S01-06 | Real-time availability / transition hardening | D02-04/05/08/09 | Concurrency + optimistic conflict + replay + CI |
+| S01-07 | Upcoming consultations | D02-03/05/08/09 | API/UI integration + notifications |
+| S01-08 | Timezone/localization | D02-03/08/09 | deterministic time tests |
+| S01-09 | Calendar UX/D02 | D02-01…D02-10 | visual QA |
+| S01-10 | Security/edge cases | D02-04/05/09/10 | security + race/retry tests |
+| S01-11 | Tests/typecheck | D02-09/10 | green typecheck + test evidence |
+| S01-12 | CI/final QA | D02-09/10 | green CI + final audit |
+
+## 07 — Financial Governance
 
 ### FINANCIAL ISOLATION GATE
 
@@ -137,7 +160,7 @@ Required evidence includes:
 
 N1.16 and any N1 operation that alters financial entitlement must map to these gates and to C3.
 
-## 07 — Roadmap ↔ Repository Validation
+## 08 — Roadmap ↔ Repository Validation
 
 Validation is bidirectional:
 
@@ -150,8 +173,9 @@ Detect and classify:
 - Duplicate feature
 - Roadmap item without repository evidence
 - Repository functionality without roadmap classification
+- **User-facing item without D02 mapping**
 
-## 08 — QA / Verification Registry
+## 09 — QA / Verification Registry
 
 Track:
 
@@ -174,7 +198,7 @@ Track:
 - Final Diff Audit
 - Verify Main
 
-## 09 — Historical Source Reconciliation
+## 10 — Historical Source Reconciliation
 
 | Historical source | Role | Canonical disposition |
 |---|---|---|
@@ -187,16 +211,6 @@ Track:
 
 Future governance changes update this canonical set rather than creating parallel competing maps.
 
-## 10 — Current Evidence Record: S01-06
-
-- **Roadmap ID:** S01-06
-- **Feature:** Transition Hardening
-- **Branch:** `codex/s01-06-transition-hardening`
-- **PR:** #52
-- **Final commit:** `e01604115c161e0538d89cbc689df4763b5e9bba`
-- **Merge commit:** `5e92f3dfe10f8081b6542b1e460cde20eb12db63`
-- **Verification status:** `VERIFIED / CLOSED`
-
 ## 11 — N1 Current Architecture Record
 
 - **Roadmap ID family:** `N1.01–N1.40`
@@ -208,9 +222,18 @@ Future governance changes update this canonical set rather than creating paralle
 - **Design overlay:** `D02-01–D02-10`
 - **Financial dependency:** `C3` for N1.16 and related financial states
 - **Implementation status:** `OPEN / PRODUCT ARCHITECTURE`
-- **Implementation evidence:** none implied by this architecture publication
 
-## 12 — Completion Pipeline
+## 12 — D02 Crosswalk Authority
+
+Canonical bridge: `docs/design/D02-ROADMAP-CROSSWALK.md`.
+
+Every user-facing roadmap item must declare:
+
+`Roadmap ID → X/Y/Z/W → Lifecycle → N1 if applicable → D02-01…D02-10 → UI states → RTL/i18n/device → Visual QA → Verify Main`
+
+D02 is therefore a **build-time foundation**, not a final cosmetic pass.
+
+## 13 — Completion Pipeline
 
 ```text
 Architectural Classification
@@ -235,6 +258,8 @@ Architectural Classification
 ## Final Governance Rules
 
 > No implementation before architectural classification.
+>
+> No user-facing implementation closure without D02 mapping.
 >
 > No financial effect before FINANCIAL ISOLATION GATE.
 >
