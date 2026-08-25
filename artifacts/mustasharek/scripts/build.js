@@ -55,12 +55,12 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
-  if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
+  if (process.env.PUBLIC_DEPLOYMENT_DOMAIN) {
+    return stripProtocol(process.env.PUBLIC_DEPLOYMENT_DOMAIN);
   }
 
   console.error(
-    "ERROR: No deployment domain found. Set EXPO_PUBLIC_DOMAIN",
+    "ERROR: No deployment domain found. Set PUBLIC_DEPLOYMENT_DOMAIN",
   );
   process.exit(1);
 }
@@ -115,7 +115,7 @@ async function checkMetroHealth() {
   }
 }
 
-async function startMetro(expoPublicDomain) {
+async function startMetro(deploymentDomain) {
   const isRunning = await checkMetroHealth();
   if (isRunning) {
     console.log("Metro already running");
@@ -123,10 +123,10 @@ async function startMetro(expoPublicDomain) {
   }
 
   console.log("Starting Metro...");
-  console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
+  console.log(`Setting EXPO_PUBLIC_DOMAIN=${deploymentDomain}`);
   const env = {
     ...process.env,
-    EXPO_PUBLIC_DOMAIN: expoPublicDomain,
+    EXPO_PUBLIC_DOMAIN: deploymentDomain,
   };
 
   metroProcess = spawn(
