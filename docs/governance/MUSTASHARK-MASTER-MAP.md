@@ -4,25 +4,45 @@
 **Adoption date:** 2026-08-25
 **Scope:** governance, roadmap control, cross-map traceability, implementation closure, evidence requirements.
 
-## 01 — Authority hierarchy
+## 01 — Canonical operating hierarchy
+
+The project adopts this hierarchy as the canonical operating model:
+
+```text
+                 MUSTASHARK-MASTER-MAP
+                          │
+                         MAP-X
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+   Architecture       Product/Lifecycle   Security
+        │                 │                 │
+     Design          Domain/Data/State    Auth/Privacy
+        │                 │                 │
+        └─────────────────┼─────────────────┘
+                          │
+                    Repository Code
+                          │
+                    CI / Evidence
+                          │
+                  CLOSED / VERIFIED
+```
+
+This hierarchy answers the project's primary control question: **where are we, where do we stand, what is proven, and what remains?**
+
+## 02 — Authority hierarchy
 
 `MUSTASHARK-MASTER-MAP` is the highest-level governance reference for the project.
 
-```text
-MUSTASHARK-MASTER-MAP  ← highest governance authority
-        ↓
-      MAP-X             ← integration / control layer
-        ↓
-Detailed maps            ← authoritative detail by namespace
-        ↓
-Repository code           ← actual implementation
-        ↓
-Evidence                  ← mandatory proof of closure
-```
+`MAP-X` is the integration and control layer.
 
-The Master Map governs **how work is controlled and closed**. It does not replace the technical authority of a detailed map inside its own namespace.
+Detailed maps are authoritative for their own namespaces and provide implementation-level detail. They are linked through MAP-X and do not silently become competing master authorities.
 
-## 02 — Separation of concerns
+Repository code is the actual implementation source. Presence of code is not proof of completion.
+
+CI and other declared Evidence prove the state of implementation. `CLOSED / VERIFIED` is a controlled outcome, not an assumption.
+
+## 03 — Separation of concerns
 
 Governance is intentionally separated from runtime.
 
@@ -31,24 +51,30 @@ Governance is intentionally separated from runtime.
 - Governance artifacts MUST NOT be imported by runtime code, bundled into the application, or made runtime dependencies merely for traceability.
 - A governance change is not a runtime change unless a separate implementation change explicitly modifies runtime code.
 
-## 03 — Canonical roles
+## 04 — Canonical roles
 
 ### MUSTASHARK-MASTER-MAP
 The supreme control reference. It defines authority order, closure rules, and the non-negotiable requirement for traceability and evidence.
 
 ### MAP-X
-The cross-map integration and control layer. It binds roadmap items to roles, lifecycles, design, domain/data/state/security, repository implementation, tests and verification.
+The cross-map integration and control layer. It binds roadmap items to architecture, product/lifecycle, design, domain/data/state, security/auth/privacy, repository implementation, CI and verification.
 
-### Detailed maps
-Detailed maps remain authoritative for their own namespaces and provide the implementation-level detail. They must be linked through MAP-X rather than becoming competing master authorities.
+### Architecture / Product-Lifecycle / Security
+The primary structural branches of the operating hierarchy. Their detailed maps remain authoritative within their namespaces.
 
-### Code
-The repository is the implementation source. Presence of code is not proof of completion.
+### Design / Domain-Data-State / Auth-Privacy
+The principal detail layers underneath the corresponding branches and must remain traceable through MAP-X.
 
-### Evidence
-Tests, CI, security review, diff audit, runtime/preview verification and other declared proof constitute the closure evidence.
+### Repository Code
+The implementation source. Code proves what exists; it does not by itself prove that the work is verified or closed.
 
-## 04 — Mandatory lifecycle
+### CI / Evidence
+The proof layer. Evidence may be reused when it remains valid for the exact implementation being closed; otherwise the affected verification must be refreshed.
+
+### CLOSED / VERIFIED
+The final controlled state, reached only when all applicable mapping, implementation, review, verification and evidence requirements are satisfied and recorded.
+
+## 05 — Mandatory lifecycle
 
 Every governed build item follows:
 
@@ -56,9 +82,9 @@ Every governed build item follows:
 
 No stage may be skipped because a change appears small.
 
-## 05 — Mandatory closure rule
+## 06 — Mandatory closure rule
 
-> **No stage may be marked CLOSED / VERIFIED until it has been implemented, linked to the applicable maps, tested, evidenced, and its closure has been recorded.**
+> **No stage may be marked CLOSED / VERIFIED until it has been implemented, linked to the applicable maps, tested as applicable, evidenced, verified, and its closure has been recorded.**
 
 A roadmap entry, documentation statement, passing local command, or code presence alone MUST NOT be treated as closure evidence.
 
@@ -67,10 +93,10 @@ Minimum closure record:
 ```text
 Roadmap ID
 → MAP-X ID
-→ applicable role/lifecycle/design mappings
-→ repository files
+→ applicable hierarchy/map mappings
+→ repository files / commit
 → implementation status
-→ tests
+→ applicable tests
 → security/review status
 → CI status
 → verification evidence
@@ -81,7 +107,17 @@ Roadmap ID
 
 Any missing required link or proof means `NOT READY FOR CLOSURE`.
 
-## 06 — Authority resolution
+## 07 — Evidence validity and reuse
+
+The purpose of Evidence is to preserve verified project state and prevent unnecessary rework.
+
+- **VALID → REUSE:** Existing evidence may be reused when it is traceable to the exact implementation/commit or an equivalent unchanged artifact and remains applicable to the closure decision.
+- **STALE / INSUFFICIENT → REFRESH:** Only the affected verification must be refreshed when the existing evidence no longer proves the required state.
+- **FAILED → BLOCK CLOSURE:** Failed evidence cannot be converted into PASS by inference or by ignoring the failure.
+
+A newly adopted governance rule does not, by itself, invalidate previously valid evidence. A material implementation change, scope change, security concern, or evidence-expiry rule may require fresh verification.
+
+## 08 — Authority resolution
 
 When sources disagree, use this order unless a stronger governance/legal decision record explicitly overrides it:
 
@@ -96,23 +132,23 @@ When sources disagree, use this order unless a stronger governance/legal decisio
 
 Historical maps are preserved as lineage; they are not silently rewritten into a new authority.
 
-## 07 — MAP-X control contract
+## 09 — MAP-X control contract
 
 MAP-X is the mandatory integration layer for build work.
 
 Every implementation item must resolve, as applicable, to:
 
-`Roadmap → MAP-X → Role → Lifecycle → Design → Domain/Data/State → Security/Privacy → Repository → Tests/CI → Evidence → Verify Main`
+`Roadmap → MAP-X → Architecture/Product-Lifecycle/Security → Design/Domain-Data-State/Auth-Privacy → Repository → Tests/CI → Evidence → Verify Main → Closure`
 
 MAP-X identifiers are integration identifiers only and MUST NOT replace existing namespace identifiers.
 
-## 08 — Detailed-map rule
+## 10 — Detailed-map rule
 
 A detailed map may define its own IDs, semantics and verification requirements. It must not silently become a competing master authority.
 
 If two detailed maps conflict, the conflict is registered and resolved through governance/MAP-X; it is not resolved by silently editing one historical source.
 
-## 09 — Evidence rule
+## 11 — Evidence rule
 
 Evidence must be specific enough to reproduce the closure decision. Depending on the stage, evidence may include:
 
@@ -129,7 +165,7 @@ Evidence must be specific enough to reproduce the closure decision. Depending on
 
 `PASS` is not inferred from the absence of an error message. The actual result must be recorded.
 
-## 10 — Governance registry
+## 12 — Governance registry
 
 The canonical control set currently includes:
 
@@ -144,7 +180,7 @@ The canonical control set currently includes:
 
 The list is a governance registry, not a runtime dependency list.
 
-## 11 — Adoption / change control
+## 13 — Adoption / change control
 
 Any future change to the control model MUST:
 
@@ -158,16 +194,19 @@ Any future change to the control model MUST:
 
 No parallel "master" map may silently supersede this document.
 
-## 12 — Current adoption statement
+## 14 — Current adoption statement
 
 The project formally adopts the following operating model:
 
 - `MUSTASHARK-MASTER-MAP` = highest governance reference.
 - `MAP-X` = integration/control layer.
-- Detailed maps = sources of namespace detail.
-- Code = actual implementation.
-- Evidence = mandatory closure condition.
+- Architecture / Product-Lifecycle / Security = primary structural branches.
+- Design / Domain-Data-State / Auth-Privacy = detail layers.
+- Repository Code = actual implementation.
+- CI / Evidence = proof layer.
+- `CLOSED / VERIFIED` = controlled final state.
+- Valid Evidence may be reused when still applicable; stale or insufficient Evidence is refreshed only where needed.
 - Governance remains separate from runtime.
 
-**Governance state:** `ADOPTED`
+**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY`
 **Runtime impact:** `NONE — DOCUMENTATION / GOVERNANCE ONLY`
