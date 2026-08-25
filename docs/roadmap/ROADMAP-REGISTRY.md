@@ -1,4 +1,4 @@
-# MUSTASHAREK — ROADMAP REGISTRY
+# MUSTASHARK — ROADMAP REGISTRY
 
 **Canonical traceability layer for roadmap ↔ repository validation.**
 
@@ -59,7 +59,37 @@ T02-01 through T02-10 and VERIFY MAIN
 ### Design
 D02-01 through D02-10
 
-## 03 — S01 Traceability Baseline
+### Lawyer Product Architecture
+**N1.01 through N1.40 — Mustashark Lawyer Digital Office**
+
+N1 is a separate product namespace. It does not consume or rename C-stage financial/legal foundation identifiers.
+
+## 03 — N1 Traceability Baseline
+
+| Roadmap ID | Scope | Primary placement | Verification expectation |
+|---|---|---|---|
+| N1.01–N1.02 | Lawyer identity / Digital Law Office / Command Center | Y/1, Y/7 | auth, ownership, UX, typecheck/CI |
+| N1.03–N1.06 | Clients / Intake / Consultation / Marketplace | Y/2, Y/7 + X/W | ownership, scope, service/API/E2E |
+| N1.07–N1.15 | Workbench / Memorandum / Documents / Matters / Court / Relationship | Y/2–Y/5 + X/W; T01/S02 | confidentiality, state, documents, E2E |
+| N1.16–N1.18 | Financial Center / BI / Reputation | Y/8 + W/8; C3 | financial authorization, reconciliation, audit |
+| N1.19–N1.20 | Tasks / Notifications | Y/3 + W; T01/S01/S02/T02 | state, retry, notification tests |
+| N1.21–N1.24 | Search / AI future / Templates / Client Conversion | Y/2/Y/3 + X/W | scoped access, AI guardrails, E2E |
+| N1.25–N1.27 | Marketplace Profile / Availability / Archive | Y/1/Y/2/Y/7; T01/S01/S02 | public/private separation, retention |
+| N1.28–N1.29 | Audit/Security / Confidentiality/Privacy | Y/5/Y/7 + W/5 | security, IDOR, privacy, audit |
+| N1.30–N1.32 | Mobile / Desktop / Court & Meeting modes | Y/1/Y/4; S01/S02 | visual, RTL, accessibility, security |
+| N1.33–N1.35 | External integrations / Investment future / Ecosystem | W + Y/2/Y/6 | regulatory/API source verification |
+| N1.36–N1.40 | Office settings / Law Firm / Intelligence / Continuity / Core | Y/8 + W/8 | RBAC, revenue, performance, E2E |
+
+## 04 — N1 Build Phase Mapping
+
+- **Phase 2.5:** N1.01–N1.06, N1.12, N1.20, N1.25, N1.26, N1.30
+- **Phase 2.6:** N1.07–N1.15, N1.19, N1.27, N1.31, N1.32, N1.39
+- **Phase 2.7:** N1.16 plus required N1.18/N1.20 financial visibility; governed by C3
+- **Phase 2.8:** N1.28–N1.29 and cross-cutting security/privacy
+- **Phase 3:** N1.17, N1.18, N1.23, N1.24, N1.33, N1.36, N1.38
+- **Phase 3+:** N1.15, N1.21–N1.22, N1.34–N1.35, N1.37, advanced N1.40
+
+## 05 — S01 Traceability Baseline
 
 | Roadmap ID | Scope | Verification expectation |
 |---|---|---|
@@ -74,7 +104,7 @@ D02-01 through D02-10
 | S01-11 | Tests/typecheck | green typecheck + test evidence |
 | S01-12 | CI/final QA | green CI + final audit |
 
-## 04 — Financial Governance
+## 06 — Financial Governance
 
 ### FINANCIAL ISOLATION GATE
 
@@ -105,7 +135,9 @@ Required evidence includes:
 - duplicate detection
 - consistent audit trail
 
-## 05 — Roadmap ↔ Repository Validation
+N1.16 and any N1 operation that alters financial entitlement must map to these gates and to C3.
+
+## 07 — Roadmap ↔ Repository Validation
 
 Validation is bidirectional:
 
@@ -119,7 +151,7 @@ Detect and classify:
 - Roadmap item without repository evidence
 - Repository functionality without roadmap classification
 
-## 06 — QA / Verification Registry
+## 08 — QA / Verification Registry
 
 Track:
 
@@ -137,10 +169,12 @@ Track:
 - Typecheck
 - CI
 - Real Preview
+- Visual QA
+- Accessibility/RTL/i18n
 - Final Diff Audit
 - Verify Main
 
-## 07 — Historical Source Reconciliation
+## 09 — Historical Source Reconciliation
 
 | Historical source | Role | Canonical disposition |
 |---|---|---|
@@ -153,7 +187,7 @@ Track:
 
 Future governance changes update this canonical set rather than creating parallel competing maps.
 
-## 08 — Current Evidence Record: S01-06
+## 10 — Current Evidence Record: S01-06
 
 - **Roadmap ID:** S01-06
 - **Feature:** Transition Hardening
@@ -161,19 +195,30 @@ Future governance changes update this canonical set rather than creating paralle
 - **PR:** #52
 - **Final commit:** `e01604115c161e0538d89cbc689df4763b5e9bba`
 - **Merge commit:** `5e92f3dfe10f8081b6542b1e460cde20eb12db63`
-- **Scope:** transactional idempotency for `complete`/`dispute`, optimistic concurrency, audit-event atomicity, same-key replay and cross-key conflict coverage
-- **Validation evidence:** `git diff --check` passed; API-server typecheck passed; DB project rebuild passed; dedicated S01-06 verification was reported green before merge
-- **Final Diff Audit:** completed before merge
-- **Merge:** squash-merged into `main`
 - **Verification status:** `VERIFIED / CLOSED`
 
-## 09 — Completion Pipeline
+## 11 — N1 Current Architecture Record
+
+- **Roadmap ID family:** `N1.01–N1.40`
+- **Official name:** `Mustashark Lawyer Digital Office`
+- **Classification:** `ADD TO MAP`
+- **Primary audit home:** `Y/1–Y/8`
+- **Cross-system overlays:** `X/W/Z` where applicable
+- **Lifecycle overlays:** `T01/S01/S02/T02`
+- **Design overlay:** `D02-01–D02-10`
+- **Financial dependency:** `C3` for N1.16 and related financial states
+- **Implementation status:** `OPEN / PRODUCT ARCHITECTURE`
+- **Implementation evidence:** none implied by this architecture publication
+
+## 12 — Completion Pipeline
 
 ```text
 Architectural Classification
 → Master Audit Placement
 → Domain + Data + State + Security Impact
 → Functional Lifecycle Placement
+→ N1 Product Placement
+→ D02 Placement
 → ROADMAP-REGISTRY UPDATE
 → Implementation
 → Typecheck
