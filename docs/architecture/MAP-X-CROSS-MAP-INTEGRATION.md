@@ -1,6 +1,6 @@
 # Mustashark — MAP-X Cross-Map Integration & Build Control System
 
-**Status:** CANONICAL GOVERNANCE MAP — PROPOSED FOR ADOPTION
+**Status:** CANONICAL GOVERNANCE MAP — ADOPTED
 **Project identity:** Mustashark
 **Scope:** all build stages, all roadmap/lifecycle families, all user surfaces, all design surfaces, all financial/legal controls, all verification gates.
 
@@ -9,6 +9,8 @@
 MAP-X is the integration layer between the existing roadmap, lifecycle, role, product, financial/legal, security, data, design and verification maps.
 
 It does not replace the canonical maps. It makes their intersections explicit so that every build item has one traceable identity and cannot drift from another map.
+
+MAP-X is also the official intake, routing and change-impact control layer for new services, features and material changes. A new request enters MAP-X before implementation so that its identity, affected maps, existing reusable capabilities, implementation location and verification requirements are known before code is changed.
 
 ## 01 — The Build Pyramid
 
@@ -69,12 +71,14 @@ Every implementation item must resolve to:
 
 ```text
 Roadmap ID
+→ Service ID when applicable
 → MAP-X ID
 → Role X/Y/Z/W
 → Lifecycle T/S
 → N1 if Lawyer Product
 → C-stage dependency if financial/legal
 → D02-01…D02-10
+→ Architecture
 → Domain
 → Data
 → State Machine
@@ -83,9 +87,10 @@ Roadmap ID
 → Tests / CI
 → Evidence
 → Verify Main
+→ Closure
 ```
 
-A missing link means the item is **NOT READY FOR CLOSURE**.
+A missing applicable link means the item is **NOT READY FOR CLOSURE**.
 
 ## 03 — MAP-X ID Convention
 
@@ -104,7 +109,154 @@ Examples:
 - `MX-SEC-01`
 - `MX-QA-01`
 
-## 04 — Cross-Map Rules
+## 04 — Service Identity Convention
+
+A new service or material product capability receives a stable **Service ID** at MAP-X intake when a distinct service identity is required.
+
+Format:
+
+`SVC-<DOMAIN>-<NN>`
+
+Examples:
+
+- `SVC-LAW-042`
+- `SVC-CLIENT-018`
+- `SVC-ADMIN-007`
+
+`Service ID` identifies the service/capability itself.
+
+`MAP-X ID` identifies the cross-map integration record.
+
+They are related but must not be conflated.
+
+A service may reuse existing infrastructure, domains, APIs, states, components or CI gates. Reuse does not require a new identifier for the reused asset; the new Service ID identifies the requested capability.
+
+## 05 — New Service Intake & Cross-Map Routing
+
+Every new service, feature or material change request enters through MAP-X before implementation begins. The request may originate from a lawyer, client, admin, product decision, security finding, engineering discovery or other authorized project source.
+
+MAP-X performs the following intake and routing sequence:
+
+```text
+NEW REQUEST
+    │
+    ▼
+  MAP-X INTAKE
+    │
+    ├─ Create Service ID when applicable
+    ├─ Classify the request
+    ├─ Identify Role / Owner
+    ├─ Identify Product / Lifecycle
+    ├─ Determine Architecture impact
+    ├─ Determine Design impact
+    ├─ Determine Domain / Data / State impact
+    ├─ Determine Security / Auth / Privacy impact
+    ├─ Determine Repository / implementation location
+    ├─ Determine applicable Tests / CI / Evidence
+    └─ Create MAP-X integration record
+              │
+              ▼
+       CROSS-MAP ROUTING
+              │
+              ▼
+       IMPLEMENTATION PLAN
+              │
+              ▼
+          REPOSITORY
+              │
+              ▼
+           PR / CI
+              │
+              ▼
+          EVIDENCE
+              │
+              ▼
+         VERIFICATION
+              │
+              ▼
+       CLOSED / VERIFIED
+```
+
+MAP-X is the routing and traceability control plane. It does not replace the detailed maps, Repository implementation, or CI.
+
+MAP-X MUST NOT become a runtime dependency, a CI replacement, or a blanket CI-rerun trigger.
+
+The intake step is governance work. Once implementation is authorized, the implementation proceeds through the normal Repository/PR/CI path.
+
+## 06 — Existing Asset & Capability Reuse / Extension Rule
+
+Before designing or building a new capability, MAP-X MUST first identify relevant existing assets and capabilities that may be reused or extended.
+
+The control question is:
+
+> **What already exists, what can it support, what can be reused, what can be extended, and what genuinely must be built new?**
+
+MAP-X therefore distinguishes three primary outcomes:
+
+```text
+EXISTING + REUSABLE
+        │
+        ▼
+      REUSE
+
+EXISTING + EXTENSIBLE
+        │
+        ▼
+      EXTEND
+
+EXISTING + INSUFFICIENT
+        │
+        ▼
+ REDESIGN / BUILD NEW
+```
+
+The assessment MUST consider, as applicable:
+
+- existing architecture and structural capabilities;
+- existing APIs and service boundaries;
+- existing domain models;
+- existing data structures and authoritative sources;
+- existing state machines and transitions;
+- existing authentication and authorization capabilities;
+- existing UI components and design primitives;
+- existing infrastructure and integrations;
+- existing security/privacy controls;
+- existing CI and verification gates;
+- existing valid Evidence that can be reused.
+
+The objective is **minimum safe change**, not maximum new construction.
+
+An existing asset is not assumed reusable merely because it exists. Reuse or extension must be supported by appropriate evidence when the capability is security-sensitive, financial/legal, architectural, stateful, or otherwise material.
+
+This rule prevents unnecessary reconstruction of already-built foundations and makes the project's existing engineering capacity visible to future work.
+
+## 07 — Change Impact Analysis
+
+MAP-X MUST identify the affected scope before implementation.
+
+For every new request, determine:
+
+```text
+Existing assets
+       │
+Existing capabilities
+       │
+       ▼
+  CHANGE IMPACT
+       │
+ ┌─────┼─────┐
+ ▼     ▼     ▼
+Reuse Extend New
+ └─────┼─────┘
+       ▼
+ Minimum Safe Change
+```
+
+Change impact is not limited to files. It includes affected architecture, product lifecycle, design surfaces, domain/data/state, security/privacy, permissions, integrations, CI gates and Evidence.
+
+A small request must not trigger a full-system rebuild merely because the request is new. Conversely, a request that crosses an existing boundary must not be treated as a local change merely because the code diff is small.
+
+## 08 — Cross-Map Rules
 
 ### Rule A — D02 is mandatory
 
@@ -130,7 +282,15 @@ A state may be displayed in several surfaces, but its authoritative source must 
 
 Architecture presence is not implementation completion. Implementation presence is not verification. Verification evidence is required for `CLOSED / VERIFIED`.
 
-## 05 — D02 Integration Matrix
+### Rule G — MAP-X routes; it does not execute
+
+MAP-X classifies and routes work to the applicable maps and implementation targets. Repository code remains the actual implementation source and CI remains the implementation verification mechanism.
+
+### Rule H — CI is impact-driven, not MAP-X-driven
+
+MAP-X may identify the Tests/CI/Evidence required by the nature of the change, but MAP-X does not automatically require a blanket rerun of unrelated CI or historical tests. Existing valid Evidence may be reused under the Evidence Validity & Reuse Rule.
+
+## 09 — D02 Integration Matrix
 
 | Build area | D02 responsibility | MAP-X requirement |
 |---|---|---|
@@ -147,7 +307,7 @@ Architecture presence is not implementation completion. Implementation presence 
 | Accessibility / RTL / LTR | D02-08/09/10 | MX-DESIGN-01 |
 | Visual regression | D02-09/10 | MX-QA-01 |
 
-## 06 — C3 Foundation Integration
+## 10 — C3 Foundation Integration
 
 C3 remains open and must be treated as an assumption-free foundation freeze until the operating/legal/regulatory model is verified.
 
@@ -174,7 +334,7 @@ C3 remains open and must be treated as an assumption-free foundation freeze unti
 
 No code change is authorized merely because a C3 question is unresolved.
 
-## 07 — C1 Financial Surface Inventory Integration
+## 11 — C1 Financial Surface Inventory Integration
 
 Current financial paths remain under verification:
 
@@ -189,7 +349,7 @@ Current financial paths remain under verification:
 
 The current classification is deliberately conservative and is not a claim that the implementation is defective in every case.
 
-## 08 — N1 Lawyer Digital Office Integration
+## 12 — N1 Lawyer Digital Office Integration
 
 N1 remains a dedicated product namespace. All N1 surfaces intersect D02 and role/lifecycle maps without consuming C-stage identifiers.
 
@@ -217,12 +377,13 @@ High-value N1 clusters:
 - Intelligence / analytics
 - Continuity / recovery
 
-## 09 — Universal Surface Contract
+## 13 — Universal Surface Contract
 
 Every screen, drawer, modal, workspace or device mode must declare:
 
 ```text
 Surface ID
+Service ID when applicable
 Role
 Lifecycle
 MAP-X ID
@@ -240,7 +401,7 @@ CI evidence
 Closure evidence
 ```
 
-## 10 — Legacy Map Review Protocol
+## 14 — Legacy Map Review Protocol
 
 Before declaring MAP-X canonical, review every existing map for:
 
@@ -257,7 +418,7 @@ Before declaring MAP-X canonical, review every existing map for:
 
 MAP-X is the control plane for resolving these intersections; it does not silently rewrite historical records.
 
-## 11 — Build Execution Gate
+## 15 — Build Execution Gate
 
 For each task:
 
@@ -265,7 +426,23 @@ For each task:
 
 A task may not skip `MAP` merely because implementation is small.
 
-## 12 — Canonical Source Order
+For a new service or material change, the `MAP` stage includes:
+
+`INTAKE → IDENTIFY → CLASSIFY → DISCOVER EXISTING ASSETS/CAPABILITIES → IMPACT ANALYSIS → ROUTE TO APPLICABLE MAPS → IMPLEMENTATION PLAN`
+
+Only after this governance routing is complete does the normal Repository/PR/CI execution proceed.
+
+## 16 — Evidence Validity & Reuse
+
+Evidence exists to preserve verified project state and prevent unnecessary rework.
+
+- **VALID → REUSE:** Existing evidence may be reused when it is traceable to the exact implementation/commit or an equivalent unchanged artifact and remains applicable to the closure decision.
+- **STALE / INSUFFICIENT → REFRESH:** Only the affected verification must be refreshed when the existing evidence no longer proves the required state.
+- **FAILED → BLOCK CLOSURE:** Failed evidence cannot be converted into PASS by inference or by ignoring the failure.
+
+A newly adopted governance rule does not, by itself, invalidate previously valid evidence. A material implementation change, scope change, security concern, or evidence-expiry rule may require fresh verification.
+
+## 17 — Canonical Source Order
 
 When maps disagree, resolve authority in this order:
 
@@ -278,13 +455,14 @@ When maps disagree, resolve authority in this order:
 7. Repository implementation
 8. Tests and runtime evidence
 
-## 13 — Reference Status
+## 18 — Reference Status & Governance
 
-This file is the proposed **single integration/control map**. Existing canonical maps remain authoritative for their own namespaces until their cross-map review is completed.
+This file is the **canonical MAP-X integration, intake, routing and change-control map**. Existing canonical maps remain authoritative for their own namespaces.
 
 The intended repository control set is:
 
 ```text
+docs/governance/MUSTASHARK-MASTER-MAP.md
 docs/architecture/MAP-X-CROSS-MAP-INTEGRATION.md
 
 docs/design/D02-SURFACE-MASTER-MAP.md
@@ -296,6 +474,11 @@ docs/roadmap/ROADMAP-REGISTRY.md
 docs/roadmap/N1-LAWYER-DIGITAL-OFFICE.md
 ```
 
-## 14 — Adoption Rule
+## 19 — Adoption Rule
 
-Once reviewed and adopted, every new build stage must register its MAP-X intersection before implementation begins, and every completed stage must retain the complete trace to D02, role/lifecycle, security, data, tests and verification evidence.
+Every new build stage or material service request must register its MAP-X intersection before implementation begins and must retain the complete trace to applicable role/lifecycle, architecture, D02, security, data, tests and verification evidence.
+
+MAP-X adoption does not alter runtime behavior and does not create a runtime dependency.
+
+**Governance state:** `ADOPTED — CANONICAL INTEGRATION / INTAKE / ROUTING CONTROL`
+**Runtime impact:** `NONE — GOVERNANCE / TRACEABILITY ONLY`
