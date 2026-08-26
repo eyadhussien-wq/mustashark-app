@@ -295,6 +295,15 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
       if (!originalLawyer || !newLawyer) throw new Error("LAWYER_NOT_FOUND");
       if (newLawyer.specialization !== originalLawyer.specialization || newLawyer.litigationTier !== originalLawyer.litigationTier || pricingBracket(newLawyer.hourlyRate) !== pricingBracket(originalLawyer.hourlyRate)) throw new Error("LAWYER_NOT_MATCHING");
 
+      // Atomic single-settlement gate: exactly one concurrent transfer may consume the held escrow.
+      // This UPDATE happens before any replacement booking or financial side-effect is created.
+      const [settlementGate] = await tx
+        .update(bookingsTable)
+        .set({ escrowStatus: "refunded", updatedAt: new Date() })
+        .where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "no_show_lawyer"), eq(bookingsTable.escrowStatus, "held")))
+        .returning({ id: bookingsTable.id });
+      if (!settlementGate) throw new Error("TRANSFER_ALREADY_SETTLED");
+
       const [newBooking] = await tx.insert(bookingsTable).values({
         id: crypto.randomUUID(),
         serialNumber: `TR-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
@@ -315,11 +324,19 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
         emailResponseDeadlineAt: booking.type === "email" ? new Date(Date.now() + EMAIL_DEADLINE_HOURS * 60 * 60 * 1000) : null,
       }).returning();
 
-      await tx.update(bookingsTable).set({ escrowStatus: "refunded", updatedAt: new Date() }).where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "no_show_lawyer"), eq(bookingsTable.escrowStatus, "held")));
       await tx.update(platformDuesTable).set({ status: "waived", updatedAt: new Date() }).where(eq(platformDuesTable.bookingId, booking.id));
       await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId: newBooking.id, officeId: newBooking.officeId, lawyerId: newLawyer.id, grossAmount: booking.price, commissionRate: "0.15", commissionAmount: (Number(booking.price) * 0.15).toFixed(2), status: "pending" }).onConflictDoNothing();
 
-      await tx.insert(bookingTransferRequestsTable).values({ id: crypto.randomUUID(), originalBookingId: booking.id, newBookingId: newBooking.id, clientId: booking.clientId!, originalLawyerId: booking.lawyerId, newLawyerId: newLawyer.id, status: "accepted", reason: "lawyer_no_show", selectedAt: new Date() });
+      // Reuse the unique transfer request created at no-show detection instead of inserting a second row.
+      const [updatedTransfer] = await tx
+        .update(bookingTransferRequestsTable)
+        .set({ newBookingId: newBooking.id, newLawyerId: newLawyer.id, status: "accepted", selectedAt: new Date() })
+        .where(and(eq(bookingTransferRequestsTable.originalBookingId, booking.id), eq(bookingTransferRequestsTable.status, "offered")))
+        .returning();
+      if (!updatedTransfer) {
+        await tx.insert(bookingTransferRequestsTable).values({ id: crypto.randomUUID(), originalBookingId: booking.id, newBookingId: newBooking.id, clientId: booking.clientId!, originalLawyerId: booking.lawyerId, newLawyerId: newLawyer.id, status: "accepted", reason: "lawyer_no_show", selectedAt: new Date() });
+      }
+
       await tx.insert(notificationsTable).values({ id: crypto.randomUUID(), userId: newLawyer.id, bookingId: newBooking.id, title: "لديك استشارة محولة عاجلة", body: "تم تحويل الاستشارة إليك مجاناً بسبب عدم حضور المحامي الأصلي. يمكنك مراجعة الموضوع والمرفقات والاستعداد للموعد.", kind: "urgent_transfer", urgent: true });
       return newBooking;
     });
@@ -333,6 +350,7 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
       NO_ORIGINAL_LAWYER: [400, "original_lawyer_unavailable"],
       LAWYER_NOT_FOUND: [404, "lawyer_not_found"],
       LAWYER_NOT_MATCHING: [400, "lawyer_does_not_match_transfer_rules"],
+      TRANSFER_ALREADY_SETTLED: [409, "transfer_already_processed"],
     };
     if (map[error?.message]) return res.status(map[error.message][0]).json({ ok: false, error: map[error.message][1] });
     console.error("Transfer Lawyer No-Show Error:", error);
