@@ -15,30 +15,19 @@ test("T1: two concurrent transfer gates yield exactly one winner", async (t) => 
   await setup.connect();
   t.after(async () => setup.end());
 
-  await setup.query(`
-    CREATE TEMP TABLE transfer_gate_test (
-      id TEXT PRIMARY KEY,
-      status TEXT NOT NULL,
-      escrow_status TEXT NOT NULL
-    )
-  `);
-  await setup.query(`INSERT INTO transfer_gate_test VALUES ('booking-1', 'no_show_lawyer', 'held')`);
+  const tableName = `transfer_gate_test_${process.pid}_${Date.now()}`;
+  await setup.query(`CREATE TABLE ${tableName} (id TEXT PRIMARY KEY, status TEXT NOT NULL, escrow_status TEXT NOT NULL)`);
+  await setup.query(`INSERT INTO ${tableName} VALUES ('booking-1', 'no_show_lawyer', 'held')`);
+  t.after(async () => setup.query(`DROP TABLE IF EXISTS ${tableName}`));
 
-  // The two clients deliberately use independent transactions against the same row.
   const a = new Client({ connectionString: databaseUrl() });
   const b = new Client({ connectionString: databaseUrl() });
   await Promise.all([a.connect(), b.connect()]);
   t.after(async () => Promise.all([a.end(), b.end()]));
 
-  // Recreate the shared test row outside the TEMP table so both connections can see it.
-  await setup.query(`DROP TABLE transfer_gate_test`);
-  await setup.query(`CREATE TABLE transfer_gate_test_shared (id TEXT PRIMARY KEY, status TEXT NOT NULL, escrow_status TEXT NOT NULL)`);
-  await setup.query(`INSERT INTO transfer_gate_test_shared VALUES ('booking-1', 'no_show_lawyer', 'held')`);
-  t.after(async () => setup.query(`DROP TABLE IF EXISTS transfer_gate_test_shared`));
-
   await Promise.all([a.query("BEGIN"), b.query("BEGIN")]);
   const update = `
-    UPDATE transfer_gate_test_shared
+    UPDATE ${tableName}
     SET escrow_status = 'refunded'
     WHERE id = 'booking-1'
       AND status = 'no_show_lawyer'
@@ -46,7 +35,9 @@ test("T1: two concurrent transfer gates yield exactly one winner", async (t) => 
     RETURNING id
   `;
 
-  const [resultA, resultB] = await Promise.all([a.query(update), b.query(update)]);
+  const first = a.query(update);
+  const second = b.query(update);
+  const [resultA, resultB] = await Promise.all([first, second]);
   const winners = Number(resultA.rowCount ?? 0) + Number(resultB.rowCount ?? 0);
   assert.equal(winners, 1, "exactly one concurrent transfer must consume the held escrow");
 
