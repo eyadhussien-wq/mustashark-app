@@ -7,6 +7,7 @@ import {
   casesTable,
   legalRepresentationDocumentsTable,
   lawyerVerificationsTable,
+  representationAuditLogsTable,
   representationMilestonesTable,
   representationQuotesTable,
   usersTable,
@@ -131,6 +132,17 @@ export const createCaseFromAgreement = async (input: {
           inArray(legalRepresentationDocumentsTable.documentType, [...REQUIRED_DOCUMENT_TYPES]),
         ),
       );
+
+    await tx.insert(representationAuditLogsTable).values({
+      id: `audit_${crypto.randomUUID()}`,
+      caseId,
+      agreementId: agreement.id,
+      actorUserId: input.actorUserId,
+      action: "case.created",
+      entityType: "case",
+      entityId: caseId,
+      metadata: { fromStatus: null, toStatus: "active" },
+    });
 
     return { case: createdCase, created: true };
   });
@@ -280,6 +292,18 @@ export const transitionCase = async (input: {
       .returning();
 
     if (!updatedCase) throw new Error("CASE_TRANSITION_CONFLICT");
+
+    await tx.insert(representationAuditLogsTable).values({
+      id: `audit_${crypto.randomUUID()}`,
+      caseId: caseRecord.id,
+      agreementId: caseRecord.agreementId,
+      actorUserId: input.actorUserId,
+      action: `case.status.${input.targetStatus}`,
+      entityType: "case",
+      entityId: caseRecord.id,
+      metadata: { fromStatus: caseRecord.status, toStatus: input.targetStatus },
+    });
+
     return { case: updatedCase };
   });
 };
