@@ -27,9 +27,7 @@ export * from "./cases";
 export * from "./caseHearings";
 export * from "./lawyerVerifications";
 export * from "./disputes";
+export * from "./disputeEvidence";
 
-// Keep these availability/booking tables explicitly exported as part of the
-// public DB schema surface. This avoids project-reference/declaration emit
-// edge cases where wildcard re-exports are not visible to consumers.
 export { lawyerAvailabilityTable } from "./lawyerAvailability";
 export { bookingTimeBlocksTable } from "./bookingTimeBlocks";

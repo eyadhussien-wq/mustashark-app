@@ -22,6 +22,7 @@ import createMilestoneProofRouter from "./createMilestoneProof";
 import createMilestoneReleaseRequestRouter from "./createMilestoneReleaseRequest";
 import disputeMilestoneReleaseRouter from "./disputeMilestoneRelease";
 import disputesRouter from "./disputes";
+import disputeEvidenceRouter from "./disputeEvidence";
 import releaseMilestoneRouter from "./releaseMilestone";
 import refundMilestoneRouter from "./refundMilestone";
 
@@ -49,6 +50,7 @@ router.use(createMilestoneProofRouter);
 router.use(createMilestoneReleaseRequestRouter);
 router.use(disputeMilestoneReleaseRouter);
 router.use(disputesRouter);
+router.use(disputeEvidenceRouter);
 router.use(releaseMilestoneRouter);
 router.use(refundMilestoneRouter);
 export default router;
