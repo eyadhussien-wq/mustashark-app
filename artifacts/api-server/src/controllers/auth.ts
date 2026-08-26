@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
+import { validateTermsConsent, auditTermsConsent } from "../security/terms-consent";
 
 const appleJwksClient = jwksClient({ jwksUri: "https://appleid.apple.com/auth/keys", cache: true, cacheMaxAge: 600_000, rateLimit: true });
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -31,7 +32,7 @@ async function verifyAppleToken(identityToken: string): Promise<{ id: string; em
   try { const decoded = jwt.decode(identityToken, { complete: true }); if (!decoded || typeof decoded === "string" || !decoded.header.kid) return null; const signingKey = await appleJwksClient.getSigningKey(decoded.header.kid); const publicKey = signingKey.getPublicKey(); const verified = jwt.verify(identityToken, publicKey, { algorithms: ["RS256"], issuer: "https://appleid.apple.com", audience: APPLE_CLIENT_ID }) as jwt.JwtPayload; if (!verified.sub) return null; return { id: verified.sub, email: verified.email ?? "", name: (verified as any).name ?? "" }; } catch { return null; }
 }
 
-const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]), token: z.string().min(1), role: z.enum(["client", "lawyer"]).optional().default("client"), displayName: z.string().optional() });
+const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]), token: z.string().min(1), role: z.enum(["client", "lawyer"]).optional().default("client"), displayName: z.string().optional(), termsAccepted: z.boolean().optional(), termsAcceptedAt: z.string().optional() });
 function roleMismatchResponse(role: string) { return { ok: false, error: "role_mismatch", roleUi: ROLE_UI[role as keyof typeof ROLE_UI], message: role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." }; }
 function lawyerVerificationPendingResponse() { return { ok: false, error: "lawyer_verification_pending", accountStatus: "pending", message: "تم استلام طلب تسجيل المحامي. لا يمكن استخدام بوابة المحامين قبل التحقق المهني واعتماد الإدارة." }; }
 
@@ -52,7 +53,7 @@ const EMAIL_UNIQUE_CONSTRAINT = "users_email_unique";
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { provider, token, role, displayName } = parsed.data;
+  const { provider, token, role, displayName, termsAccepted, termsAcceptedAt } = parsed.data;
   try {
     let providerUser: { id: string; email: string; name: string } | null = null;
     if (provider === "google") providerUser = await verifyGoogleToken(token);
@@ -62,6 +63,7 @@ export async function socialAuth(req: Request, res: Response) {
 
     let dbUser = await findUserByProvider(provider, providerUser.id);
     if (!dbUser) {
+      if (!validateTermsConsent(termsAccepted, termsAcceptedAt)) return res.status(400).json({ ok: false, error: "terms_consent_required", message: "يجب الموافقة على الشروط والأحكام قبل إنشاء الحساب." });
       if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني الموثق من مزود الهوية مطلوب لإنشاء حساب جديد." });
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
@@ -73,6 +75,7 @@ export async function socialAuth(req: Request, res: Response) {
         throw err;
       }
       if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
+      auditTermsConsent(req, { flow: "social", role, email: providerUser.email, termsAcceptedAt: termsAcceptedAt! });
     }
 
     if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
@@ -98,12 +101,12 @@ async function findUserByProvider(provider: string, providerId: string) {
   return rows[0] ?? null;
 }
 
-const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional() });
+const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional(), termsAccepted: z.boolean().optional(), termsAcceptedAt: z.string().optional() });
 
 export async function localAuth(req: Request, res: Response) {
   const parsed = localAuthSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate } = parsed.data;
+  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate, termsAccepted, termsAcceptedAt } = parsed.data;
   const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : undefined;
   const normalEmail = email.trim().toLowerCase();
   const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
@@ -134,6 +137,7 @@ export async function localAuth(req: Request, res: Response) {
       const jwtToken = signToken({ userId: refreshed.id, email: refreshed.email, role: (refreshed.role ?? "client") as "client" | "lawyer" | "admin", provider: "local" });
       return res.json({ ok: true, jwt: jwtToken, userId: refreshed.id, isNew: false, roleUi: ROLE_UI[refreshed.role as keyof typeof ROLE_UI], user: { id: refreshed.id, name: refreshed.name, email: refreshed.email, role: refreshed.role, phone: refreshed.phone, phoneCountry: refreshed.phoneCountry, country: refreshed.country, nationality: refreshed.nationality, specialization: refreshed.specialization, bio: refreshed.bio, hourlyRate: refreshed.hourlyRate ? parseFloat(refreshed.hourlyRate) : null } });
     }
+    if (!validateTermsConsent(termsAccepted, termsAcceptedAt)) return res.status(400).json({ ok: false, error: "terms_consent_required", message: "يجب الموافقة على الشروط والأحكام قبل إنشاء الحساب." });
     if (!name?.trim()) return res.status(400).json({ ok: false, error: "name_required", message: "الاسم مطلوب للتسجيل" });
     if (!phone) return res.status(400).json({ ok: false, error: "phone_required", message: "رقم الهاتف مطلوب لإنشاء الحساب" });
     if (!isSupportedPhone(phone)) return res.status(400).json({ ok: false, error: "invalid_phone", message: "رقم الهاتف غير صالح. استخدم رقمًا قطريًا يبدأ +974 أو أردنيًا يبدأ +962 وبالطول الصحيح." });
@@ -143,6 +147,7 @@ export async function localAuth(req: Request, res: Response) {
     const isLawyerRegistration = role === "lawyer";
     const accountStatus = isLawyerRegistration ? "pending" : "active";
     const statusReason = isLawyerRegistration ? "lawyer_verification_required" : null;
+    auditTermsConsent(req, { flow: "local", role, email: normalEmail, termsAcceptedAt: termsAcceptedAt! });
     await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus, statusReason, ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
     if (isLawyerRegistration) return res.status(202).json({ ok: true, isNew: true, accountStatus: "pending", role: "lawyer", verificationRequired: true, message: "تم إنشاء طلب تسجيل المحامي. لا يمكن الدخول إلى بوابة المحامين حتى تتحقق الإدارة من الصفة المهنية وتعتمد الحساب.", user: { id: newId, name: name.trim(), email: normalEmail, role: "lawyer", accountStatus: "pending" } });
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
