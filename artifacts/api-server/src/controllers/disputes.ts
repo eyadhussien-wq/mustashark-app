@@ -1,7 +1,11 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { getDisputeById, transitionDispute, type DisputeTransitionAction } from "../services/disputes";
 
-const ACTIONS: DisputeTransitionAction[] = ["submit_for_review", "resolve_client", "resolve_lawyer", "resolve_split", "close", "cancel"];
+const transitionSchema = z.object({
+  action: z.enum(["submit_for_review", "resolve_client", "resolve_lawyer", "resolve_split", "close", "cancel"]),
+  resolutionNote: z.string().trim().max(5000).optional(),
+});
 
 export async function getDisputeController(req: Request, res: Response) {
   const actor = req.authUser;
@@ -21,14 +25,16 @@ export async function transitionDisputeController(req: Request, res: Response) {
   const actor = req.authUser;
   if (!actor) return res.status(401).json({ ok: false, error: "authentication_required" });
   const disputeId = String(req.params.disputeId ?? "").trim();
-  const action = String(req.body?.action ?? "").trim() as DisputeTransitionAction;
-  const resolutionNote = typeof req.body?.resolutionNote === "string" ? req.body.resolutionNote : undefined;
-
   if (!disputeId) return res.status(400).json({ ok: false, error: "invalid_dispute_id" });
-  if (!ACTIONS.includes(action)) return res.status(400).json({ ok: false, error: "invalid_dispute_action" });
 
+  const parsed = transitionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: "invalid_dispute_transition", details: parsed.error.flatten() });
+  }
+
+  const action = parsed.data.action as DisputeTransitionAction;
   try {
-    const result = await transitionDispute(req, disputeId, action, actor.id, actor.role, resolutionNote);
+    const result = await transitionDispute(req, disputeId, action, actor.id, actor.role, parsed.data.resolutionNote);
     if ("error" in result) {
       const status = result.error === "dispute_not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
       return res.status(status).json({ ok: false, error: result.error });
