@@ -49,6 +49,7 @@ export const createBookingSafely = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error?.message === "SLOT_ALREADY_BOOKED") return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
     if (error?.message === "SLOT_OUTSIDE_AVAILABILITY") return res.status(409).json({ ok: false, error: "slot_not_available", message: "هذا الوقت خارج أوقات توفر المحامي." });
+    if (error?.code === "23505" || error?.cause?.code === "23505") return res.status(409).json({ ok: false, error: "slot_already_booked", message: "هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر." });
     console.error("Create Booking Safely Error:", error); return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
