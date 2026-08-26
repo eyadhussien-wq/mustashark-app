@@ -87,7 +87,7 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Concurrent OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
-    const body = { provider: "google", token: "synthetic-security-gate-token", role: "client" };
+    const body = { provider: "google", token: "synthetic-security-gate-token", role: "client", termsAccepted: true, termsAcceptedAt: new Date().toISOString() };
     const makeReq = () => ({ body, log: { error() {}, warn() {}, info() {} } }) as any;
     const r1 = responseMock();
     const r2 = responseMock();
@@ -113,7 +113,7 @@ test("#3b Provider Identity: email collision never auto-links an unrelated local
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Conflicting OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
-    const req = { body: { provider: "google", token: "synthetic-security-gate-conflict-token", role: "client" }, log: { error() {}, warn() {}, info() {} } } as any;
+    const req = { body: { provider: "google", token: "synthetic-security-gate-conflict-token", role: "client", termsAccepted: true, termsAcceptedAt: new Date().toISOString() }, log: { error() {}, warn() {}, info() {} } } as any;
     const res = responseMock();
     await socialAuth(req, res as any);
 
