@@ -112,7 +112,7 @@ export const notificationsTable = pgTable("notifications", {
 
 export const bookingTransferRequestsTable = pgTable("booking_transfer_requests", {
   id: text("id").primaryKey(),
-  originalBookingId: text("original_booking_id").notNull().references(() => bookingsTable.id, { onDelete: "cascade" }),
+  originalBookingId: text("original_booking_id").notNull().unique().references(() => bookingsTable.id, { onDelete: "cascade" }),
   newBookingId: text("new_booking_id").references(() => bookingsTable.id, { onDelete: "set null" }),
   clientId: text("client_id").notNull().references(() => usersTable.id),
   originalLawyerId: text("original_lawyer_id").references(() => usersTable.id, { onDelete: "set null" }),
