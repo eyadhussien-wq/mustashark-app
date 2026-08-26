@@ -297,12 +297,12 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
 
       // Atomic single-settlement gate: exactly one concurrent transfer may consume the held escrow.
       // This UPDATE happens before any replacement booking or financial side-effect is created.
-      const [settlementGate] = await tx
+      const settlementGateResult = await tx
         .update(bookingsTable)
         .set({ escrowStatus: "refunded", updatedAt: new Date() })
         .where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "no_show_lawyer"), eq(bookingsTable.escrowStatus, "held")))
         .returning({ id: bookingsTable.id });
-      if (!settlementGate) throw new Error("TRANSFER_ALREADY_SETTLED");
+      if (settlementGateResult.length !== 1) throw new Error("TRANSFER_ALREADY_SETTLED");
 
       const [newBooking] = await tx.insert(bookingsTable).values({
         id: crypto.randomUUID(),
