@@ -75,14 +75,14 @@ export async function socialAuth(req: Request, res: Response) {
         throw err;
       }
       if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
-      auditTermsConsent(req, { flow: "social", role, email: providerUser.email, termsAcceptedAt: termsAcceptedAt! });
+      if (insertedNewUser(dbUser, newId)) {
+        await auditTermsConsent(req, { flow: "social", role, userId: dbUser.id, termsAcceptedAt: termsAcceptedAt! });
+      }
     }
 
     if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
       const now = new Date();
-      if (dbUser.deletionScheduledAt > now) {
-        return res.status(403).json({ ok: false, error: "account_reactivation_requires_verified_auth", message: "لا يمكن إعادة تفعيل الحساب المحذوف عبر تسجيل الدخول الاجتماعي دون مسار تحقق موثق." });
-      }
+      if (dbUser.deletionScheduledAt > now) return res.status(403).json({ ok: false, error: "account_reactivation_requires_verified_auth", message: "لا يمكن إعادة تفعيل الحساب المحذوف عبر تسجيل الدخول الاجتماعي دون مسار تحقق موثق." });
       return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
     }
     if (isBlockedAccountStatus(dbUser.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "عذراً، تم إيقاف هذا الحساب. يرجى التواصل مع الدعم." });
@@ -100,6 +100,8 @@ async function findUserByProvider(provider: string, providerId: string) {
   const rows = await db.select().from(usersTable).where(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerId))).limit(1);
   return rows[0] ?? null;
 }
+
+function insertedNewUser(dbUser: { id: string }, newId: string): boolean { return dbUser.id === newId; }
 
 const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional(), termsAccepted: z.boolean().optional(), termsAcceptedAt: z.string().optional() });
 
@@ -121,12 +123,10 @@ export async function localAuth(req: Request, res: Response) {
         req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
         return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
       }
-      // No account-state mutation is permitted before credential verification succeeds.
       if (existing.deletedAt && existing.deletionScheduledAt) {
         const now = new Date();
-        if (existing.deletionScheduledAt > now) {
-          await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, existing.id));
-        } else return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
+        if (existing.deletionScheduledAt > now) await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, existing.id));
+        else return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
       }
       const refreshed = (await db.select().from(usersTable).where(eq(usersTable.id, existing.id)).limit(1))[0];
       if (!refreshed) return res.status(500).json({ ok: false, error: "user_creation_failed" });
@@ -147,8 +147,8 @@ export async function localAuth(req: Request, res: Response) {
     const isLawyerRegistration = role === "lawyer";
     const accountStatus = isLawyerRegistration ? "pending" : "active";
     const statusReason = isLawyerRegistration ? "lawyer_verification_required" : null;
-    auditTermsConsent(req, { flow: "local", role, email: normalEmail, termsAcceptedAt: termsAcceptedAt! });
     await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus, statusReason, ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
+    await auditTermsConsent(req, { flow: "local", role, userId: newId, termsAcceptedAt: termsAcceptedAt! });
     if (isLawyerRegistration) return res.status(202).json({ ok: true, isNew: true, accountStatus: "pending", role: "lawyer", verificationRequired: true, message: "تم إنشاء طلب تسجيل المحامي. لا يمكن الدخول إلى بوابة المحامين حتى تتحقق الإدارة من الصفة المهنية وتعتمد الحساب.", user: { id: newId, name: name.trim(), email: normalEmail, role: "lawyer", accountStatus: "pending" } });
     const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
     return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, roleUi: ROLE_UI[role], user: { id: newId, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
