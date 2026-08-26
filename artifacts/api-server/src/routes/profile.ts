@@ -11,6 +11,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
 import { getLawyerBankAccount, upsertLawyerBankAccount } from "../controllers/lawyerBankAccounts";
 import { getLawyerVerification, submitLawyerVerification } from "../controllers/lawyerVerification";
+import { getLawyerIdentity } from "../controllers/lawyerIdentity";
 
 const profileRouter = Router();
 
@@ -39,6 +40,7 @@ profileRouter.get("/profile/bank-account", requireAuth, requireLawyer, getLawyer
 profileRouter.put("/profile/bank-account", requireAuth, requireLawyer, upsertLawyerBankAccount);
 profileRouter.get("/profile/lawyer-verification", requireAuth, requireLawyer, getLawyerVerification);
 profileRouter.post("/profile/lawyer-verification", requireAuth, requireLawyer, submitLawyerVerification);
+profileRouter.get("/profile/lawyer-identity", requireAuth, requireLawyer, getLawyerIdentity);
 
 profileRouter.delete("/profile", requireAuth, requireClient, softDeleteClient);
 profileRouter.post(
