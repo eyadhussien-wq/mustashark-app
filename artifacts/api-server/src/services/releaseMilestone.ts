@@ -23,6 +23,12 @@ export type ReleaseMilestoneResult =
 /**
  * Releases an approved milestone from escrow to the assigned lawyer wallet.
  * All financial mutations are server-authoritative, atomic and idempotent.
+ *
+ * The release request is atomically claimed by transitioning approved ->
+ * auto_released before any financial posting. A concurrent request, even with
+ * a different idempotency key, cannot claim the same request after the first
+ * transaction commits. Any later failure rolls the claim back with the rest
+ * of the transaction, preserving safe retry semantics.
  */
 export async function releaseMilestone(
   req: Request,
@@ -54,16 +60,27 @@ export async function releaseMilestone(
 
     if (!row) return { error: "release_request_not_found" };
     if (row.request.clientId !== clientId || row.quote.clientId !== clientId) return { error: "forbidden" };
-    if (row.request.status !== "approved" && row.request.status !== "auto_released") {
-      return { error: "milestone_not_releasable" };
-    }
+    if (row.request.status !== "approved") return { error: "milestone_not_releasable" };
     if (["released", "cancelled", "disputed"].includes(row.milestone.status)) {
       return { error: "milestone_not_releasable" };
     }
     if (!row.wallet) return { error: "lawyer_wallet_not_found" };
 
-    const amount = row.milestone.amount;
+    // Atomic single-settlement gate. Only one transaction may move an
+    // approved release request into its terminal released state. Different
+    // idempotency keys therefore cannot create duplicate payouts.
     const now = new Date();
+    const [claimedRequest] = await tx
+      .update(milestoneReleaseRequestsTable)
+      .set({ status: "auto_released", decidedAt: row.request.decidedAt ?? now, updatedAt: now })
+      .where(and(
+        eq(milestoneReleaseRequestsTable.id, row.request.id),
+        eq(milestoneReleaseRequestsTable.status, "approved"),
+      ))
+      .returning();
+    if (!claimedRequest) return { error: "milestone_not_releasable" };
+
+    const amount = row.milestone.amount;
 
     const [tier] = await tx
       .select()
@@ -172,20 +189,13 @@ export async function releaseMilestone(
       .returning();
     if (!updatedWallet) throw new Error("LAWYER_WALLET_UPDATE_FAILED");
 
-    const [updatedRequest] = await tx
-      .update(milestoneReleaseRequestsTable)
-      .set({ decidedAt: row.request.decidedAt ?? now, updatedAt: now })
-      .where(eq(milestoneReleaseRequestsTable.id, row.request.id))
-      .returning();
-    if (!updatedRequest) throw new Error("RELEASE_REQUEST_UPDATE_FAILED");
-
     const body = {
       ok: true as const,
       milestone: updatedMilestone,
       escrowAccount: updatedEscrow,
       releaseTransaction,
       commissionTransaction,
-      walletTransaction: { ...walletTransaction, wallet: updatedWallet, releaseRequest: updatedRequest },
+      walletTransaction: { ...walletTransaction, wallet: updatedWallet, releaseRequest: claimedRequest },
     };
     await persistIdempotencyResponse(tx, req, clientId, 200, body);
     return { replay: false as const, status: 200 as const, body };
