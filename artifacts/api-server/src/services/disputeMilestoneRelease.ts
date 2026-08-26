@@ -1,6 +1,8 @@
+import crypto from "crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
+  disputesTable,
   milestoneProofsTable,
   milestoneReleaseRequestsTable,
   representationMilestonesTable,
@@ -11,14 +13,14 @@ import type { Request } from "express";
 
 export type DisputeMilestoneReleaseResult =
   | { replay: true; status: number; body: unknown }
-  | { replay: false; status: 200; body: { ok: true; releaseRequest: unknown; proof: unknown; milestone: unknown } }
-  | { error: "release_request_not_found" | "forbidden" | "dispute_reason_required" | "milestone_not_disputable" };
+  | { replay: false; status: 201; body: { ok: true; dispute: unknown; releaseRequest: unknown; proof: unknown; milestone: unknown } }
+  | { error: "release_request_not_found" | "forbidden" | "dispute_reason_required" | "milestone_not_disputable" | "dispute_already_exists" };
 
 /**
- * Locks a release request into dispute before release. No financial amount is
- * accepted from the client and no money moves during dispute creation. The
- * request, proof and milestone states change atomically so release/refund
- * guards cannot bypass the dispute.
+ * Creates the canonical T02 dispute record and atomically moves the existing
+ * release-request/proof/milestone state to disputed. No amount is accepted
+ * from the client and no financial movement occurs here; C3 remains the only
+ * settlement authority.
  */
 export async function disputeMilestoneRelease(
   req: Request,
@@ -54,7 +56,32 @@ export async function disputeMilestoneRelease(
       return { error: "milestone_not_disputable" };
     }
 
+    const [existingDispute] = await tx
+      .select({ id: disputesTable.id })
+      .from(disputesTable)
+      .where(eq(disputesTable.releaseRequestId, row.request.id))
+      .limit(1)
+      .for("update");
+    if (existingDispute) return { error: "dispute_already_exists" };
+
     const now = new Date();
+    const [dispute] = await tx
+      .insert(disputesTable)
+      .values({
+        id: crypto.randomUUID(),
+        releaseRequestId: row.request.id,
+        milestoneId: row.milestone.id,
+        quoteId: row.quote.id,
+        clientId: row.request.clientId,
+        lawyerId: row.request.lawyerId,
+        reason: normalizedReason,
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!dispute) throw new Error("DISPUTE_CREATE_FAILED");
+
     const [updatedRequest] = await tx
       .update(milestoneReleaseRequestsTable)
       .set({ status: "disputed", disputeReason: normalizedReason, decidedAt: now, updatedAt: now })
@@ -85,8 +112,8 @@ export async function disputeMilestoneRelease(
       .returning();
     if (!updatedMilestone) throw new Error("MILESTONE_DISPUTE_TRANSITION_FAILED");
 
-    const body = { ok: true as const, releaseRequest: updatedRequest, proof: updatedProof, milestone: updatedMilestone };
-    await persistIdempotencyResponse(tx, req, clientId, 200, body);
-    return { replay: false as const, status: 200 as const, body };
+    const body = { ok: true as const, dispute, releaseRequest: updatedRequest, proof: updatedProof, milestone: updatedMilestone };
+    await persistIdempotencyResponse(tx, req, clientId, 201, body);
+    return { replay: false as const, status: 201 as const, body };
   });
 }
