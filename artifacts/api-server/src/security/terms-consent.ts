@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { db, termsConsentAuditTable } from "@workspace/db";
+import type { Request } from "express";
 
 export const TERMS_CONSENT_VERSION = "2026-08-26";
 
@@ -16,19 +16,19 @@ export function validateTermsConsent(termsAccepted: boolean | undefined, termsAc
   return Number.isFinite(acceptedAt) && acceptedAt <= Date.now() + 60_000;
 }
 
-export async function auditTermsConsent(data: {
-  flow: "social" | "local";
-  role: "client" | "lawyer";
-  userId: string;
-  termsAcceptedAt: string;
-}) {
-  await db.insert(termsConsentAuditTable).values({
-    id: `terms-${data.userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    userId: data.userId,
+// The authentication controller currently invokes this helper before the Local
+// insert and after the Social insert. Keep the current contract source-compatible
+// while removing raw PII from the security log. Durable DB evidence is added in
+// the schema and must be wired from the post-insert creation points before merge.
+export function auditTermsConsent(
+  req: Request,
+  data: { flow: "social" | "local"; role: "client" | "lawyer"; email: string; termsAcceptedAt: string },
+) {
+  void req.log.info({
+    auditEvent: "terms_consent",
     flow: data.flow,
     role: data.role,
     consentVersion: TERMS_CONSENT_VERSION,
-    acceptedAt: new Date(data.termsAcceptedAt),
-    createdAt: new Date(),
-  });
+    termsAcceptedAt: data.termsAcceptedAt,
+  }, "terms and conditions consent accepted");
 }
