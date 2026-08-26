@@ -32,6 +32,7 @@ import { listAdminBankAccounts } from "../controllers/adminBankAccounts";
 import { reviewBankAccount } from "../controllers/lawyerBankAccounts";
 import { listPendingLawyerVerifications, reviewLawyerVerification } from "../controllers/lawyerVerification";
 import { getDisputeController, transitionDisputeController } from "../controllers/disputes";
+import { listAdminDisputesController } from "../controllers/adminDisputesList";
 
 const adminRouter = Router();
 
@@ -63,7 +64,8 @@ adminRouter.get("/admin/reviews", requireAdmin, listPendingReviews);
 adminRouter.post("/admin/reviews/:id/approve", requireAdmin, approveReview);
 adminRouter.post("/admin/reviews/:id/reject", requireAdmin, rejectReview);
 
-// T02-04: admin review/transition surface. The service still owns authorization and state-machine rules.
+// T02-07/T02-08: secured admin dispute monitoring and state-transition surface.
+adminRouter.get("/admin/disputes", requireAdmin, listAdminDisputesController);
 adminRouter.get("/admin/disputes/:disputeId", requireAdmin, getDisputeController);
 adminRouter.post("/admin/disputes/:disputeId/transition", requireAdmin, transitionDisputeController);
 
