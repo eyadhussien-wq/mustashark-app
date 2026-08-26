@@ -21,11 +21,11 @@ import allocateMilestoneRouter from "./allocateMilestone";
 import createMilestoneProofRouter from "./createMilestoneProof";
 import createMilestoneReleaseRequestRouter from "./createMilestoneReleaseRequest";
 import disputeMilestoneReleaseRouter from "./disputeMilestoneRelease";
+import disputesRouter from "./disputes";
 import releaseMilestoneRouter from "./releaseMilestone";
 import refundMilestoneRouter from "./refundMilestone";
 
 const router: IRouter = Router();
-
 router.use(healthRouter);
 router.use(authRouter);
 router.use(profileRouter);
@@ -48,7 +48,7 @@ router.use(allocateMilestoneRouter);
 router.use(createMilestoneProofRouter);
 router.use(createMilestoneReleaseRequestRouter);
 router.use(disputeMilestoneReleaseRouter);
+router.use(disputesRouter);
 router.use(releaseMilestoneRouter);
 router.use(refundMilestoneRouter);
-
 export default router;
