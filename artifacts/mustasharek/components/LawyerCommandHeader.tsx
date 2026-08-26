@@ -10,47 +10,52 @@ type Props = {
   identity: LawyerIdentityReadDto;
 };
 
-const verificationLabels: Record<LawyerIdentityReadDto["verification"] extends infer V ? V extends { status: infer S } ? S : never : never, string> = {
-  pending: "قيد المراجعة",
-  approved: "موثّق",
-  rejected: "مرفوض",
-};
+export function getLawyerCommandHeaderState(identity: LawyerIdentityReadDto) {
+  const verificationStatus = identity.verification?.status ?? null;
+  const verificationLabel = verificationStatus === "approved" ? "موثّق" : verificationStatus === "pending" ? "قيد المراجعة" : verificationStatus === "rejected" ? "مرفوض" : "غير متاح";
+  const accountLabel = {
+    pending: "الحساب قيد المراجعة",
+    active: "الحساب نشط",
+    suspended: "الحساب موقوف",
+    terminated: "الحساب منتهٍ",
+    rejected: "الحساب مرفوض",
+    blocked: "الحساب محظور",
+  }[identity.accountStatus];
 
-const accountLabels: Record<LawyerIdentityReadDto["accountStatus"], string> = {
-  pending: "الحساب قيد المراجعة",
-  active: "الحساب نشط",
-  suspended: "الحساب موقوف",
-  terminated: "الحساب منتهٍ",
-  rejected: "الحساب مرفوض",
-  blocked: "الحساب محظور",
-};
+  return {
+    name: identity.name,
+    specialization: identity.specialization || "المحاماة",
+    verificationLabel,
+    accountLabel,
+  };
+}
 
 export function LawyerCommandHeader({ identity }: Props) {
+  const state = getLawyerCommandHeaderState(identity);
   const verificationStatus = identity.verification?.status ?? null;
-  const verificationLabel = verificationStatus ? verificationLabels[verificationStatus] : "غير متاح";
   const verificationIcon = verificationStatus === "approved" ? "check-circle" : verificationStatus === "rejected" ? "x-circle" : "clock";
 
   return (
     <View style={styles.card} accessibilityRole="header">
       <View style={styles.identityRow}>
-        <View style={styles.avatar} accessibilityLabel={identity.name}>
-          <Text style={styles.avatarText}>{identity.name.charAt(0) || "؟"}</Text>
+        <View style={styles.avatar} accessibilityLabel={state.name}>
+          <Text style={styles.avatarText}>{state.name.charAt(0) || "؟"}</Text>
         </View>
         <View style={styles.copy}>
           <Text style={styles.eyebrow}>مركز عمل المحامي</Text>
-          <Text style={styles.name} numberOfLines={1}>{identity.name}</Text>
-          <Text style={styles.specialization} numberOfLines={1}>{identity.specialization || "المحاماة"}</Text>
+          <Text style={styles.name} numberOfLines={1}>{state.name}</Text>
+          <Text style={styles.specialization} numberOfLines={1}>{state.specialization}</Text>
         </View>
       </View>
 
       <View style={styles.statusRow}>
         <View style={[styles.statusPill, verificationStatus === "approved" ? styles.statusGood : undefined]}>
           <Feather name={verificationIcon as any} size={14} color={verificationStatus === "approved" ? C.success : C.navy} />
-          <Text style={styles.statusText}>التحقق: {verificationLabel}</Text>
+          <Text style={styles.statusText}>التحقق: {state.verificationLabel}</Text>
         </View>
         <View style={[styles.statusPill, identity.accountStatus === "active" ? styles.statusGood : undefined]}>
           <Feather name={identity.accountStatus === "active" ? "check" : "alert-circle"} size={14} color={identity.accountStatus === "active" ? C.success : C.warning} />
-          <Text style={styles.statusText}>{accountLabels[identity.accountStatus]}</Text>
+          <Text style={styles.statusText}>{state.accountLabel}</Text>
         </View>
       </View>
     </View>
