@@ -8,6 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { rateLabel } from "@/utils/currency";
 import { ProfessionalCalendar, buildCalendarDays } from "@/components/ProfessionalCalendar";
+import { LawyerWorkQueue } from "@/components/LawyerWorkQueue";
+import { buildLawyerWorkQueue } from "@/lib/agenda/lawyerWorkQueue";
 
 const C = colors.light;
 
@@ -20,6 +22,10 @@ export default function LawyerDashboard() {
   const [selectedDate, setSelectedDate] = useState("");
 
   const myConsults = useMemo(() => consultations.filter((c) => c.lawyerId === user?.id), [consultations, user?.id]);
+  const lawyerWorkQueue = useMemo(
+    () => (user?.id ? buildLawyerWorkQueue(consultations, user.id) : []),
+    [consultations, user?.id],
+  );
   const pending = myConsults.filter((c) => c.status === "pending").length;
   const accepted = myConsults.filter((c) => c.status === "accepted").length;
   const completed = myConsults.filter((c) => c.status === "completed").length;
@@ -76,6 +82,8 @@ export default function LawyerDashboard() {
         <StatCard icon="check-circle" label="استشارات مكتملة" value={completed.toString()} tone="success" onPress={() => goFiltered("completed")} />
         <StatCard icon="trending-up" label={`الإيرادات (${user?.country ? rateLabel(user.country) : "ر.ق"})`} value={totalEarnings.toString()} tone="gold" onPress={() => goFiltered("completed")} />
       </View>
+
+      <LawyerWorkQueue items={lawyerWorkQueue} />
 
       <View style={styles.calendarSection}>
         <ProfessionalCalendar
