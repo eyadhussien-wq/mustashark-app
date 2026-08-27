@@ -1,0 +1,31 @@
+name: S01-04 Client Booking Calendar Contract Gate
+
+on:
+  push:
+    branches: ["feat/s01-04-client-booking-calendar"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Client Booking Calendar Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck scripts
+        run: pnpm --filter @workspace/scripts typecheck
+      - name: Run S01-04 contract test
+        run: pnpm --filter @workspace/scripts exec tsx ./src/s01-04-client-booking-calendar-contract-test.ts
