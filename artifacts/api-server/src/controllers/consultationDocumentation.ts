@@ -39,6 +39,33 @@ function sanitizePrintMetadata(metadata: unknown) {
   return Object.keys(safe).length > 0 ? safe : null;
 }
 
+const toSafeArchiveDto = (booking: typeof bookingsTable.$inferSelect) => ({
+  id: booking.id,
+  serialNumber: booking.serialNumber,
+  clientId: booking.clientId,
+  lawyerId: booking.lawyerId,
+  subject: booking.subject,
+  scheduledDate: booking.scheduledDate,
+  scheduledTime: booking.scheduledTime,
+  status: booking.status,
+  archivedAt: booking.archivedAt,
+});
+
+const toSafePrintBookingDto = (booking: typeof bookingsTable.$inferSelect) => ({
+  id: booking.id,
+  subject: booking.subject,
+  description: booking.description,
+  scheduledDate: booking.scheduledDate,
+  scheduledTime: booking.scheduledTime,
+  status: booking.status,
+  type: booking.type,
+  attachments: (booking.attachments ?? []).map((attachment) => ({
+    name: String(attachment.name).slice(0, 200),
+    uri: String(attachment.uri).slice(0, 2000),
+  })),
+  archivedAt: booking.archivedAt,
+});
+
 export async function listConsultationArchive(req: Request, res: Response) {
   const user = req.authUser!;
   const rows = await db
@@ -51,9 +78,6 @@ export async function listConsultationArchive(req: Request, res: Response) {
       scheduledDate: bookingsTable.scheduledDate,
       scheduledTime: bookingsTable.scheduledTime,
       status: bookingsTable.status,
-      price: bookingsTable.price,
-      paymentStatus: bookingsTable.paymentStatus,
-      escrowStatus: bookingsTable.escrowStatus,
       archivedAt: bookingsTable.archivedAt,
     })
     .from(bookingsTable)
@@ -113,11 +137,11 @@ export async function getConsultationPrintData(req: Request, res: Response) {
 
   const events = await db.select({ id: consultationEventsTable.id, eventType: consultationEventsTable.eventType, metadata: consultationEventsTable.metadata, createdAt: consultationEventsTable.createdAt }).from(consultationEventsTable).where(eq(consultationEventsTable.bookingId, bookingId)).orderBy(asc(consultationEventsTable.createdAt));
   const safeClient = row.client ? { id: row.client.id, name: row.client.name, email: row.client.email, phone: row.client.phone } : null;
-  const safeAttachments = (row.booking.attachments ?? []).map((attachment) => ({ name: String(attachment.name).slice(0, 200), uri: String(attachment.uri).slice(0, 2000) }));
+  const safeBooking = toSafePrintBookingDto(row.booking);
   const safeEvents = events.map((event) => ({ id: event.id, eventType: event.eventType, metadata: sanitizePrintMetadata(event.metadata), createdAt: event.createdAt }));
 
   await db.insert(consultationEventsTable).values({ id: randomUUID(), bookingId, eventType: "document.print_data_accessed", actorId: req.authUser!.id, metadata: { purpose: "consultation_documentation" } });
-  return res.json({ ok: true, document: { serialNumber: row.booking.serialNumber, booking: { id: row.booking.id, subject: row.booking.subject, description: row.booking.description, scheduledDate: row.booking.scheduledDate, scheduledTime: row.booking.scheduledTime, status: row.booking.status, type: row.booking.type, price: row.booking.price, paymentStatus: row.booking.paymentStatus, escrowStatus: row.booking.escrowStatus, attachments: safeAttachments, archivedAt: row.booking.archivedAt }, client: safeClient, events: safeEvents, generatedAt: new Date().toISOString() } });
+  return res.json({ ok: true, document: { serialNumber: row.booking.serialNumber, booking: safeBooking, client: safeClient, events: safeEvents, generatedAt: new Date().toISOString() } });
 }
 
 export async function recordConsultationPrintExport(req: Request, res: Response) {
@@ -127,3 +151,5 @@ export async function recordConsultationPrintExport(req: Request, res: Response)
   await db.insert(consultationEventsTable).values({ id: randomUUID(), bookingId: result.booking.id, eventType: "document.printed", actorId: req.authUser!.id, metadata: { format: "pdf", purpose: "consultation_documentation" } });
   return res.status(201).json({ ok: true, recorded: true });
 }
+
+export { toSafeArchiveDto, toSafePrintBookingDto };
