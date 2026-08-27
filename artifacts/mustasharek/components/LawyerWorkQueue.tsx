@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import colors from "@/constants/colors";
 import type { LawyerWorkQueueItem } from "@/lib/agenda/lawyerWorkQueue";
 import { LawyerAvailabilitySettingsCard } from "@/components/lawyer/LawyerAvailabilitySettingsCard";
+import { LawyerClientDirectory } from "@/components/lawyer/LawyerClientDirectory";
 
 const C = colors.light;
 
@@ -32,6 +33,7 @@ export function LawyerWorkQueue({ items }: Props) {
         )}
       </View>
       <LawyerAvailabilitySettingsCard />
+      <LawyerClientDirectory />
     </>
   );
 }
