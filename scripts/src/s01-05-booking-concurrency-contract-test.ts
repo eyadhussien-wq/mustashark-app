@@ -62,28 +62,23 @@ if (process.env.DATABASE_URL) {
     const serialA = `S0105-A-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
     const serialB = `S0105-B-${Date.now()}-${crypto.randomBytes(2).toString("hex")}`;
     const q = (value: string) => `'${value.replaceAll("'", "''")}'`;
-    try {
-      const insertBooking = (id: string, serial: string) => sql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${q(id)}, ${q(serial)}, ${q(clientId)}, ${q(lawyerId)}, 'S01-05 concurrency proof', '2099-02-03', '10:00', 'pending', 'chat', '0', 'pending', 'none', 1);`);
-      insertBooking(bookingA, serialA);
-      insertBooking(bookingB, serialB);
+    const insertBooking = (id: string, serial: string) => sql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${q(id)}, ${q(serial)}, ${q(clientId)}, ${q(lawyerId)}, 'S01-05 concurrency proof', '2099-02-03', '10:00', 'pending', 'chat', '0', 'pending', 'none', 1);`);
+    insertBooking(bookingA, serialA);
+    insertBooking(bookingB, serialB);
 
-      const blockInsert = (blockId: string, bookingId: string) => `BEGIN; SELECT pg_sleep(0.5); INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${q(blockId)}, ${q(bookingId)}, ${q(lawyerId)}, '2099-02-03', '10:00', '11:00'); COMMIT;`;
-      const [first, second] = await Promise.all([
-        runPsql(databaseUrl, blockInsert(blockA, bookingA)),
-        runPsql(databaseUrl, blockInsert(blockB, bookingB)),
-      ]);
+    const blockInsert = (blockId: string, bookingId: string) => `BEGIN; SELECT pg_sleep(0.5); INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${q(blockId)}, ${q(bookingId)}, ${q(lawyerId)}, '2099-02-03', '10:00', '11:00'); COMMIT;`;
+    const [first, second] = await Promise.all([
+      runPsql(databaseUrl, blockInsert(blockA, bookingA)),
+      runPsql(databaseUrl, blockInsert(blockB, bookingB)),
+    ]);
 
-      const successes = [first, second].filter((result) => result.code === 0).length;
-      const failures = [first, second].filter((result) => result.code !== 0 && /duplicate key value|booking_time_blocks_exact_slot_uq/i.test(result.output)).length;
-      assert.equal(successes, 1, `expected exactly one concurrent slot claim to commit, got ${successes}`);
-      assert.equal(failures, 1, `expected exactly one concurrent slot claim to be rejected by the uniqueness guard, got ${failures}`);
+    const successes = [first, second].filter((result) => result.code === 0).length;
+    const failures = [first, second].filter((result) => result.code !== 0 && /duplicate key value|booking_time_blocks_exact_slot_uq/i.test(result.output)).length;
+    assert.equal(successes, 1, `expected exactly one concurrent slot claim to commit, got ${successes}`);
+    assert.equal(failures, 1, `expected exactly one concurrent slot claim to be rejected by the uniqueness guard, got ${failures}`);
 
-      const activeCount = Number(sql(`SELECT count(*) FROM booking_time_blocks WHERE lawyer_id=${q(lawyerId)} AND scheduled_date='2099-02-03' AND start_time='10:00' AND end_time='11:00' AND released_at IS NULL;`));
-      assert.equal(activeCount, 1, `expected one active slot after concurrent contention, got ${activeCount}`);
-    } finally {
-      sql(`DELETE FROM booking_time_blocks WHERE id IN (${q(blockA)}, ${q(blockB)});`);
-      sql(`DELETE FROM bookings WHERE id IN (${q(bookingA)}, ${q(bookingB)});`);
-    }
+    const activeCount = Number(sql(`SELECT count(*) FROM booking_time_blocks WHERE lawyer_id=${q(lawyerId)} AND scheduled_date='2099-02-03' AND start_time='10:00' AND end_time='11:00' AND released_at IS NULL;`));
+    assert.equal(activeCount, 1, `expected one active slot after concurrent contention, got ${activeCount}`);
   }
 }
 
