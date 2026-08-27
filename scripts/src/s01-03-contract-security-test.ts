@@ -70,7 +70,9 @@ function nextMonday() {
 const lawyer = await login(lawyerEmail, lawyerPassword, "lawyer");
 const client = await login(clientEmail, clientPassword, "client");
 const lawyerId = lawyer.userId ?? lawyer.user?.id;
+const clientId = client.userId ?? client.user?.id;
 assert(lawyerId, "lawyer login did not return user id");
+assert(clientId, "client login did not return user id");
 
 const clientHeaders = { authorization: `Bearer ${client.jwt}` };
 const lawyerHeaders = { authorization: `Bearer ${lawyer.jwt}` };
@@ -124,7 +126,7 @@ assert(JSON.stringify(result.body.availability.map((x: any) => [x.dayOfWeek, x.s
 
 const bookingId = crypto.randomUUID();
 const serialNumber = `S0103-SEC-${crypto.randomBytes(4).toString("hex")}`;
-psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${sqlLiteral(bookingId)}, ${sqlLiteral(serialNumber)}, ${sqlLiteral(client.userId ?? client.body?.user?.id ?? "")}, ${sqlLiteral(lawyerId)}, 'S01-03 occupied-slot security test', ${sqlLiteral(monday)}, '10:00', 'pending', 'chat', '100.00', 'pending', 'none', 1);`);
+psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${sqlLiteral(bookingId)}, ${sqlLiteral(serialNumber)}, ${sqlLiteral(clientId)}, ${sqlLiteral(lawyerId)}, 'S01-03 occupied-slot security test', ${sqlLiteral(monday)}, '10:00', 'pending', 'chat', '100.00', 'pending', 'none', 1);`);
 psql(`INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${sqlLiteral(crypto.randomUUID())}, ${sqlLiteral(bookingId)}, ${sqlLiteral(lawyerId)}, ${sqlLiteral(monday)}, '10:00', '11:00');`);
 
 result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: clientHeaders });
@@ -133,10 +135,10 @@ assert(result.body?.timezone === "Asia/Qatar", `timezone contract changed: ${JSO
 const generated = result.body?.slots;
 assert(Array.isArray(generated), "available-slots response is not an array");
 assert(!generated.some((slot: any) => slot.startTime === "10:00" && slot.endTime === "11:00"), "occupied booking block was returned as available");
-const tenToEleven = generated.find((slot: any) => slot.startTime === "09:00" && slot.endTime === "10:00");
-assert(tenToEleven, `expected unoccupied 09:00-10:00 slot was not returned: ${JSON.stringify(generated)}`);
-assert(tenToEleven.startAtUtc === `${monday}T06:00:00.000Z`, `UTC conversion contract failed for Asia/Qatar: ${JSON.stringify(tenToEleven)}`);
-assert(tenToEleven.endAtUtc === `${monday}T07:00:00.000Z`, `UTC end conversion contract failed for Asia/Qatar: ${JSON.stringify(tenToEleven)}`);
+const nineToTen = generated.find((slot: any) => slot.startTime === "09:00" && slot.endTime === "10:00");
+assert(nineToTen, `expected unoccupied 09:00-10:00 slot was not returned: ${JSON.stringify(generated)}`);
+assert(nineToTen.startAtUtc === `${monday}T06:00:00.000Z`, `UTC conversion contract failed for Asia/Qatar: ${JSON.stringify(nineToTen)}`);
+assert(nineToTen.endAtUtc === `${monday}T07:00:00.000Z`, `UTC end conversion contract failed for Asia/Qatar: ${JSON.stringify(nineToTen)}`);
 
 console.log("S01-03 CONTRACT + SECURITY HARDENING PASSED");
 console.log("- public availability DTO: PASS (no financial/internal fields)");
