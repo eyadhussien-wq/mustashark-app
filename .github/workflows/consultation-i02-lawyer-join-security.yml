@@ -112,10 +112,9 @@ jobs:
           assert.doesNotMatch(joinSource, /req\.body\.lawyerId/);
           assert.doesNotMatch(joinSource, /req\.params\.lawyerId/);
 
-          // Create a second active lawyer by cloning only the authentication fixture.
-          const secondLawyerId = 'ci-i02-other-lawyer';
-          const secondLawyerEmail = 'other-lawyer@mustashark.com';
-          psql(`DELETE FROM users WHERE id = ${lit(secondLawyerId)};`);
+          // Create a per-run active lawyer fixture without mutating or deleting seeded users.
+          const secondLawyerId = crypto.randomUUID();
+          const secondLawyerEmail = `other-lawyer-${crypto.randomUUID()}@mustashark.com`;
           psql(`INSERT INTO users (id, name, email, password_hash, role, country, auth_provider, account_status, litigation_tier, reviews_count, created_at, updated_at)
                 SELECT ${lit(secondLawyerId)}, 'Other CI Lawyer', ${lit(secondLawyerEmail)}, password_hash, 'lawyer', country, 'local', 'active', litigation_tier, 0, NOW(), NOW()
                 FROM users WHERE email = 'lawyer@mustashark.com' LIMIT 1;`);
