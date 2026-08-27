@@ -1,0 +1,59 @@
+name: S01-05 Booking Contract Gate
+
+on:
+  push:
+    branches: ["feat/s01-05-booking-contract-hardening"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  booking-contract:
+    name: Atomic Booking + Double-Booking + Idempotency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s01_05_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_05_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Provision isolated schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_05_test
+        run: pnpm --filter @workspace/db push
+      - name: Apply booking time-block uniqueness guard
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_05_test
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_05_test
+        run: node ./scripts/seed-ci-test-users.mjs
+      - name: Typecheck scripts
+        run: pnpm --filter @workspace/scripts typecheck
+      - name: Run S01-05 contract test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_05_test
+        run: pnpm --filter @workspace/scripts exec tsx ./src/s01-05-booking-concurrency-contract-test.ts
