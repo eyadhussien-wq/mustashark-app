@@ -104,12 +104,16 @@ export const recordJoin = async (req: Request, res: Response) => {
     const isClient = authUser.role === "client" && booking.clientId === authUser.id;
     if (!isLawyer && !isClient) return res.status(403).json({ ok: false, error: "unauthorized_access" });
     if (booking.status !== "accepted" || !isWithinAppointmentWindow(booking) || (booking.type === "video" && !booking.googleMeetLink)) return res.status(400).json({ ok: false, error: "consultation_not_available" });
+    const state = getT01State(booking);
+    if (state !== "SCHEDULED" && state !== "IN_PROGRESS") return res.status(409).json({ ok: false, error: "invalid_state_transition" });
     const result = await db.transaction(async (tx) => {
-      assertT01Transition(getT01State(booking), "IN_PROGRESS");
+      if (state === "SCHEDULED") assertT01Transition(state, "IN_PROGRESS");
       const now = new Date();
       const rows = await tx.update(bookingsTable).set({ updatedAt: now, ...(isLawyer ? { lawyerJoinedAt: now } : { clientJoinedAt: now }), actualStartTime: booking.actualStartTime ?? now }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "accepted"), isLawyer ? isNull(bookingsTable.lawyerJoinedAt) : isNull(bookingsTable.clientJoinedAt), isLawyer ? eq(bookingsTable.lawyerId, authUser.id) : eq(bookingsTable.clientId, authUser.id))).returning();
       if (rows.length === 0) throw new Error("INVALID_JOIN");
-      await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "SESSION_STARTED", actorId: authUser.id, metadata: { fromState: "SCHEDULED", toState: "IN_PROGRESS", actorRole: authUser.role } });
+      if (state === "SCHEDULED") {
+        await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "SESSION_STARTED", actorId: authUser.id, metadata: { fromState: "SCHEDULED", toState: "IN_PROGRESS", actorRole: authUser.role } });
+      }
       return rows[0];
     });
     return res.json({ ok: true, booking: result });
@@ -238,7 +242,7 @@ export const disputeBooking = async (req: Request, res: Response) => {
     if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_access" });
     if (error?.message === "VERSION_CONFLICT" || error?.message === "IDEMPOTENCY_REQUEST_IN_PROGRESS") return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
     if (error?.message === "IDEMPOTENCY_REQUEST_MISMATCH") return res.status(409).json({ ok: false, error: "idempotency_request_mismatch" });
-    if (error?.message?.startsWith("INVALID_T01_TRANSITION")) return res.status(409).json({ ok: false, error: "invalid_dispute_state" });
+    if (error?.message?.startsWith("INVALID_T01_TRANSITION")) return res.status(409).json({ ok: false, error: "invalid_state_transition" });
     console.error("Dispute Booking Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
