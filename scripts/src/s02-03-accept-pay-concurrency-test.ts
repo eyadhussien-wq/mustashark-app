@@ -192,6 +192,82 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
   assert.equal(secondPersisted[0]?.status, "submitted", "blocked proposal must remain submitted");
 }
 
+// Scenario D: reusing an idempotency key for a different Accept request must be rejected
+// rather than replaying the first request's financial result.
+{
+  const requestId = await createRequest(clientToken);
+  const first = await createProposal(requestId, lawyerToken, "180.00");
+  const second = await createProposal(requestId, lawyerToken, "190.00");
+  const key = `s02-03-mismatch-${Date.now()}-${Math.random()}`;
+
+  const firstAccept = await post(
+    `/api/representation-quote-requests/${requestId}/proposals/${first.id}/accept`,
+    {},
+    clientToken,
+    key,
+  );
+  assert.equal(firstAccept.status, 200, `first idempotent request must succeed: ${JSON.stringify(firstAccept)}`);
+
+  const mismatch = await post(
+    `/api/representation-quote-requests/${requestId}/proposals/${second.id}/accept`,
+    {},
+    clientToken,
+    key,
+  );
+  assert.equal(mismatch.status, 409, `idempotency-key mismatch must be rejected: ${JSON.stringify(mismatch)}`);
+  assert.equal(mismatch.body?.error, "IDEMPOTENCY_REQUEST_MISMATCH", "mismatched idempotency key must not replay another request");
+
+  const [request] = await db
+    .select()
+    .from(representationQuoteRequestsTable)
+    .where(eq(representationQuoteRequestsTable.id, requestId));
+  assert.equal(request?.quoteId, firstAccept.body?.quote?.id, "mismatch must preserve the original winning quote");
+}
+
+// Scenario E: an expired submitted proposal must be atomically marked expired and must not
+// initialize a quote, milestones, or escrow account.
+{
+  const requestId = await createRequest(clientToken);
+  const proposal = await createProposal(requestId, lawyerToken, "210.00");
+
+  await db
+    .update(lawyerProposalsTable)
+    .set({ expiresAt: new Date(Date.now() - 60_000), updatedAt: new Date() })
+    .where(and(
+      eq(lawyerProposalsTable.id, proposal.id),
+      eq(lawyerProposalsTable.requestId, requestId),
+      eq(lawyerProposalsTable.status, "submitted"),
+    ));
+
+  const expiredAccept = await post(
+    `/api/representation-quote-requests/${requestId}/proposals/${proposal.id}/accept`,
+    {},
+    clientToken,
+    `expiry-${Date.now()}-${Math.random()}`,
+  );
+  assert.equal(expiredAccept.status, 409, `expired proposal must be rejected: ${JSON.stringify(expiredAccept)}`);
+  assert.equal(expiredAccept.body?.error, "proposal_expired", "expired proposal must return proposal_expired");
+
+  const [persistedProposal] = await db
+    .select()
+    .from(lawyerProposalsTable)
+    .where(eq(lawyerProposalsTable.id, proposal.id));
+  assert.equal(persistedProposal?.status, "expired", "expired proposal must transition atomically to expired");
+
+  const [request] = await db
+    .select()
+    .from(representationQuoteRequestsTable)
+    .where(eq(representationQuoteRequestsTable.id, requestId));
+  assert.equal(request?.status, "submitted", "expired accept must not convert the parent request");
+  assert.equal(request?.quoteId, null, "expired accept must not create a quote");
+
+  const quotes = await db
+    .select()
+    .from(representationQuotesTable)
+    .where(eq(representationQuotesTable.clientId, request?.clientId ?? ""));
+  assert.ok(!quotes.some((quote) => quote.id === request?.quoteId), "expired accept must not initialize financial quote state");
+}
+
 await pool.end();
 console.log("S02-03 ACCEPT & PAY CONCURRENCY TEST PASSED");
 console.log("- concurrent same-key accept/replay: PASS");
@@ -199,3 +275,5 @@ console.log("- distinct-key accept race: PASS");
 console.log("- one financial quote + one escrow account: PASS");
 console.log("- exact 3-milestone financial invariant: PASS");
 console.log("- converted parent blocks second proposal: PASS");
+console.log("- idempotency-key mismatch: PASS");
+console.log("- expired proposal atomic guard: PASS");
