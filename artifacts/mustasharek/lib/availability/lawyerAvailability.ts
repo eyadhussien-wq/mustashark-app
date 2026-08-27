@@ -27,11 +27,13 @@ export function normalizeLawyerAvailability(payload: unknown): LawyerAvailabilit
     const value = item as Partial<LawyerAvailabilityWindow>;
     return (
       typeof value.id === "string" &&
+      typeof value.dayOfWeek === "number" &&
       Number.isInteger(value.dayOfWeek) &&
       value.dayOfWeek >= 0 &&
       value.dayOfWeek <= 6 &&
       typeof value.startTime === "string" &&
       typeof value.endTime === "string" &&
+      typeof value.slotDurationMinutes === "number" &&
       Number.isInteger(value.slotDurationMinutes) &&
       value.slotDurationMinutes >= 15 &&
       value.slotDurationMinutes <= 240 &&
