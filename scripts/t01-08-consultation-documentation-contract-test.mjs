@@ -20,6 +20,12 @@ const assertions = [
   ["archive migration is idempotent", migration.includes("ADD COLUMN IF NOT EXISTS")],
   ["archive timestamp is indexed", migration.includes("bookings_archived_at_idx")],
   ["booking schema exposes archive fields", bookings.includes("archivedAt") && bookings.includes("archivedBy")],
+  ["archive DTO excludes price", !controller.includes("price: booking.price")],
+  ["archive DTO excludes paymentStatus", !controller.includes("paymentStatus: booking.paymentStatus")],
+  ["archive DTO excludes escrowStatus", !controller.includes("escrowStatus: booking.escrowStatus")],
+  ["print DTO excludes price", !controller.includes("price: row.booking.price")],
+  ["print DTO excludes paymentStatus", !controller.includes("paymentStatus: row.booking.paymentStatus")],
+  ["print DTO excludes escrowStatus", !controller.includes("escrowStatus: row.booking.escrowStatus")],
 ];
 
 const failed = assertions.filter(([, ok]) => !ok);
