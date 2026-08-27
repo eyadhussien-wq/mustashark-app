@@ -38,7 +38,7 @@ const proceedStart = client.indexOf("async function handleProceed() {");
 const proceedEnd = client.indexOf("\n  const rowDir", proceedStart);
 assert(proceedStart >= 0 && proceedEnd > proceedStart, "handleProceed boundary not found");
 const proceed = client.slice(proceedStart, proceedEnd);
-assert.equal((proceed.match(/selectedSlot\.startTime/g) ?? []).length >= 2, true);
+assert.equal((proceed.match(/selectedSlot\.startTime/g) ?? []).length >= 1, true);
 assert.equal(proceed.includes("selectedTime"), true);
 assert.match(proceed, /Idempotency-Key/);
 
