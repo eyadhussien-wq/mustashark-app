@@ -1,0 +1,191 @@
+name: Consultation I02 Lawyer Join Security
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lawyer-join-security:
+    name: Consultation I02 lawyer ownership / IDOR security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./scripts/seed-ci-test-users.mjs
+      - name: Build API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          NODE_ENV: production
+          PORT: "8081"
+          SESSION_SECRET: ci-consultation-i02-join-security
+        run: |
+          pnpm --filter @workspace/api-server start > /tmp/mustashark-i02-api.log 2>&1 &
+          echo $! > /tmp/mustashark-i02-api.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mustashark-i02-api.log
+          exit 1
+      - name: Run Consultation I02 contract and IDOR test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          SESSION_SECRET: ci-consultation-i02-join-security
+          BASE_URL: http://127.0.0.1:8081
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import crypto from 'node:crypto';
+          import { readFileSync } from 'node:fs';
+
+          const db = process.env.DATABASE_URL;
+          const baseUrl = process.env.BASE_URL;
+          const secret = process.env.SESSION_SECRET;
+          const psql = (sql) => execFileSync('psql', [db, '-At', '-c', sql], { encoding: 'utf8' }).trim();
+          const lit = (value) => `'${String(value).replaceAll("'", "''")}'`;
+
+          // Contract assertions: the route must be auth + role + idempotency guarded.
+          const routes = readFileSync('artifacts/api-server/src/routes/bookings.ts', 'utf8');
+          const joinLine = routes.split('\n').find((line) => line.includes('bookingsRouter.post("/bookings/join"'));
+          assert.ok(joinLine, 'join route is missing');
+          assert.match(joinLine, /requireAuth/);
+          assert.match(joinLine, /requireClientOrLawyer/);
+          assert.match(joinLine, /requireIdempotencyKey/);
+          assert.match(joinLine, /recordJoin/);
+
+          const controller = readFileSync('artifacts/api-server/src/controllers/bookings.ts', 'utf8');
+          const start = controller.indexOf('export const recordJoin =');
+          const end = controller.indexOf('export const checkLawyerAbsence =', start);
+          assert.ok(start >= 0 && end > start, 'recordJoin controller is missing');
+          const joinSource = controller.slice(start, end);
+          assert.match(joinSource, /booking\.lawyerId === authUser\.id/);
+          assert.match(joinSource, /booking\.clientId === authUser\.id/);
+          assert.match(joinSource, /res\.status\(403\)/);
+          assert.doesNotMatch(joinSource, /req\.body\.lawyerId/);
+          assert.doesNotMatch(joinSource, /req\.params\.lawyerId/);
+
+          // Create a second active lawyer by cloning only the authentication fixture.
+          const secondLawyerId = 'ci-i02-other-lawyer';
+          const secondLawyerEmail = 'other-lawyer@mustashark.com';
+          psql(`DELETE FROM users WHERE id = ${lit(secondLawyerId)};`);
+          psql(`INSERT INTO users (id, name, email, password_hash, role, country, auth_provider, account_status, litigation_tier, reviews_count, created_at, updated_at)
+                SELECT ${lit(secondLawyerId)}, 'Other CI Lawyer', ${lit(secondLawyerEmail)}, password_hash, 'lawyer', country, 'local', 'active', litigation_tier, 0, NOW(), NOW()
+                FROM users WHERE email = 'lawyer@mustashark.com' LIMIT 1;`);
+
+          async function login(email, role) {
+            const response = await fetch(`${baseUrl}/api/auth/local-auth`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email, password: 'test1234', role }),
+            });
+            const body = await response.json();
+            assert.equal(response.status, 200, `${role} login failed: ${response.status} ${JSON.stringify(body)}`);
+            assert.equal(typeof body.jwt, 'string', `${role} login returned no JWT`);
+            return { token: body.jwt, id: body.user.id };
+          }
+
+          const client = await login('client@mustashark.com', 'client');
+          const ownerLawyer = await login('lawyer@mustashark.com', 'lawyer');
+          const otherLawyer = await login(secondLawyerEmail, 'lawyer');
+          assert.equal(otherLawyer.id, secondLawyerId);
+
+          const bookingId = crypto.randomUUID();
+          const serial = `I02-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+          const scheduled = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Qatar', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+          }).formatToParts(new Date());
+          const parts = Object.fromEntries(scheduled.map((part) => [part.type, part.value]));
+          const date = `${parts.year}-${parts.month}-${parts.day}`;
+          const time = `${parts.hour}:${parts.minute}`;
+
+          psql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, description, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version)
+                VALUES (${lit(bookingId)}, ${lit(serial)}, ${lit(client.id)}, ${lit(ownerLawyer.id)}, 'Consultation I02 security test', 'CI only', ${lit(date)}, ${lit(time)}, 'accepted', 'chat', '100.00', 'paid', 'held', 1);`);
+
+          async function join(token, label) {
+            const response = await fetch(`${baseUrl}/api/bookings/join`, {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${token}`,
+                'Idempotency-Key': `i02-${label}-${crypto.randomUUID()}`,
+              },
+              body: JSON.stringify({ bookingId }),
+            });
+            return { status: response.status, body: await response.json() };
+          }
+
+          // Positive control: the actual owner may join.
+          const ownerJoin = await join(ownerLawyer.token, 'owner');
+          assert.equal(ownerJoin.status, 200, `owner join must succeed: ${JSON.stringify(ownerJoin)}`);
+
+          // IDOR control: a different lawyer may authenticate but cannot join another lawyer's booking.
+          const foreignJoin = await join(otherLawyer.token, 'foreign');
+          assert.equal(foreignJoin.status, 403, `foreign lawyer join must be rejected with 403: ${JSON.stringify(foreignJoin)}`);
+
+          const state = psql(`SELECT lawyer_id || '|' || (lawyer_joined_at IS NOT NULL) || '|' || (client_joined_at IS NOT NULL) || '|' || price || '|' || payment_status || '|' || escrow_status FROM bookings WHERE id = ${lit(bookingId)};`);
+          assert.equal(state, `${ownerLawyer.id}|true|false|100.00|paid|held`, `unexpected post-join state: ${state}`);
+
+          const events = Number(psql(`SELECT count(*) FROM consultation_events WHERE booking_id = ${lit(bookingId)} AND event_type = 'SESSION_STARTED';`));
+          assert.equal(events, 1, `foreign lawyer must not create a SESSION_STARTED event; got ${events}`);
+
+          console.log('CONSULTATION I02 LAWYER JOIN SECURITY TEST PASSED');
+          console.log('- authenticated owner join: PASS');
+          console.log('- foreign lawyer IDOR attempt: PASS (403)');
+          console.log('- financial fields unchanged by join: PASS');
+          console.log('- single SESSION_STARTED event: PASS');
+          NODE
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/mustashark-i02-api.log
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/mustashark-i02-api.pid ]; then kill "$(cat /tmp/mustashark-i02-api.pid)" || true; fi
