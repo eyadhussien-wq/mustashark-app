@@ -4,6 +4,7 @@ import colors from "@/constants/colors";
 import type { LawyerWorkQueueItem } from "@/lib/agenda/lawyerWorkQueue";
 import { LawyerAvailabilitySettingsCard } from "@/components/lawyer/LawyerAvailabilitySettingsCard";
 import { LawyerClientDirectory } from "@/components/lawyer/LawyerClientDirectory";
+import { LawyerConsultationDirectory } from "@/components/lawyer/LawyerConsultationDirectory";
 
 const C = colors.light;
 
@@ -34,6 +35,7 @@ export function LawyerWorkQueue({ items }: Props) {
       </View>
       <LawyerAvailabilitySettingsCard />
       <LawyerClientDirectory />
+      <LawyerConsultationDirectory />
     </>
   );
 }
