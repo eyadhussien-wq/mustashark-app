@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Button, Text, View } from "react-native";
+import { useAuth } from "@/contexts/AuthContext";
 
 type AvailabilitySlot = {
   dayOfWeek: number;
@@ -10,7 +11,10 @@ type AvailabilitySlot = {
 
 type AvailabilityResponse = { availability?: AvailabilitySlot[] };
 
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api` : "";
+
 export function LawyerAvailabilitySettingsCard() {
+  const { user, getAuthToken } = useAuth();
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -19,7 +23,11 @@ export function LawyerAvailabilitySettingsCard() {
   async function loadAvailability() {
     setLoading(true); setError(null);
     try {
-      const response = await fetch("/availability/lawyers/me", { credentials: "include" });
+      if (user?.role !== "lawyer") throw new Error("هذه الإعدادات متاحة للمحامي فقط.");
+      if (!API_BASE) throw new Error("خدمة الإتاحة غير مهيأة. لا يمكن المتابعة بدون الخادم.");
+      const token = await getAuthToken();
+      if (!token) throw new Error("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
+      const response = await fetch(`${API_BASE}/availability/lawyers/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error(`Availability request failed (${response.status})`);
       const data = (await response.json()) as AvailabilityResponse;
       setSlots(data.availability ?? []);
@@ -31,10 +39,13 @@ export function LawyerAvailabilitySettingsCard() {
   async function saveAvailability() {
     setSaving(true); setError(null);
     try {
-      const response = await fetch("/availability/lawyers/me", {
+      if (user?.role !== "lawyer") throw new Error("هذه الإعدادات متاحة للمحامي فقط.");
+      if (!API_BASE) throw new Error("خدمة الإتاحة غير مهيأة. لا يمكن المتابعة بدون الخادم.");
+      const token = await getAuthToken();
+      if (!token) throw new Error("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
+      const response = await fetch(`${API_BASE}/availability/lawyers/me`, {
         method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ slots }),
       });
       if (!response.ok) throw new Error(`Availability save failed (${response.status})`);
@@ -44,7 +55,7 @@ export function LawyerAvailabilitySettingsCard() {
     } finally { setSaving(false); }
   }
 
-  useEffect(() => { void loadAvailability(); }, []);
+  useEffect(() => { void loadAvailability(); }, [user?.id]);
 
   return (
     <View>
