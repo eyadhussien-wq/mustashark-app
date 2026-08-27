@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import crypto from "node:crypto";
 
 function load(path: string) {
@@ -38,6 +38,17 @@ assert.match(idempotency, /requestHash/);
 assert.match(idempotency, /idempotency_key_reused_with_different_request/);
 assert.match(idempotency, /idempotency_request_in_progress/);
 
+function runPsql(databaseUrl: string, sql: string): Promise<{ code: number; output: string }> {
+  return new Promise((resolvePromise) => {
+    const child = spawn("psql", [databaseUrl, "-At", "-v", "ON_ERROR_STOP=1"], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", (chunk) => { output += chunk.toString(); });
+    child.stderr.on("data", (chunk) => { output += chunk.toString(); });
+    child.on("close", (code) => resolvePromise({ code: code ?? 1, output }));
+    child.stdin.end(sql);
+  });
+}
+
 if (process.env.DATABASE_URL) {
   const databaseUrl = process.env.DATABASE_URL;
   const sql = (query: string) => execFileSync("psql", [databaseUrl, "-At", "-v", "ON_ERROR_STOP=1", "-c", query], { encoding: "utf8" }).trim();
@@ -55,11 +66,20 @@ if (process.env.DATABASE_URL) {
       const insertBooking = (id: string, serial: string) => sql(`INSERT INTO bookings (id, serial_number, client_id, lawyer_id, subject, scheduled_date, scheduled_time, status, type, price, payment_status, escrow_status, version) VALUES (${q(id)}, ${q(serial)}, ${q(clientId)}, ${q(lawyerId)}, 'S01-05 concurrency proof', '2099-02-03', '10:00', 'pending', 'chat', '0', 'pending', 'none', 1);`);
       insertBooking(bookingA, serialA);
       insertBooking(bookingB, serialB);
-      execFileSync("psql", [databaseUrl, "-At", "-v", "ON_ERROR_STOP=1", "-c", `INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${q(blockA)}, ${q(bookingA)}, ${q(lawyerId)}, '2099-02-03', '10:00', '11:00'); INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${q(blockB)}, ${q(bookingB)}, ${q(lawyerId)}, '2099-02-03', '10:00', '11:00');`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-      assert.fail("database allowed duplicate active booking time blocks");
-    } catch (error: any) {
-      const output = `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
-      assert.match(output, /duplicate key value|booking_time_blocks_exact_slot_uq/i, "duplicate slot must be rejected by the unique constraint");
+
+      const blockInsert = (blockId: string, bookingId: string) => `BEGIN; SELECT pg_sleep(0.5); INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date, start_time, end_time) VALUES (${q(blockId)}, ${q(bookingId)}, ${q(lawyerId)}, '2099-02-03', '10:00', '11:00'); COMMIT;`;
+      const [first, second] = await Promise.all([
+        runPsql(databaseUrl, blockInsert(blockA, bookingA)),
+        runPsql(databaseUrl, blockInsert(blockB, bookingB)),
+      ]);
+
+      const successes = [first, second].filter((result) => result.code === 0).length;
+      const failures = [first, second].filter((result) => result.code !== 0 && /duplicate key value|booking_time_blocks_exact_slot_uq/i.test(result.output)).length;
+      assert.equal(successes, 1, `expected exactly one concurrent slot claim to commit, got ${successes}`);
+      assert.equal(failures, 1, `expected exactly one concurrent slot claim to be rejected by the uniqueness guard, got ${failures}`);
+
+      const activeCount = Number(sql(`SELECT count(*) FROM booking_time_blocks WHERE lawyer_id=${q(lawyerId)} AND scheduled_date='2099-02-03' AND start_time='10:00' AND end_time='11:00' AND released_at IS NULL;`));
+      assert.equal(activeCount, 1, `expected one active slot after concurrent contention, got ${activeCount}`);
     } finally {
       sql(`DELETE FROM booking_time_blocks WHERE id IN (${q(blockA)}, ${q(blockB)});`);
       sql(`DELETE FROM bookings WHERE id IN (${q(bookingA)}, ${q(bookingB)});`);
@@ -69,5 +89,5 @@ if (process.env.DATABASE_URL) {
 
 console.log("S01-05 BOOKING ATOMICITY + DOUBLE-BOOKING + IDEMPOTENCY CONTRACT PASSED");
 console.log("- transactional booking + time-block coupling: PASS");
-console.log("- database active-slot uniqueness guard: PASS");
+console.log("- concurrent active-slot uniqueness guard: PASS");
 console.log("- idempotency identity/replay boundary: PASS");
