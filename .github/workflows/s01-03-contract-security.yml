@@ -1,0 +1,84 @@
+name: S01-03 Contract Security Gate
+
+on:
+  push:
+    branches: ["feat/s01-03-contract-security-hardening"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract-security:
+    name: Availability Contract + Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_s01_03_security_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_s01_03_security_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Provision isolated schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+        run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+        run: node ./scripts/seed-ci-test-users.mjs
+      - name: Apply S01-02 booking block migration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+        run: PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s01_02_booking_time_block_uniqueness.sql
+      - name: Build API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+          NODE_ENV: production
+          PORT: "8081"
+          SESSION_SECRET: s01-03-security-ci-test-secret
+        run: pnpm --filter @workspace/api-server start >/tmp/s01-03-security-api.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/s01-03-security-api.log
+          exit 1
+      - name: Run contract and security tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_s01_03_security_test
+          S01_02_BASE_URL: http://127.0.0.1:8081
+          S01_02_LAWYER_EMAIL: lawyer@mustashark.com
+          S01_02_LAWYER_PASSWORD: test1234
+          S01_02_CLIENT_EMAIL: client@mustashark.com
+          S01_02_CLIENT_PASSWORD: test1234
+        run: pnpm --filter @workspace/scripts exec tsx ./src/s01-03-contract-security-test.ts
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/s01-03-security-api.log
