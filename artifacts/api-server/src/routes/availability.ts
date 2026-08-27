@@ -7,6 +7,7 @@ const router = Router();
 const requireLawyer = requireRole("lawyer");
 
 router.get("/availability/lawyers/:lawyerId", requireAuth, getLawyerAvailability);
+router.get("/availability/lawyers/me", requireAuth, requireLawyer, getLawyerAvailability);
 router.put("/availability/lawyers/me", requireAuth, requireLawyer, updateMyAvailability);
 router.delete("/availability/lawyers/me", requireAuth, requireLawyer, deleteMyAvailability);
 router.get("/availability/lawyers/:lawyerId/slots", requireAuth, getAvailableSlots);
