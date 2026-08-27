@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import colors from "@/constants/colors";
 import type { LawyerWorkQueueItem } from "@/lib/agenda/lawyerWorkQueue";
+import { LawyerAvailabilitySettingsCard } from "@/components/lawyer/LawyerAvailabilitySettingsCard";
 
 const C = colors.light;
 
@@ -11,24 +12,27 @@ type Props = {
 
 export function LawyerWorkQueue({ items }: Props) {
   return (
-    <View style={styles.card} accessibilityLabel="طابور أعمال المحامي">
-      <Text style={styles.title}>طابور العمل</Text>
-      {items.length === 0 ? (
-        <Text style={styles.empty}>لا توجد طلبات قيد العمل حالياً.</Text>
-      ) : (
-        items.map((item) => (
-          <View key={item.id} style={styles.item}>
-            <View style={styles.copy}>
-              <Text style={styles.subject} numberOfLines={1}>{item.subject}</Text>
-              <Text style={styles.meta} numberOfLines={1}>{item.clientName} · {item.date} · {item.time}</Text>
+    <>
+      <View style={styles.card} accessibilityLabel="طابور أعمال المحامي">
+        <Text style={styles.title}>طابور العمل</Text>
+        {items.length === 0 ? (
+          <Text style={styles.empty}>لا توجد طلبات قيد العمل حالياً.</Text>
+        ) : (
+          items.map((item) => (
+            <View key={item.id} style={styles.item}>
+              <View style={styles.copy}>
+                <Text style={styles.subject} numberOfLines={1}>{item.subject}</Text>
+                <Text style={styles.meta} numberOfLines={1}>{item.clientName} · {item.date} · {item.time}</Text>
+              </View>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{item.status === "pending" ? "جديد" : "مقبول"}</Text>
+              </View>
             </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{item.status === "pending" ? "جديد" : "مقبول"}</Text>
-            </View>
-          </View>
-        ))
-      )}
-    </View>
+          ))
+        )}
+      </View>
+      <LawyerAvailabilitySettingsCard />
+    </>
   );
 }
 
