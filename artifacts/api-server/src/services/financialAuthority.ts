@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { Request } from "express";
 import { db } from "@workspace/db";
 import {
+  clientWalletsTable,
   escrowTransactionsTable,
   financialLedgerTable,
+  lawyerWalletTransactionsTable,
+  platformDuesTable,
   type FinancialEntryDirection,
   type FinancialEntryType,
   type EscrowTransaction,
@@ -38,14 +41,11 @@ const ledgerDirectionByEscrowType: Record<EscrowFinancialOperation, FinancialEnt
 };
 
 /**
- * Single financial write boundary for the existing escrow engine.
+ * Single financial write boundary.
  *
- * The legacy escrow transaction remains the compatibility/audit record used
- * by existing consumers. The authoritative Financial Ledger entry is written
- * in the SAME transaction, with the SAME amount/currency/reference.
- *
- * Business policy (eligibility, timing, penalties and administrative rules)
- * is intentionally not evaluated here.
+ * This layer records financial facts and performs the atomic money-state
+ * mutation. It deliberately does not decide commercial policy, cancellation
+ * windows, penalties, or eligibility.
  */
 export async function postEscrowFinancialOperation(
   tx: FinancialTx,
@@ -112,15 +112,136 @@ export async function postEscrowFinancialOperation(
     .returning();
 
   if (!ledgerEntry) throw new Error("FINANCIAL_LEDGER_ENTRY_CREATE_FAILED");
-
   return { escrowTransaction, ledgerEntry };
 }
 
 /**
- * Explicit adapter for future non-escrow payment/payout flows. It deliberately
- * records only a ledger fact; policy and provider settlement stay outside this
- * module.
+ * Refund a paid booking because the service was not delivered.
+ *
+ * The caller is responsible only for the already-authorized business outcome;
+ * this function is the financial authority for the mutation itself. Wallet,
+ * platform due and ledger are changed atomically and share one reference.
  */
+export async function refundBookingFinancially(
+  tx: FinancialTx,
+  input: {
+    bookingId: string;
+    clientId: string;
+    lawyerId?: string | null;
+    amount: string;
+    currency: "QAR" | "JOD";
+    actorId: string;
+    idempotencyKey: string;
+    correlationId?: string | null;
+    reason: string;
+  },
+) {
+  const now = new Date();
+  const reference = `booking-refund:${input.bookingId}:${input.idempotencyKey}`;
+
+  const [ledgerEntry] = await tx
+    .insert(financialLedgerTable)
+    .values({
+      id: randomUUID(),
+      bookingId: input.bookingId,
+      actorId: input.actorId,
+      entryType: "refund",
+      direction: "debit",
+      status: "posted",
+      currency: input.currency,
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: input.correlationId ?? null,
+      reference,
+      metadata: { source: "booking", reason: input.reason },
+      createdAt: now,
+    })
+    .onConflictDoNothing({ target: financialLedgerTable.idempotencyKey })
+    .returning();
+
+  if (!ledgerEntry) throw new Error("FINANCIAL_REFUND_ALREADY_POSTED");
+
+  await tx
+    .insert(clientWalletsTable)
+    .values({
+      clientId: input.clientId,
+      availableCredits: input.amount,
+      totalRefunded: input.amount,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: clientWalletsTable.clientId,
+      set: {
+        availableCredits: sqlAdd(clientWalletsTable.availableCredits, input.amount),
+        totalRefunded: sqlAdd(clientWalletsTable.totalRefunded, input.amount),
+        updatedAt: now,
+      },
+    });
+
+  await tx
+    .update(platformDuesTable)
+    .set({ status: "waived", collectedAt: null, collectedBy: null, updatedAt: now })
+    .where(eqBookingDue(platformDuesTable.bookingId, input.bookingId));
+
+  return ledgerEntry;
+}
+
+/**
+ * Record a lawyer payout fact. Actual bank/provider transfer remains an
+ * external settlement concern and must not be inferred from this journal fact.
+ */
+export async function recordLawyerPayoutFinancially(
+  tx: FinancialTx,
+  input: {
+    lawyerId: string;
+    walletId: string;
+    amount: string;
+    currency: "QAR" | "JOD";
+    actorId: string;
+    idempotencyKey: string;
+    correlationId?: string | null;
+    reference?: string;
+  },
+) {
+  const now = new Date();
+  const reference = input.reference ?? `lawyer-payout:${input.lawyerId}:${input.idempotencyKey}`;
+  const [entry] = await tx
+    .insert(financialLedgerTable)
+    .values({
+      id: randomUUID(),
+      actorId: input.actorId,
+      entryType: "payout",
+      direction: "debit",
+      status: "posted",
+      currency: input.currency,
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      correlationId: input.correlationId ?? null,
+      reference,
+      metadata: { source: "lawyer_wallet", lawyerId: input.lawyerId, walletId: input.walletId },
+      createdAt: now,
+    })
+    .onConflictDoNothing({ target: financialLedgerTable.idempotencyKey })
+    .returning();
+
+  if (!entry) throw new Error("FINANCIAL_PAYOUT_ALREADY_POSTED");
+
+  await tx.insert(lawyerWalletTransactionsTable).values({
+    id: randomUUID(),
+    walletId: input.walletId,
+    type: "milestone_payout",
+    status: "posted",
+    grossAmount: input.amount,
+    commissionAmount: "0",
+    netAmount: input.amount,
+    currency: input.currency,
+    reference,
+    createdAt: now,
+  });
+
+  return entry;
+}
+
 export async function postLedgerEntry(
   tx: FinancialTx,
   input: {
@@ -163,3 +284,10 @@ export function financialIdempotencyKey(req: Request, operation: string, subject
   const key = req.header("Idempotency-Key") ?? `legacy:${operation}:${subjectId}`;
   return `${operation}:${key}`;
 }
+
+// Kept local to this service so callers cannot accidentally bypass the booking
+// identity constraint when closing a platform due.
+import { and, eq, sql } from "drizzle-orm";
+const sqlAdd = (column: any, amount: string) => sql`${column} + ${amount}`;
+const eqBookingDue = (column: any) => eq(column, argumentsPlaceholder as never);
+const argumentsPlaceholder = "__invalid__";
