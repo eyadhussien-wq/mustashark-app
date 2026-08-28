@@ -9,6 +9,7 @@
     "t01-state-machine-test": "tsx ./t01-consultation-state-machine-test.ts",
     "test-concurrency": "tsx ./src/test-concurrency.ts",
     "x1-booking-cancel-test": "tsx ./src/x1-booking-cancel-test.ts",
+    "financial-e2e": "tsx ./src/financial-e2e-harness.ts",
     "s01-02-availability-test": "tsx ./src/s01-02-availability-test.ts",
     "s01-03-idempotency-test": "tsx ./src/s01-03-idempotency-test.ts",
     "s01-03-transition-concurrency-test": "tsx ./src/s01-03-transition-concurrency-test.ts",
