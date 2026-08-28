@@ -9,10 +9,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: financial-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_financial_e2e
+
 jobs:
   financial-e2e:
     name: Financial Authority E2E (isolated PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -26,8 +34,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_financial_e2e
     steps:
       - name: Checkout exact commit under test
         uses: actions/checkout@v4
