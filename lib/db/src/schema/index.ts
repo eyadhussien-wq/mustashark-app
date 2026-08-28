@@ -28,6 +28,14 @@ export * from "./cases";
 export * from "./caseHearings";
 export * from "./lawyerVerifications";
 
+// Explicitly expose the financial value types on the package boundary.
+// This prevents declaration/project-reference consumers from losing type-only
+// exports that originate in the financial ledger module.
+export type {
+  FinancialEntryType,
+  FinancialEntryDirection,
+} from "./financialLedger";
+
 // Keep these availability/booking tables explicitly exported as part of the
 // public DB schema surface. This avoids project-reference/declaration emit
 // edge cases where wildcard re-exports are not visible to consumers.
