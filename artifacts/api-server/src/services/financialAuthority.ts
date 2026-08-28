@@ -1,3 +1,4 @@
+import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
 import { db } from "@workspace/db";
@@ -41,11 +42,13 @@ const ledgerDirectionByEscrowType: Record<EscrowFinancialOperation, FinancialEnt
 };
 
 /**
- * Single financial write boundary.
+ * Single financial write boundary for the existing escrow engine.
  *
- * This layer records financial facts and performs the atomic money-state
- * mutation. It deliberately does not decide commercial policy, cancellation
- * windows, penalties, or eligibility.
+ * The legacy escrow transaction remains the compatibility/audit record used
+ * by existing consumers. The Financial Ledger entry is written in the SAME
+ * database transaction with the SAME amount/currency/reference.
+ *
+ * Business policy is intentionally outside this module.
  */
 export async function postEscrowFinancialOperation(
   tx: FinancialTx,
@@ -116,18 +119,14 @@ export async function postEscrowFinancialOperation(
 }
 
 /**
- * Refund a paid booking because the service was not delivered.
- *
- * The caller is responsible only for the already-authorized business outcome;
- * this function is the financial authority for the mutation itself. Wallet,
- * platform due and ledger are changed atomically and share one reference.
+ * Authoritative booking refund bookkeeping. The business layer decides that
+ * a refund is due; this function only performs the atomic financial mutation.
  */
 export async function refundBookingFinancially(
   tx: FinancialTx,
   input: {
     bookingId: string;
     clientId: string;
-    lawyerId?: string | null;
     amount: string;
     currency: "QAR" | "JOD";
     actorId: string;
@@ -172,8 +171,8 @@ export async function refundBookingFinancially(
     .onConflictDoUpdate({
       target: clientWalletsTable.clientId,
       set: {
-        availableCredits: sqlAdd(clientWalletsTable.availableCredits, input.amount),
-        totalRefunded: sqlAdd(clientWalletsTable.totalRefunded, input.amount),
+        availableCredits: sql`${clientWalletsTable.availableCredits} + ${input.amount}`,
+        totalRefunded: sql`${clientWalletsTable.totalRefunded} + ${input.amount}`,
         updatedAt: now,
       },
     });
@@ -181,14 +180,15 @@ export async function refundBookingFinancially(
   await tx
     .update(platformDuesTable)
     .set({ status: "waived", collectedAt: null, collectedBy: null, updatedAt: now })
-    .where(eqBookingDue(platformDuesTable.bookingId, input.bookingId));
+    .where(eq(platformDuesTable.bookingId, input.bookingId));
 
   return ledgerEntry;
 }
 
 /**
- * Record a lawyer payout fact. Actual bank/provider transfer remains an
- * external settlement concern and must not be inferred from this journal fact.
+ * Records an authorized lawyer payout in the internal journal and compatibility
+ * wallet transaction history. The external bank/provider transfer is NOT
+ * inferred from this record and must be reconciled separately.
  */
 export async function recordLawyerPayoutFinancially(
   tx: FinancialTx,
@@ -201,10 +201,12 @@ export async function recordLawyerPayoutFinancially(
     idempotencyKey: string;
     correlationId?: string | null;
     reference?: string;
+    milestoneId?: string | null;
   },
 ) {
   const now = new Date();
   const reference = input.reference ?? `lawyer-payout:${input.lawyerId}:${input.idempotencyKey}`;
+
   const [entry] = await tx
     .insert(financialLedgerTable)
     .values({
@@ -229,6 +231,7 @@ export async function recordLawyerPayoutFinancially(
   await tx.insert(lawyerWalletTransactionsTable).values({
     id: randomUUID(),
     walletId: input.walletId,
+    milestoneId: input.milestoneId ?? null,
     type: "milestone_payout",
     status: "posted",
     grossAmount: input.amount,
@@ -284,10 +287,3 @@ export function financialIdempotencyKey(req: Request, operation: string, subject
   const key = req.header("Idempotency-Key") ?? `legacy:${operation}:${subjectId}`;
   return `${operation}:${key}`;
 }
-
-// Kept local to this service so callers cannot accidentally bypass the booking
-// identity constraint when closing a platform due.
-import { and, eq, sql } from "drizzle-orm";
-const sqlAdd = (column: any, amount: string) => sql`${column} + ${amount}`;
-const eqBookingDue = (column: any) => eq(column, argumentsPlaceholder as never);
-const argumentsPlaceholder = "__invalid__";
