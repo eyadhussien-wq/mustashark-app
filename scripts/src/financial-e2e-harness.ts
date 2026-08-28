@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import type { Request } from "express";
 import { eq } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
@@ -22,6 +21,13 @@ import type { FundMilestoneResult } from "../../artifacts/api-server/src/service
 import type { ReleaseMilestoneResult } from "../../artifacts/api-server/src/services/releaseMilestone";
 import type { RefundMilestoneResult } from "../../artifacts/api-server/src/services/refundMilestone";
 
+type ServiceRequest = Parameters<typeof fundMilestone>[0];
+
+type HarnessResult =
+  | { replay: true; status: number; body: unknown }
+  | { replay: false; status: 200; body: { ok: true; [key: string]: unknown } }
+  | { error: string };
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -40,9 +46,9 @@ function assertReplay(result: unknown, operation: string): asserts result is { r
   assert(isRecord(result) && result.replay === true, `${operation} replay failed: ${JSON.stringify(result)}`);
 }
 
-function requestWithIdempotency(key: string, body: unknown = {}): Request {
+function requestWithIdempotency(key: string, body: unknown = {}): ServiceRequest {
   const headers = new Map<string, string>([["idempotency-key", key]]);
-  const request = {
+  return {
     method: "POST",
     path: "/synthetic/financial-e2e",
     params: {},
@@ -51,19 +57,18 @@ function requestWithIdempotency(key: string, body: unknown = {}): Request {
     route: { path: "/synthetic/financial-e2e" },
     get(name: string) { return headers.get(name.toLowerCase()); },
     header(name: string) { return headers.get(name.toLowerCase()); },
-  } as unknown as Request;
-  return request;
+  } as ServiceRequest;
 }
 
-async function expectSuccessfulFund(result: FundMilestoneResult, operation: string) {
+function expectSuccessfulFund(result: FundMilestoneResult, operation: string) {
   assertOkBody(result, operation);
 }
 
-async function expectSuccessfulRelease(result: ReleaseMilestoneResult, operation: string) {
+function expectSuccessfulRelease(result: ReleaseMilestoneResult, operation: string) {
   assertOkBody(result, operation);
 }
 
-async function expectSuccessfulRefund(result: RefundMilestoneResult, operation: string) {
+function expectSuccessfulRefund(result: RefundMilestoneResult, operation: string) {
   assertOkBody(result, operation);
 }
 
@@ -124,14 +129,14 @@ async function main() {
       milestoneId,
       clientId,
     );
-    await expectSuccessfulFund(fund, "fund");
+    expectSuccessfulFund(fund, "fund");
 
     const funded = (await db.select().from(escrowAccountsTable).where(eq(escrowAccountsTable.id, escrowId)))[0];
     assert(funded?.depositedAmount === amount, `escrow deposit mismatch: ${funded?.depositedAmount}`);
     console.log(`LEDGER_AFTER_PAYMENT=escrow_deposit ${amount} QAR`);
 
     const releaseA = await releaseMilestone(requestWithIdempotency(`release-${runId}`), releaseRequestId, clientId);
-    await expectSuccessfulRelease(releaseA, "release");
+    expectSuccessfulRelease(releaseA, "release");
     const releaseB = await releaseMilestone(requestWithIdempotency(`release-${runId}`), releaseRequestId, clientId);
     assertReplay(releaseB, "release");
 
@@ -167,9 +172,9 @@ async function main() {
     await db.insert(escrowAccountsTable).values({ id: refundEscrowId, quoteId: refundQuoteId, currency: "QAR" });
 
     const refundFund = await fundMilestone(requestWithIdempotency(`refund-fund-${runId}`), refundMilestoneId, clientId);
-    await expectSuccessfulFund(refundFund, "refund setup");
+    expectSuccessfulFund(refundFund, "refund setup");
     const refund = await refundMilestone(requestWithIdempotency(`refund-${runId}`), refundMilestoneId, clientId);
-    await expectSuccessfulRefund(refund, "refund");
+    expectSuccessfulRefund(refund, "refund");
     const refundReplay = await refundMilestone(requestWithIdempotency(`refund-${runId}`), refundMilestoneId, clientId);
     assertReplay(refundReplay, "refund");
 
