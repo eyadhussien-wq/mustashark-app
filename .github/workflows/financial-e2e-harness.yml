@@ -1,0 +1,59 @@
+name: Financial Authority E2E Harness V1
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  financial-e2e:
+    name: Financial Authority E2E (isolated PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_financial_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_financial_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_financial_e2e
+    steps:
+      - name: Checkout exact commit under test
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision isolated Test DB from this commit
+        run: pnpm --filter @workspace/db push
+
+      - name: Typecheck scripts
+        run: pnpm --filter @workspace/scripts typecheck
+
+      - name: Run Financial Authority E2E Harness
+        run: pnpm --filter @workspace/scripts financial-e2e
