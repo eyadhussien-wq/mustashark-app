@@ -4,6 +4,7 @@ export * from "./bookings";
 export * from "./lawyerAvailability";
 export * from "./bookingTimeBlocks";
 export * from "./platformDues";
+export * from "./financialLedger";
 export * from "./lawyerDeletionRequests";
 export * from "./lawyerProfileChangeRequests";
 export * from "./lawyerReviews";
