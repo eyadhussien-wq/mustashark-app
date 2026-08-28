@@ -1,0 +1,88 @@
+name: G1.4 Lawyer Discovery Contract
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  g1-04-lawyer-discovery:
+    name: G1.4 lawyer discovery security contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+      - name: Provision isolated auth fixtures
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./scripts/seed-ci-test-users.mjs
+      - name: Build API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          NODE_ENV: production
+          PORT: "8081"
+          SESSION_SECRET: ci-g1-04-lawyer-discovery-secret
+        run: |
+          pnpm --filter @workspace/api-server start > /tmp/mustashark-g1-04-api.log 2>&1 &
+          echo $! > /tmp/mustashark-g1-04-api.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mustashark-g1-04-api.log
+          exit 1
+      - name: Run G1.4 HTTP security contract test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          G1_04_BASE_URL: http://127.0.0.1:8081
+        run: pnpm --filter @workspace/scripts exec tsx ./src/g1-04-lawyer-discovery-contract-test.ts
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/mustashark-g1-04-api.log
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/mustashark-g1-04-api.pid ]; then kill "$(cat /tmp/mustashark-g1-04-api.pid)" || true; fi
