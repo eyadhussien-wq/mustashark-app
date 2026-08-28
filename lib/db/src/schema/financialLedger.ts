@@ -22,11 +22,13 @@ export const financialEntryTypeEnum = pgEnum("financial_entry_type", [
   "payout",
   "adjustment",
 ]);
+export type FinancialEntryType = (typeof financialEntryTypeEnum.enumValues)[number];
 
 export const financialEntryDirectionEnum = pgEnum("financial_entry_direction", [
   "credit",
   "debit",
 ]);
+export type FinancialEntryDirection = (typeof financialEntryDirectionEnum.enumValues)[number];
 
 export const financialEntryStatusEnum = pgEnum("financial_entry_status", [
   "pending",
