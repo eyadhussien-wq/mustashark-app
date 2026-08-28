@@ -18,19 +18,35 @@ export async function releaseMilestone(req: Request, releaseRequestId: string, c
   return db.transaction(async (tx) => {
     const idempotency = await claimIdempotency(tx, req, clientId);
     if (idempotency.replay) return idempotency;
-    const [row] = await tx.select({ request: milestoneReleaseRequestsTable, milestone: representationMilestonesTable, quote: representationQuotesTable, escrow: escrowAccountsTable, lawyer: usersTable, wallet: lawyerWalletsTable })
+
+    const [row] = await tx.select({
+      request: milestoneReleaseRequestsTable,
+      milestone: representationMilestonesTable,
+      quote: representationQuotesTable,
+      escrow: escrowAccountsTable,
+      lawyer: usersTable,
+    })
       .from(milestoneReleaseRequestsTable)
       .innerJoin(representationMilestonesTable, eq(representationMilestonesTable.id, milestoneReleaseRequestsTable.milestoneId))
       .innerJoin(representationQuotesTable, eq(representationQuotesTable.id, representationMilestonesTable.quoteId))
       .innerJoin(escrowAccountsTable, eq(escrowAccountsTable.quoteId, representationQuotesTable.id))
       .innerJoin(usersTable, eq(usersTable.id, milestoneReleaseRequestsTable.lawyerId))
-      .leftJoin(lawyerWalletsTable, eq(lawyerWalletsTable.lawyerId, milestoneReleaseRequestsTable.lawyerId))
-      .where(eq(milestoneReleaseRequestsTable.id, releaseRequestId)).limit(1).for("update");
+      .where(eq(milestoneReleaseRequestsTable.id, releaseRequestId))
+      .limit(1)
+      .for("update");
+
     if (!row) return { error: "release_request_not_found" };
     if (row.request.clientId !== clientId || row.quote.clientId !== clientId) return { error: "forbidden" };
     if (row.request.status !== "approved" && row.request.status !== "auto_released") return { error: "milestone_not_releasable" };
     if (["released", "cancelled", "disputed"].includes(row.milestone.status)) return { error: "milestone_not_releasable" };
-    if (!row.wallet) return { error: "lawyer_wallet_not_found" };
+
+    const [wallet] = await tx.select()
+      .from(lawyerWalletsTable)
+      .where(eq(lawyerWalletsTable.lawyerId, row.request.lawyerId))
+      .limit(1)
+      .for("update");
+    if (!wallet) return { error: "lawyer_wallet_not_found" };
+
     if (!row.escrow) return { error: "escrow_account_not_found" };
 
     const amount = row.milestone.amount;
@@ -65,13 +81,13 @@ export async function releaseMilestone(req: Request, releaseRequestId: string, c
     if (!updatedMilestone) throw new Error("MILESTONE_RELEASE_TRANSITION_FAILED");
 
     const [walletTransaction] = await tx.insert(lawyerWalletTransactionsTable).values({
-      id: randomUUID(), walletId: row.wallet.id, milestoneId: row.milestone.id, type: "milestone_payout", status: "posted",
+      id: randomUUID(), walletId: wallet.id, milestoneId: row.milestone.id, type: "milestone_payout", status: "posted",
       grossAmount: amount, commissionAmount, netAmount, currency: row.quote.currency,
       reference: `escrow-release:${release.escrowTransaction.id}`, createdAt: now,
     }).returning();
     if (!walletTransaction) throw new Error("LAWYER_WALLET_TRANSACTION_FAILED");
     const [updatedWallet] = await tx.update(lawyerWalletsTable).set({ availableBalance: sql`${lawyerWalletsTable.availableBalance} + ${netAmount}`, updatedAt: now })
-      .where(eq(lawyerWalletsTable.id, row.wallet.id)).returning();
+      .where(eq(lawyerWalletsTable.id, wallet.id)).returning();
     if (!updatedWallet) throw new Error("LAWYER_WALLET_UPDATE_FAILED");
     const [updatedRequest] = await tx.update(milestoneReleaseRequestsTable).set({ decidedAt: row.request.decidedAt ?? now, updatedAt: now })
       .where(eq(milestoneReleaseRequestsTable.id, row.request.id)).returning();
