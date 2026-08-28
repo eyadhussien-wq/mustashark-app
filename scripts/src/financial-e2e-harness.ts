@@ -23,11 +23,6 @@ import type { RefundMilestoneResult } from "../../artifacts/api-server/src/servi
 
 type ServiceRequest = Parameters<typeof fundMilestone>[0];
 
-type HarnessResult =
-  | { replay: true; status: number; body: unknown }
-  | { replay: false; status: 200; body: { ok: true; [key: string]: unknown } }
-  | { error: string };
-
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -60,17 +55,9 @@ function requestWithIdempotency(key: string, body: unknown = {}): ServiceRequest
   } as ServiceRequest;
 }
 
-function expectSuccessfulFund(result: FundMilestoneResult, operation: string) {
-  assertOkBody(result, operation);
-}
-
-function expectSuccessfulRelease(result: ReleaseMilestoneResult, operation: string) {
-  assertOkBody(result, operation);
-}
-
-function expectSuccessfulRefund(result: RefundMilestoneResult, operation: string) {
-  assertOkBody(result, operation);
-}
+function expectSuccessfulFund(result: FundMilestoneResult, operation: string) { assertOkBody(result, operation); }
+function expectSuccessfulRelease(result: ReleaseMilestoneResult, operation: string) { assertOkBody(result, operation); }
+function expectSuccessfulRefund(result: RefundMilestoneResult, operation: string) { assertOkBody(result, operation); }
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
@@ -85,6 +72,7 @@ async function main() {
   const releaseRequestId = crypto.randomUUID();
   const paymentProofId = crypto.randomUUID();
   const amount = "300.00";
+  const commission = "45.00";
   const net = "255.00";
 
   try {
@@ -92,45 +80,21 @@ async function main() {
       { id: clientId, name: "Synthetic Client", email: `financial-client-${runId}@test.invalid`, role: "client", country: "qatar", accountStatus: "active" },
       { id: lawyerId, name: "Synthetic Lawyer", email: `financial-lawyer-${runId}@test.invalid`, role: "lawyer", country: "qatar", accountStatus: "active" },
     ]);
-    await db.insert(representationQuotesTable).values({
-      id: quoteId, clientId, lawyerId, title: "Synthetic legal consultation", description: "Financial E2E only",
-      totalAmount: amount, currency: "QAR", status: "accepted", fundingMode: "full", acceptedAt: new Date(),
-    });
-    await db.insert(representationMilestonesTable).values({
-      id: milestoneId, quoteId, stage: "stage_1", percentage: "100.00", amount, title: "Synthetic service", status: "awaiting_deposit",
-    });
+    await db.insert(representationQuotesTable).values({ id: quoteId, clientId, lawyerId, title: "Synthetic legal consultation", description: "Financial E2E only", totalAmount: amount, currency: "QAR", status: "accepted", fundingMode: "full", acceptedAt: new Date() });
+    await db.insert(representationMilestonesTable).values({ id: milestoneId, quoteId, stage: "stage_1", percentage: "100.00", amount, title: "Synthetic service", status: "awaiting_deposit" });
     await db.insert(escrowAccountsTable).values({ id: escrowId, quoteId, currency: "QAR" });
     await db.insert(lawyerWalletsTable).values({ id: walletId, lawyerId, currency: "QAR" });
-    await db.insert(commissionTiersTable).values({
-      id: crypto.randomUUID(), country: "qatar", currency: "QAR", minQuoteAmount: "0", maxQuoteAmount: null,
-      commissionRate: "15.00", active: true, effectiveFrom: new Date(Date.now() - 60_000), effectiveTo: null,
-    });
-    await db.insert(milestoneProofsTable).values({
-      id: proofId, milestoneId, lawyerId, documentKey: `synthetic/${runId}`, proofType: "e2e", status: "approved",
-    });
-    await db.insert(milestoneReleaseRequestsTable).values({
-      id: releaseRequestId, milestoneId, proofId, clientId, lawyerId, status: "approved",
-      reviewDeadlineAt: new Date(Date.now() + 3_600_000),
-    });
-
-    await db.insert(paymentProofsTable).values({
-      id: paymentProofId, bookingId: crypto.randomUUID(), clientId, amount, currency: "QAR",
-      channel: "external", method: "other", proofUri: "synthetic://myfatoorah-test", reference: `MF-TEST-${runId}`, status: "confirmed",
-    }).catch(() => {
-      console.log("PROVIDER_BOUNDARY_NOTE=payment_proofs booking FK unavailable; provider confirmation remains synthetic");
-    });
+    await db.insert(commissionTiersTable).values({ id: crypto.randomUUID(), country: "qatar", currency: "QAR", minQuoteAmount: "0", maxQuoteAmount: null, commissionRate: "15.00", active: true, effectiveFrom: new Date(Date.now() - 60_000), effectiveTo: null });
+    await db.insert(milestoneProofsTable).values({ id: proofId, milestoneId, lawyerId, documentKey: `synthetic/${runId}`, proofType: "e2e", status: "approved" });
+    await db.insert(milestoneReleaseRequestsTable).values({ id: releaseRequestId, milestoneId, proofId, clientId, lawyerId, status: "approved", reviewDeadlineAt: new Date(Date.now() + 3_600_000) });
+    await db.insert(paymentProofsTable).values({ id: paymentProofId, bookingId: crypto.randomUUID(), clientId, amount, currency: "QAR", channel: "external", method: "other", proofUri: "synthetic://myfatoorah-test", reference: `MF-TEST-${runId}`, status: "confirmed" }).catch(() => console.log("PROVIDER_BOUNDARY_NOTE=payment_proofs booking FK unavailable; provider confirmation remains synthetic"));
 
     console.log(`FINANCIAL_E2E_RUN=${runId}`);
     console.log("PROVIDER=MYFATOORAH_TEST_SYNTHETIC");
     console.log(`AMOUNT=${amount} QAR`);
 
-    const fund = await fundMilestone(
-      requestWithIdempotency(`fund-${runId}`, { provider: "myfatoorah-test", reference: `MF-TEST-${runId}` }),
-      milestoneId,
-      clientId,
-    );
+    const fund = await fundMilestone(requestWithIdempotency(`fund-${runId}`, { provider: "myfatoorah-test", reference: `MF-TEST-${runId}` }), milestoneId, clientId);
     expectSuccessfulFund(fund, "fund");
-
     const funded = (await db.select().from(escrowAccountsTable).where(eq(escrowAccountsTable.id, escrowId)))[0];
     assert(funded?.depositedAmount === amount, `escrow deposit mismatch: ${funded?.depositedAmount}`);
     console.log(`LEDGER_AFTER_PAYMENT=escrow_deposit ${amount} QAR`);
@@ -150,19 +114,27 @@ async function main() {
     assert(escrow?.refundedAmount === "0.00", `unexpected refund: ${escrow?.refundedAmount}`);
     assert(wallet?.availableBalance === net, `lawyer wallet mismatch: expected ${net}, got ${wallet?.availableBalance}`);
     assert(escrowTx.length === 3, `expected 3 escrow transactions, got ${escrowTx.length}`);
-    assert(ledger.length === 2, `expected 2 release/commission ledger entries, got ${ledger.length}`);
+    assert(ledger.length === 3, `expected 3 release/commission/lawyer-net ledger entries, got ${ledger.length}`);
 
     const debit = ledger.filter((x) => x.direction === "debit").reduce((sum, x) => sum + Number(x.amount), 0);
     const credit = ledger.filter((x) => x.direction === "credit").reduce((sum, x) => sum + Number(x.amount), 0);
+    const lawyerNetLedger = ledger.filter((x) => x.direction === "credit" && x.reference.startsWith("lawyer-net:"));
+    const commissionLedger = ledger.filter((x) => x.direction === "credit" && x.reference.startsWith("commission:"));
+    assert(lawyerNetLedger.length === 1, `expected exactly 1 lawyer-net ledger entry, got ${lawyerNetLedger.length}`);
+    assert(commissionLedger.length === 1, `expected exactly 1 commission ledger entry, got ${commissionLedger.length}`);
+    assert(Number(lawyerNetLedger[0]?.amount) === Number(net), `lawyer-net ledger mismatch: expected ${net}, got ${lawyerNetLedger[0]?.amount}`);
+    assert(Number(commissionLedger[0]?.amount) === Number(commission), `commission ledger mismatch: expected ${commission}, got ${commissionLedger[0]?.amount}`);
+    assert(Math.abs(debit - Number(amount)) < 0.005, `LEDGER_DEBIT_MISMATCH debit=${debit.toFixed(2)} expected=${Number(amount).toFixed(2)}`);
+    assert(Math.abs(credit - (Number(commission) + Number(net))) < 0.005, `LEDGER_CREDIT_MISMATCH credit=${credit.toFixed(2)} expected=${Number(amount).toFixed(2)}`);
+    assert(Math.abs(debit - credit) < 0.005, `LEDGER_UNBALANCED debit=${debit.toFixed(2)} credit=${credit.toFixed(2)}`);
     console.log(`LEDGER_RELEASE_DEBIT=${debit.toFixed(2)} QAR`);
     console.log(`LEDGER_RELEASE_CREDIT=${credit.toFixed(2)} QAR`);
     console.log(`LAWYER_NET_SETTLEMENT=${wallet?.availableBalance} QAR`);
+    console.log(`PLATFORM_COMMISSION=${commission} QAR`);
     console.log(`RECONCILIATION_PROVIDER=${amount} QAR`);
     console.log(`RECONCILIATION_ESCROW_RELEASED=${escrow?.releasedAmount} QAR`);
     console.log(`RECONCILIATION_LAWYER_NET=${wallet?.availableBalance} QAR`);
     console.log("REPLAY_ADDITIONAL_EFFECT=0 QAR");
-
-    assert(Math.abs(debit - credit) < 0.005, `LEDGER_UNBALANCED debit=${debit.toFixed(2)} credit=${credit.toFixed(2)}`);
 
     const refundQuoteId = crypto.randomUUID();
     const refundMilestoneId = crypto.randomUUID();
@@ -170,14 +142,12 @@ async function main() {
     await db.insert(representationQuotesTable).values({ id: refundQuoteId, clientId, lawyerId, title: "Synthetic refund", totalAmount: "100.00", currency: "QAR", status: "accepted", fundingMode: "full", acceptedAt: new Date() });
     await db.insert(representationMilestonesTable).values({ id: refundMilestoneId, quoteId: refundQuoteId, stage: "stage_1", percentage: "100.00", amount: "100.00", title: "Synthetic refund service", status: "awaiting_deposit" });
     await db.insert(escrowAccountsTable).values({ id: refundEscrowId, quoteId: refundQuoteId, currency: "QAR" });
-
     const refundFund = await fundMilestone(requestWithIdempotency(`refund-fund-${runId}`), refundMilestoneId, clientId);
     expectSuccessfulFund(refundFund, "refund setup");
     const refund = await refundMilestone(requestWithIdempotency(`refund-${runId}`), refundMilestoneId, clientId);
     expectSuccessfulRefund(refund, "refund");
     const refundReplay = await refundMilestone(requestWithIdempotency(`refund-${runId}`), refundMilestoneId, clientId);
     assertReplay(refundReplay, "refund");
-
     const refundEscrow = (await db.select().from(escrowAccountsTable).where(eq(escrowAccountsTable.id, refundEscrowId)))[0];
     assert(refundEscrow?.refundedAmount === "100.00", `refund amount mismatch: ${refundEscrow?.refundedAmount}`);
     console.log("REFUND_IDEMPOTENCY=PASS");
