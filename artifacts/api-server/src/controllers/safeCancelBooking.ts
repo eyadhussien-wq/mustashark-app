@@ -257,3 +257,7 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
+
+// Backward-compatible export name. This is the same safe implementation;
+// no legacy/unsafe cancellation path is restored.
+export const cancelBooking = cancelBookingSafely;
