@@ -1,6 +1,7 @@
 name: G1.4 Lawyer Discovery Contract
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "**"
