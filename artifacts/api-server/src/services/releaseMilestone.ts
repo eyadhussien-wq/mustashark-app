@@ -6,12 +6,12 @@ import {
   milestoneReleaseRequestsTable, representationMilestonesTable, representationQuotesTable, usersTable,
 } from "@workspace/db/schema";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
-import { postEscrowFinancialOperation, financialIdempotencyKey } from "./financialAuthority";
+import { postEscrowFinancialOperation, postLedgerEntry, financialIdempotencyKey } from "./financialAuthority";
 import type { Request } from "express";
 
 export type ReleaseMilestoneResult =
   | { replay: true; status: number; body: unknown }
-  | { replay: false; status: 200; body: { ok: true; milestone: unknown; escrowAccount: unknown; releaseTransaction: unknown; commissionTransaction: unknown; walletTransaction: unknown; releaseLedgerEntry: unknown; commissionLedgerEntry: unknown } }
+  | { replay: false; status: 200; body: { ok: true; milestone: unknown; escrowAccount: unknown; releaseTransaction: unknown; commissionTransaction: unknown; walletTransaction: unknown; releaseLedgerEntry: unknown; commissionLedgerEntry: unknown; lawyerNetLedgerEntry: unknown } }
   | { error: "release_request_not_found" | "forbidden" | "milestone_not_releasable" | "escrow_account_not_found" | "commission_tier_not_found" | "lawyer_wallet_not_found" };
 
 export async function releaseMilestone(req: Request, releaseRequestId: string, clientId: string): Promise<ReleaseMilestoneResult> {
@@ -72,6 +72,12 @@ export async function releaseMilestone(req: Request, releaseRequestId: string, c
       currency: row.quote.currency, reference: `commission:${release.escrowTransaction.id}`, actorId: clientId,
       correlationId: releaseRequestId, idempotencyKey: `${releaseKey}:commission`,
     });
+    const lawyerNetLedgerEntry = await postLedgerEntry(tx, {
+      entryType: "settlement", direction: "credit", amount: netAmount, currency: row.quote.currency,
+      actorId: clientId, reference: `lawyer-net:${release.escrowTransaction.id}`, idempotencyKey: `${releaseKey}:lawyer-net`,
+      correlationId: releaseRequestId,
+      metadata: { source: "lawyer_wallet", lawyerId: row.request.lawyerId, walletId: wallet.id, grossAmount: amount, commissionAmount },
+    });
 
     const [updatedEscrow] = await tx.update(escrowAccountsTable).set({ releasedAmount: sql`${escrowAccountsTable.releasedAmount} + ${amount}`, updatedAt: now })
       .where(and(eq(escrowAccountsTable.id, row.escrow.id), sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.releasedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`)).returning();
@@ -97,7 +103,7 @@ export async function releaseMilestone(req: Request, releaseRequestId: string, c
       ok: true as const, milestone: updatedMilestone, escrowAccount: updatedEscrow,
       releaseTransaction: release.escrowTransaction, commissionTransaction: commission.escrowTransaction,
       walletTransaction: { ...walletTransaction, wallet: updatedWallet, releaseRequest: updatedRequest },
-      releaseLedgerEntry: release.ledgerEntry, commissionLedgerEntry: commission.ledgerEntry,
+      releaseLedgerEntry: release.ledgerEntry, commissionLedgerEntry: commission.ledgerEntry, lawyerNetLedgerEntry,
     };
     await persistIdempotencyResponse(tx, req, clientId, 200, body);
     return { replay: false as const, status: 200 as const, body };
