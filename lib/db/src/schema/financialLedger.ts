@@ -23,6 +23,11 @@ export const financialEntryTypeEnum = pgEnum("financial_entry_type", [
   "adjustment",
 ]);
 
+export const financialEntryDirectionEnum = pgEnum("financial_entry_direction", [
+  "credit",
+  "debit",
+]);
+
 export const financialEntryStatusEnum = pgEnum("financial_entry_status", [
   "pending",
   "posted",
@@ -30,9 +35,10 @@ export const financialEntryStatusEnum = pgEnum("financial_entry_status", [
 ]);
 
 /**
- * Authoritative append-only financial record for internal money movements.
- * Commercial policy (refund windows, commission rules, payout timing) is kept
- * outside this table; entries record the resulting financial fact only.
+ * Authoritative internal financial journal. Every financial mutation records
+ * an immutable fact here inside the same DB transaction as the business state.
+ * Commercial policy (refund windows, commission rules, payout timing) stays
+ * outside this foundation layer.
  */
 export const financialLedgerTable = pgTable(
   "financial_ledger",
@@ -41,6 +47,7 @@ export const financialLedgerTable = pgTable(
     bookingId: text("booking_id").references(() => bookingsTable.id),
     actorId: text("actor_id").references(() => usersTable.id),
     entryType: financialEntryTypeEnum("entry_type").notNull(),
+    direction: financialEntryDirectionEnum("direction").notNull(),
     status: financialEntryStatusEnum("status").notNull().default("posted"),
     currency: text("currency").notNull().default("QAR"),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
