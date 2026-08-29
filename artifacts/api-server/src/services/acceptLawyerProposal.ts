@@ -11,6 +11,7 @@ import {
 } from "@workspace/db/schema";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 import { generateRepresentationMilestones } from "./representationFinance";
+import { isLawyerOperationallyEligible } from "./lawyerEligibility";
 import type { Request } from "express";
 
 const ACTIVE_REQUEST_STATUSES = ["submitted", "under_review"] as const;
@@ -94,6 +95,10 @@ export async function acceptLawyerProposalAndInitializeFunding(
       .for("update");
 
     if (!proposal) return { error: "proposal_not_found" };
+
+    if (!(await isLawyerOperationallyEligible(proposal.lawyerId))) {
+      return { error: "forbidden" };
+    }
 
     const now = new Date();
     if (proposal.status === "submitted" && (!proposal.expiresAt || now >= proposal.expiresAt)) {
