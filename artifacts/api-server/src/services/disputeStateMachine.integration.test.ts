@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test, { after } from "node:test";
-import { pool } from "@workspace/db";
+import { db, pool } from "@workspace/db";
+import {
+  agreementsTable,
+  casesTable,
+  disputesTable,
+  representationQuotesTable,
+  usersTable,
+} from "@workspace/db";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -135,10 +142,10 @@ test("T02-02 enforces resolution outcome only at CLOSED", async () => {
 });
 
 after(async () => {
-  await pool.query("DELETE FROM disputes WHERE id IN ($1, $2)", [disputeId, raceId]);
-  await pool.query("DELETE FROM cases WHERE id = $1", [caseId]);
-  await pool.query("DELETE FROM agreements WHERE id = $1", [agreementId]);
-  await pool.query("DELETE FROM representation_quotes WHERE id = $1", [quoteId]);
-  await pool.query("DELETE FROM users WHERE id IN ($1, $2)", [clientId, lawyerId]);
+  await db.delete(disputesTable).where(disputesTable.id.in([disputeId, raceId]));
+  await db.delete(casesTable).where(casesTable.id.eq(caseId));
+  await db.delete(agreementsTable).where(agreementsTable.id.eq(agreementId));
+  await db.delete(representationQuotesTable).where(representationQuotesTable.id.eq(quoteId));
+  await db.delete(usersTable).where(usersTable.id.in([clientId, lawyerId]));
   await pool.end();
 });
