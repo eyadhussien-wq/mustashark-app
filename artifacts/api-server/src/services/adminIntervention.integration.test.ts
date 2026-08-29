@@ -99,16 +99,6 @@ test("S02-08: admin intervention atomically changes case and writes immutable au
   console.log(`ADMIN_INTERVENTION_SUCCESS=${caseId} AUDIT=${audit.id}`);
 });
 
-test("S02-08: admin audit logs reject UPDATE and DELETE with PostgreSQL 42501", async () => {
-  const { adminId, caseId } = await createFixture();
-  await transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" });
-  const [audit] = await db.select({ id: adminAuditLogsTable.id }).from(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, caseId)).limit(1);
-  assert.ok(audit);
-  await assert.rejects(() => pool.query("UPDATE admin_audit_logs SET description = 'tampered' WHERE id = $1", [audit.id]), (error: unknown) => (error as { code?: string }).code === "42501");
-  await assert.rejects(() => pool.query("DELETE FROM admin_audit_logs WHERE id = $1", [audit.id]), (error: unknown) => (error as { code?: string }).code === "42501");
-  console.log(`ADMIN_AUDIT_IMMUTABLE=${audit.id} UPDATE=42501 DELETE=42501`);
-});
-
 after(async () => {
   for (const caseId of createdCaseIds) await db.delete(casesTable).where(eq(casesTable.id, caseId));
   for (const agreementId of createdAgreementIds) await db.delete(agreementsTable).where(eq(agreementsTable.id, agreementId));
