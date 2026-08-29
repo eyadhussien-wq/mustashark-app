@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
 
 const databaseUrl = process.env.ADMIN_INTERVENTION_TEST_DATABASE_URL;
 if (!databaseUrl) throw new Error("ADMIN_INTERVENTION_TEST_DATABASE_URL is required");
 if (/(prod|production|live)/i.test(databaseUrl)) throw new Error("Refusing to run S02-08 database verification against a production-like database URL");
+process.env.DATABASE_URL = databaseUrl;
 
+const { pool } = await import("@workspace/db");
 const auditId = `s02-08-immutability-${crypto.randomUUID()}`;
 const adminId = "s02-08-admin-reference";
 const caseId = `s02-08-immutability-case-${crypto.randomUUID()}`;
