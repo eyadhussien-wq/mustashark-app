@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import { Pool } from "pg";
 
@@ -7,7 +6,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
 const parsed = new URL(databaseUrl);
 const host = parsed.hostname.toLowerCase();
-if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
   throw new Error(`Production DB Guard: refusing non-isolated host ${host}`);
 }
 if (!/mustashark_test|test/i.test(parsed.pathname)) {
@@ -20,37 +19,43 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function psql(query: string) {
-  return execFileSync("psql", [databaseUrl!, "-At", "-c", query], { encoding: "utf8" }).trim();
-}
-
-function sql(value: string) {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
+const clientId = crypto.randomUUID();
+const lawyerId = crypto.randomUUID();
+const quoteId = crypto.randomUUID();
+const agreementId = crypto.randomUUID();
 const caseId = crypto.randomUUID();
-const userId = crypto.randomUUID();
 const disputeId = crypto.randomUUID();
-const email = `t02-02-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.invalid`;
+const raceId = crypto.randomUUID();
+const suffix = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 
 async function main() {
   await pool.query("SELECT 1");
 
   await pool.query(
-    `INSERT INTO users (id, email, role, password_hash, created_at, updated_at) VALUES ($1, $2, 'client', 'ci-test-only', now(), now())`,
-    [userId, email],
+    `INSERT INTO users (id, name, email, role, password_hash, account_status, litigation_tier, created_at, updated_at)
+     VALUES ($1, 'T02-02 Client', $2, 'client', 'ci-test-only', 'active', 'general', now(), now()),
+            ($3, 'T02-02 Lawyer', $4, 'lawyer', 'ci-test-only', 'active', 'general', now(), now())`,
+    [clientId, `client-${suffix}@test.invalid`, lawyerId, `lawyer-${suffix}@test.invalid`],
   );
   await pool.query(
-    `INSERT INTO agreements (id, client_id, lawyer_id, title, status, created_at, updated_at) VALUES ($1, $2, $2, 'T02-02 CI fixture', 'draft', now(), now())`,
-    [caseId, userId],
+    `INSERT INTO representation_quotes (id, client_id, lawyer_id, title, total_amount, currency, status, created_at, updated_at)
+     VALUES ($1, $2, $3, 'T02-02 CI fixture', '100.00', 'JOD', 'accepted', now(), now())`,
+    [quoteId, clientId, lawyerId],
   );
   await pool.query(
-    `INSERT INTO cases (id, agreement_id, client_id, lawyer_id, status, created_at, updated_at) VALUES ($1, $2, $3, $3, 'active', now(), now())`,
-    [caseId, caseId, userId],
+    `INSERT INTO agreements (id, quote_id, client_id, lawyer_id, status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, 'confirmed', now(), now())`,
+    [agreementId, quoteId, clientId, lawyerId],
   );
   await pool.query(
-    `INSERT INTO disputes (id, case_id, opened_by, lifecycle_state, version, opened_at, created_at, updated_at) VALUES ($1, $2, $3, 'open', 1, now(), now(), now())`,
-    [disputeId, caseId, userId],
+    `INSERT INTO cases (id, agreement_id, client_id, lawyer_id, status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, 'active', now(), now())`,
+    [caseId, agreementId, clientId, lawyerId],
+  );
+  await pool.query(
+    `INSERT INTO disputes (id, case_id, opened_by, lifecycle_state, version, opened_at, created_at, updated_at)
+     VALUES ($1, $2, $3, 'open', 1, now(), now(), now())`,
+    [disputeId, caseId, clientId],
   );
 
   const expected: Array<[string, string]> = [
@@ -66,7 +71,14 @@ async function main() {
     const row = current.rows[0];
     assert(row.lifecycle_state === from, `unexpected source state: ${row.lifecycle_state}; expected ${from}`);
     const result = await pool.query(
-      `UPDATE disputes SET lifecycle_state = $1, resolution_outcome = CASE WHEN $1 = 'closed' THEN 'dismissed'::dispute_resolution_outcome ELSE NULL END, version = version + 1, closed_at = CASE WHEN $1 = 'closed' THEN now() ELSE NULL END, updated_at = now() WHERE id = $2 AND lifecycle_state = $3 AND version = $4 RETURNING lifecycle_state, version`,
+      `UPDATE disputes
+       SET lifecycle_state = $1,
+           resolution_outcome = CASE WHEN $1 = 'closed' THEN 'dismissed'::dispute_resolution_outcome ELSE NULL END,
+           version = version + 1,
+           closed_at = CASE WHEN $1 = 'closed' THEN now() ELSE NULL END,
+           updated_at = now()
+       WHERE id = $2 AND lifecycle_state = $3 AND version = $4
+       RETURNING lifecycle_state, version`,
       [to, disputeId, from, row.version],
     );
     assert(result.rowCount === 1, `transition ${from}->${to} did not commit`);
@@ -81,16 +93,24 @@ async function main() {
     `UPDATE disputes SET lifecycle_state = 'open', version = version + 1 WHERE id = $1 AND lifecycle_state = 'closed' AND version = 6 RETURNING id`,
     [disputeId],
   );
-  assert(invalid.rowCount === 0, "terminal closed state accepted an invalid transition");
+  assert(invalid.rowCount === 0, "terminal CLOSED state accepted an invalid transition");
 
-  const raceId = crypto.randomUUID();
   await pool.query(
-    `INSERT INTO disputes (id, case_id, opened_by, lifecycle_state, version, opened_at, created_at, updated_at) VALUES ($1, $2, $3, 'open', 1, now(), now(), now())`,
-    [raceId, caseId, userId],
+    `INSERT INTO disputes (id, case_id, opened_by, lifecycle_state, version, opened_at, created_at, updated_at)
+     VALUES ($1, $2, $3, 'open', 1, now(), now(), now())`,
+    [raceId, caseId, clientId],
   );
   const race = await Promise.all([
-    pool.query(`UPDATE disputes SET lifecycle_state = 'mediation', version = version + 1, updated_at = now() WHERE id = $1 AND lifecycle_state = 'open' AND version = 1 RETURNING id`, [raceId]),
-    pool.query(`UPDATE disputes SET lifecycle_state = 'mediation', version = version + 1, updated_at = now() WHERE id = $1 AND lifecycle_state = 'open' AND version = 1 RETURNING id`, [raceId]),
+    pool.query(
+      `UPDATE disputes SET lifecycle_state = 'mediation', version = version + 1, updated_at = now()
+       WHERE id = $1 AND lifecycle_state = 'open' AND version = 1 RETURNING id`,
+      [raceId],
+    ),
+    pool.query(
+      `UPDATE disputes SET lifecycle_state = 'mediation', version = version + 1, updated_at = now()
+       WHERE id = $1 AND lifecycle_state = 'open' AND version = 1 RETURNING id`,
+      [raceId],
+    ),
   ]);
   assert(race.filter((r) => r.rowCount === 1).length === 1, "optimistic concurrency did not allow exactly one winner");
   assert(race.filter((r) => r.rowCount === 0).length === 1, "optimistic concurrency did not reject the stale writer");
