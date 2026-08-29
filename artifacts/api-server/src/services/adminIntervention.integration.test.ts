@@ -57,13 +57,12 @@ const createFixture = async () => {
 
 test("S02-08: failure after case update rolls back both case mutation and audit insert", async () => {
   const { adminId, caseId } = await createFixture();
-  const escapedAdminId = adminId.replace(/'/g, "''");
   const escapedCaseId = caseId.replace(/'/g, "''");
-  await pool.query(`CREATE OR REPLACE FUNCTION s02_08_force_admin_audit_fk_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN DELETE FROM users WHERE id = '${escapedAdminId}'; RETURN NEW; END; $$`);
+  await pool.query(`CREATE OR REPLACE FUNCTION s02_08_force_admin_audit_fk_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'S02_08_FORCED_ROLLBACK'; END; $$`);
   await pool.query(`CREATE TRIGGER s02_08_force_admin_audit_fk_failure AFTER UPDATE OF status ON cases FOR EACH ROW WHEN (NEW.id = '${escapedCaseId}') EXECUTE FUNCTION s02_08_force_admin_audit_fk_failure()`);
   const auditBefore = await db.select({ id: adminAuditLogsTable.id }).from(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, caseId));
   try {
-    await assert.rejects(() => transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" }), /foreign key|ADMIN_INTERVENTION_FORBIDDEN|insert or update/i);
+    await assert.rejects(() => transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" }), /S02_08_FORCED_ROLLBACK/);
   } finally {
     await pool.query("DROP TRIGGER IF EXISTS s02_08_force_admin_audit_fk_failure ON cases");
     await pool.query("DROP FUNCTION IF EXISTS s02_08_force_admin_audit_fk_failure()");
