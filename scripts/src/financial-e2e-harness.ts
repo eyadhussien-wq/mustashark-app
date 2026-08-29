@@ -118,8 +118,14 @@ async function main() {
 
     const debit = ledger.filter((x) => x.direction === "debit").reduce((sum, x) => sum + Number(x.amount), 0);
     const credit = ledger.filter((x) => x.direction === "credit").reduce((sum, x) => sum + Number(x.amount), 0);
-    const lawyerNetLedger = ledger.filter((x) => x.direction === "credit" && x.reference.startsWith("lawyer-net:"));
-    const commissionLedger = ledger.filter((x) => x.direction === "credit" && x.reference.startsWith("commission:"));
+    const lawyerNetLedger = ledger.filter((x) => {
+      if (x.direction !== "credit" || !x.reference) return false;
+      return x.reference.startsWith("lawyer-net:");
+    });
+    const commissionLedger = ledger.filter((x) => {
+      if (x.direction !== "credit" || !x.reference) return false;
+      return x.reference.startsWith("commission:");
+    });
     assert(lawyerNetLedger.length === 1, `expected exactly 1 lawyer-net ledger entry, got ${lawyerNetLedger.length}`);
     assert(commissionLedger.length === 1, `expected exactly 1 commission ledger entry, got ${commissionLedger.length}`);
     assert(Number(lawyerNetLedger[0]?.amount) === Number(net), `lawyer-net ledger mismatch: expected ${net}, got ${lawyerNetLedger[0]?.amount}`);
