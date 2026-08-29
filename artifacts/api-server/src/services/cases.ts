@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
+  adminAuditLogsTable,
   agreementsTable,
   caseMembershipsTable,
   casesTable,
@@ -274,6 +275,30 @@ export const transitionCase = async (input: {
       .returning();
 
     if (!updatedCase) throw new Error("CASE_TRANSITION_CONFLICT");
+
+    // Administrative interventions are audited inside the same transaction.
+    // If the transition rolls back, this audit row rolls back with it.
+    if (input.actorRole === "admin") {
+      await tx.insert(adminAuditLogsTable).values({
+        id: crypto.randomUUID(),
+        adminId: input.actorUserId,
+        action: `case.status.${input.targetStatus}`,
+        entityType: "case",
+        entityId: input.caseId,
+        description: `Administrative case transition: ${caseRecord.status} -> ${input.targetStatus}`,
+        beforeData: {
+          status: caseRecord.status,
+          completedAt: caseRecord.completedAt,
+          closedAt: caseRecord.closedAt,
+        },
+        afterData: {
+          status: updatedCase.status,
+          completedAt: updatedCase.completedAt,
+          closedAt: updatedCase.closedAt,
+        },
+      });
+    }
+
     return { case: updatedCase };
   });
 };
