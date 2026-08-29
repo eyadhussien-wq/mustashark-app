@@ -9,7 +9,7 @@ async function main() {
   }
   process.env.DATABASE_URL = databaseUrl;
 
-  const { pool } = await import("@workspace/db");
+  const { pool } = await import("../lib/db/src/index.ts");
   const auditId = `s02-08-immutability-${crypto.randomUUID()}`;
   const adminId = "s02-08-admin-reference";
   const caseId = `s02-08-immutability-case-${crypto.randomUUID()}`;
