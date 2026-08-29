@@ -1,0 +1,74 @@
+name: S02-08 Admin Monitoring & Intervention
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-intervention:
+    name: Admin Intervention (isolated PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+
+    env:
+      ADMIN_INTERVENTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision isolated database
+        env:
+          DATABASE_URL: ${{ env.ADMIN_INTERVENTION_TEST_DATABASE_URL }}
+        run: pnpm --filter @workspace/db push
+
+      - name: Apply S02-08 database immutability guard
+        env:
+          DATABASE_URL: ${{ env.ADMIN_INTERVENTION_TEST_DATABASE_URL }}
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/0008_s02_08_admin_audit_immutability.sql
+
+      - name: Verify immutable audit trigger
+        env:
+          DATABASE_URL: ${{ env.ADMIN_INTERVENTION_TEST_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1 FROM pg_trigger WHERE tgname = 'admin_audit_logs_immutable_update_delete' AND NOT tgisinternal;" | grep -q "1"
+
+      - name: Run S02-08 integration tests
+        working-directory: artifacts/api-server
+        env:
+          ADMIN_INTERVENTION_TEST_DATABASE_URL: ${{ env.ADMIN_INTERVENTION_TEST_DATABASE_URL }}
+        run: pnpm exec tsx --test src/services/adminIntervention.integration.test.ts
