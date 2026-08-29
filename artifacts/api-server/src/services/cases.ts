@@ -225,6 +225,18 @@ export const transitionCase = async (input: {
       throw new Error("CASE_ALREADY_CLOSED");
     }
 
+    if (input.actorRole === "admin") {
+      const [admin] = await tx
+        .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus, deletedAt: usersTable.deletedAt })
+        .from(usersTable)
+        .where(eq(usersTable.id, input.actorUserId))
+        .limit(1)
+        .for("update");
+      if (!admin || admin.role !== "admin" || admin.accountStatus !== "active" || admin.deletedAt) {
+        throw new Error("ADMIN_INTERVENTION_FORBIDDEN");
+      }
+    }
+
     if (input.targetStatus === "completed") {
       if (input.actorRole !== "admin" && !(input.actorRole === "lawyer" && caseRecord.lawyerId === input.actorUserId)) {
         throw new Error("FORBIDDEN");
@@ -276,8 +288,6 @@ export const transitionCase = async (input: {
 
     if (!updatedCase) throw new Error("CASE_TRANSITION_CONFLICT");
 
-    // Administrative interventions are audited inside the same transaction.
-    // If the transition rolls back, this audit row rolls back with it.
     if (input.actorRole === "admin") {
       await tx.insert(adminAuditLogsTable).values({
         id: crypto.randomUUID(),
