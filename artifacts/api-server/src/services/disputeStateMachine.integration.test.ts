@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test, { after } from "node:test";
+import { eq, inArray } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
 import {
   agreementsTable,
@@ -29,6 +30,7 @@ const agreementId = crypto.randomUUID();
 const caseId = crypto.randomUUID();
 const disputeId = crypto.randomUUID();
 const raceId = crypto.randomUUID();
+const resolutionFixtureId = crypto.randomUUID();
 const suffix = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 
 await pool.query(
@@ -126,26 +128,25 @@ test("T02-02 optimistic concurrency allows exactly one winner", async () => {
 });
 
 test("T02-02 enforces resolution outcome only at CLOSED", async () => {
-  const id = crypto.randomUUID();
   await pool.query(
     `INSERT INTO disputes (id, case_id, opened_by, lifecycle_state, version, opened_at, created_at, updated_at)
      VALUES ($1, $2, $3, 'open', 1, now(), now(), now())`,
-    [id, caseId, clientId],
+    [resolutionFixtureId, caseId, clientId],
   );
 
   await assert.rejects(
     pool.query(
       `UPDATE disputes SET resolution_outcome = 'client' WHERE id = $1`,
-      [id],
+      [resolutionFixtureId],
     ),
   );
 });
 
 after(async () => {
-  await db.delete(disputesTable).where(disputesTable.id.in([disputeId, raceId]));
-  await db.delete(casesTable).where(casesTable.id.eq(caseId));
-  await db.delete(agreementsTable).where(agreementsTable.id.eq(agreementId));
-  await db.delete(representationQuotesTable).where(representationQuotesTable.id.eq(quoteId));
-  await db.delete(usersTable).where(usersTable.id.in([clientId, lawyerId]));
+  await db.delete(disputesTable).where(inArray(disputesTable.id, [disputeId, raceId, resolutionFixtureId]));
+  await db.delete(casesTable).where(eq(casesTable.id, caseId));
+  await db.delete(agreementsTable).where(eq(agreementsTable.id, agreementId));
+  await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, quoteId));
+  await db.delete(usersTable).where(inArray(usersTable.id, [clientId, lawyerId]));
   await pool.end();
 });
