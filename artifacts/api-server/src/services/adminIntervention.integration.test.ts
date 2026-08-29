@@ -24,10 +24,7 @@ const adminSeedId = "s02-08-admin-reference";
 const ensureReferenceAdmin = async () => {
   await db.insert(usersTable).values({
     id: adminSeedId, name: "Mustashark Admin", email: adminEmail, role: "admin", authProvider: "local", accountStatus: "active", createdAt: new Date(), updatedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: usersTable.email,
-    set: { role: "admin", accountStatus: "active", deletedAt: null, updatedAt: new Date() },
-  });
+  }).onConflictDoUpdate({ target: usersTable.email, set: { role: "admin", accountStatus: "active", deletedAt: null, updatedAt: new Date() } });
   const [admin] = await db.select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus, deletedAt: usersTable.deletedAt }).from(usersTable).where(eq(usersTable.email, adminEmail)).limit(1);
   assert.ok(admin, `${adminEmail} must exist in the isolated Test DB`);
   assert.equal(admin.role, "admin");
@@ -58,19 +55,6 @@ const createFixture = async () => {
   return { adminId, caseId };
 };
 
-test("S02-08: admin intervention atomically changes case and writes immutable audit", async () => {
-  const { adminId, caseId } = await createFixture();
-  await transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" });
-  const [updatedCase] = await db.select().from(casesTable).where(eq(casesTable.id, caseId)).limit(1);
-  assert.equal(updatedCase?.status, "completed");
-  const [audit] = await db.select().from(adminAuditLogsTable).where(and(eq(adminAuditLogsTable.adminId, adminId), eq(adminAuditLogsTable.entityId, caseId))).limit(1);
-  assert.ok(audit);
-  assert.equal(audit.action, "case.status.completed");
-  assert.deepEqual(audit.beforeData, { status: "active", completedAt: null, closedAt: null });
-  assert.equal((audit.afterData as { status: string }).status, "completed");
-  console.log(`ADMIN_INTERVENTION_SUCCESS=${caseId} AUDIT=${audit.id}`);
-});
-
 test("S02-08: failure after case update rolls back both case mutation and audit insert", async () => {
   const { adminId, caseId } = await createFixture();
   const escapedAdminId = adminId.replace(/'/g, "''");
@@ -89,6 +73,19 @@ test("S02-08: failure after case update rolls back both case mutation and audit 
   assert.equal(unchangedCase?.status, "active");
   assert.deepEqual(auditAfter, auditBefore);
   console.log(`ADMIN_INTERVENTION_ROLLBACK=${caseId} CASE=active AUDIT_COUNT=${auditAfter.length}`);
+});
+
+test("S02-08: admin intervention atomically changes case and writes immutable audit", async () => {
+  const { adminId, caseId } = await createFixture();
+  await transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" });
+  const [updatedCase] = await db.select().from(casesTable).where(eq(casesTable.id, caseId)).limit(1);
+  assert.equal(updatedCase?.status, "completed");
+  const [audit] = await db.select().from(adminAuditLogsTable).where(and(eq(adminAuditLogsTable.adminId, adminId), eq(adminAuditLogsTable.entityId, caseId))).limit(1);
+  assert.ok(audit);
+  assert.equal(audit.action, "case.status.completed");
+  assert.deepEqual(audit.beforeData, { status: "active", completedAt: null, closedAt: null });
+  assert.equal((audit.afterData as { status: string }).status, "completed");
+  console.log(`ADMIN_INTERVENTION_SUCCESS=${caseId} AUDIT=${audit.id}`);
 });
 
 test("S02-08: admin audit logs reject UPDATE and DELETE with PostgreSQL 42501", async () => {
