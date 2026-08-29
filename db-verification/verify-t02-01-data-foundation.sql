@@ -2,41 +2,15 @@ BEGIN;
 
 DO $$
 BEGIN
-  IF to_regclass('public.disputes') IS NULL THEN
-    RAISE EXCEPTION 'T02-01 FAIL: disputes table missing';
-  END IF;
-  IF to_regclass('public.dispute_evidence') IS NULL THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence table missing';
-  END IF;
+  IF to_regclass('public.disputes') IS NULL THEN RAISE EXCEPTION 'T02-01 FAIL: disputes table missing'; END IF;
+  IF to_regclass('public.dispute_evidence') IS NULL THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence table missing'; END IF;
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='disputes') <> 17 THEN RAISE EXCEPTION 'T02-01 FAIL: disputes column count mismatch'; END IF;
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='dispute_evidence') <> 13 THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence column count mismatch'; END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type WHERE typname = 'dispute_status'
-  ) THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_status enum missing';
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type WHERE typname = 'dispute_resolution'
-  ) THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_resolution enum missing';
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type WHERE typname = 'dispute_evidence_type'
-  ) THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence_type enum missing';
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_type WHERE typname = 'dispute_evidence_status'
-  ) THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence_status enum missing';
-  END IF;
-
-  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='disputes') <> 17 THEN
-    RAISE EXCEPTION 'T02-01 FAIL: disputes column count mismatch';
-  END IF;
-
-  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='dispute_evidence') <> 14 THEN
-    RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence column count mismatch';
-  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='dispute_status') THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_status enum missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='dispute_resolution') THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_resolution enum missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='dispute_evidence_type') THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence_type enum missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname='dispute_evidence_status') THEN RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence_status enum missing'; END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='disputes_case_id_fk') THEN RAISE EXCEPTION 'T02-01 FAIL: case FK missing'; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='disputes_release_request_id_fk') THEN RAISE EXCEPTION 'T02-01 FAIL: release request FK missing'; END IF;
@@ -67,13 +41,8 @@ SAVEPOINT t02_01_fk_guard;
 DO $$
 BEGIN
   BEGIN
-    INSERT INTO disputes (
-      id, case_id, release_request_id, milestone_id, escrow_account_id, quote_id,
-      client_id, lawyer_id, reason
-    ) VALUES (
-      't02-01-invalid-dispute', 'missing-case', 'missing-release', 'missing-milestone',
-      'missing-escrow', 'missing-quote', 'missing-client', 'missing-lawyer', 'synthetic FK guard'
-    );
+    INSERT INTO disputes (id, case_id, release_request_id, milestone_id, escrow_account_id, quote_id, client_id, lawyer_id, reason)
+    VALUES ('t02-01-invalid-dispute', 'missing-case', 'missing-release', 'missing-milestone', 'missing-escrow', 'missing-quote', 'missing-client', 'missing-lawyer', 'synthetic FK guard');
     RAISE EXCEPTION 'T02-01 FAIL: disputes accepted orphan references';
   EXCEPTION WHEN foreign_key_violation THEN
     RAISE NOTICE 'T02-01 dispute FK guard: PASS';
@@ -85,12 +54,8 @@ SAVEPOINT t02_01_evidence_fk_guard;
 DO $$
 BEGIN
   BEGIN
-    INSERT INTO dispute_evidence (
-      id, dispute_id, submitted_by, evidence_type, storage_key, content_hash
-    ) VALUES (
-      't02-01-invalid-evidence', 'missing-dispute', 'missing-user', 'document',
-      'synthetic/t02-01/invalid', 'synthetic-invalid-hash'
-    );
+    INSERT INTO dispute_evidence (id, dispute_id, submitted_by, evidence_type, storage_key, content_hash)
+    VALUES ('t02-01-invalid-evidence', 'missing-dispute', 'missing-user', 'document', 'synthetic/t02-01/invalid', 'synthetic-invalid-hash');
     RAISE EXCEPTION 'T02-01 FAIL: dispute_evidence accepted orphan references';
   EXCEPTION WHEN foreign_key_violation THEN
     RAISE NOTICE 'T02-01 evidence FK guard: PASS';
@@ -99,5 +64,4 @@ END $$;
 ROLLBACK TO SAVEPOINT t02_01_evidence_fk_guard;
 
 ROLLBACK;
-
 SELECT 'T02-01 — DATA FOUNDATION PASS' AS result;
