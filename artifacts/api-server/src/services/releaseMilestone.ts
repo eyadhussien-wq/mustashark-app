@@ -13,6 +13,7 @@ import {
   usersTable,
 } from "@workspace/db/schema";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
+import { isLawyerOperationallyEligible } from "./lawyerEligibility";
 import type { Request } from "express";
 
 export type ReleaseMilestoneResult =
@@ -59,6 +60,9 @@ export async function releaseMilestone(
     }
     if (["released", "cancelled", "disputed"].includes(row.milestone.status)) {
       return { error: "milestone_not_releasable" };
+    }
+    if (!(await isLawyerOperationallyEligible(row.request.lawyerId))) {
+      return { error: "forbidden" };
     }
     if (!row.wallet) return { error: "lawyer_wallet_not_found" };
 
@@ -119,30 +123,17 @@ export async function releaseMilestone(
         createdAt: now,
       })
       .returning();
-    if (!commissionTransaction) throw new Error("ESCROW_COMMISSION_TRANSACTION_FAILED");
+    if (!commissionTransaction) throw new Error("COMMISSION_TRANSACTION_FAILED");
 
-    const [updatedEscrow] = await tx
+    await tx
       .update(escrowAccountsTable)
-      .set({
-        releasedAmount: sql`${escrowAccountsTable.releasedAmount} + ${amount}`,
-        updatedAt: now,
-      })
-      .where(and(
-        eq(escrowAccountsTable.id, row.escrow.id),
-        sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.releasedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`,
-      ))
-      .returning();
-    if (!updatedEscrow) throw new Error("ESCROW_RELEASE_BALANCE_FAILED");
+      .set({ releasedAmount: sql`${escrowAccountsTable.releasedAmount} + ${amount}`, updatedAt: now })
+      .where(eq(escrowAccountsTable.id, row.escrow.id));
 
-    const [updatedMilestone] = await tx
+    await tx
       .update(representationMilestonesTable)
-      .set({ status: "released", completedAt: now, updatedAt: now })
-      .where(and(
-        eq(representationMilestonesTable.id, row.milestone.id),
-        sql`${representationMilestonesTable.status} NOT IN ('released', 'cancelled', 'disputed')`,
-      ))
-      .returning();
-    if (!updatedMilestone) throw new Error("MILESTONE_RELEASE_TRANSITION_FAILED");
+      .set({ status: "released", updatedAt: now })
+      .where(eq(representationMilestonesTable.id, row.milestone.id));
 
     const [walletTransaction] = await tx
       .insert(lawyerWalletTransactionsTable)
@@ -162,30 +153,21 @@ export async function releaseMilestone(
       .returning();
     if (!walletTransaction) throw new Error("LAWYER_WALLET_TRANSACTION_FAILED");
 
-    const [updatedWallet] = await tx
+    await tx
       .update(lawyerWalletsTable)
       .set({
         availableBalance: sql`${lawyerWalletsTable.availableBalance} + ${netAmount}`,
         updatedAt: now,
       })
-      .where(eq(lawyerWalletsTable.id, row.wallet.id))
-      .returning();
-    if (!updatedWallet) throw new Error("LAWYER_WALLET_UPDATE_FAILED");
-
-    const [updatedRequest] = await tx
-      .update(milestoneReleaseRequestsTable)
-      .set({ decidedAt: row.request.decidedAt ?? now, updatedAt: now })
-      .where(eq(milestoneReleaseRequestsTable.id, row.request.id))
-      .returning();
-    if (!updatedRequest) throw new Error("RELEASE_REQUEST_UPDATE_FAILED");
+      .where(eq(lawyerWalletsTable.id, row.wallet.id));
 
     const body = {
       ok: true as const,
-      milestone: updatedMilestone,
-      escrowAccount: updatedEscrow,
+      milestone: { ...row.milestone, status: "released" },
+      escrowAccount: { ...row.escrow, releasedAmount: String(Number(row.escrow.releasedAmount) + grossAmount) },
       releaseTransaction,
       commissionTransaction,
-      walletTransaction: { ...walletTransaction, wallet: updatedWallet, releaseRequest: updatedRequest },
+      walletTransaction,
     };
     await persistIdempotencyResponse(tx, req, clientId, 200, body);
     return { replay: false as const, status: 200 as const, body };
