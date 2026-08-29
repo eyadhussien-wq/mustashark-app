@@ -24,6 +24,7 @@
     "s02-05:api": "tsx ./src/s02-05-legal-representation-documents-api-behavioral-test.ts",
     "s02-06:financial-closure": "tsx ./src/s02-06-case-financial-closure-guard-test.ts",
     "s02-07:lawyer-eligibility": "tsx ./src/s02-07-lawyer-operational-eligibility-test.ts",
+    "t02-02:state-machine": "tsx ./src/t02-02-dispute-state-machine-test.ts",
     "test": "tsx ./src/s01-03-idempotency-test.ts && tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.20.0",
     "tsx": "catalog:"
   }
 }
