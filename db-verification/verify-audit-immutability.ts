@@ -35,7 +35,6 @@ async function main() {
     } catch (error) {
       assert.equal((error as { code?: string }).code, "42501");
       console.log("ADMIN_AUDIT_IMMUTABLE_UPDATE=42501");
-    } finally {
       await client.query("ROLLBACK TO SAVEPOINT s02_08_update");
     }
 
@@ -46,7 +45,6 @@ async function main() {
     } catch (error) {
       assert.equal((error as { code?: string }).code, "42501");
       console.log("ADMIN_AUDIT_IMMUTABLE_DELETE=42501");
-    } finally {
       await client.query("ROLLBACK TO SAVEPOINT s02_08_delete");
     }
 
