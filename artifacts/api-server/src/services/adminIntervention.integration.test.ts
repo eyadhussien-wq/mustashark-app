@@ -55,6 +55,18 @@ const createFixture = async () => {
   return { adminId, caseId };
 };
 
+const containsRollbackMarker = (error: unknown): boolean => {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && (typeof current === "object" || typeof current === "function") && !seen.has(current)) {
+    seen.add(current);
+    const candidate = current as { message?: unknown; code?: unknown; detail?: unknown; cause?: unknown };
+    if ([candidate.message, candidate.code, candidate.detail].some((value) => typeof value === "string" && value.includes("S02_08_FORCED_ROLLBACK"))) return true;
+    current = candidate.cause;
+  }
+  return typeof error === "string" && error.includes("S02_08_FORCED_ROLLBACK");
+};
+
 test("S02-08: failure after case update rolls back both case mutation and audit insert", async () => {
   const { adminId, caseId } = await createFixture();
   const escapedCaseId = caseId.replace(/'/g, "''");
@@ -62,7 +74,7 @@ test("S02-08: failure after case update rolls back both case mutation and audit 
   await pool.query(`CREATE TRIGGER s02_08_force_admin_audit_fk_failure AFTER UPDATE OF status ON cases FOR EACH ROW WHEN (NEW.id = '${escapedCaseId}') EXECUTE FUNCTION s02_08_force_admin_audit_fk_failure()`);
   const auditBefore = await db.select({ id: adminAuditLogsTable.id }).from(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, caseId));
   try {
-    await assert.rejects(() => transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" }), /S02_08_FORCED_ROLLBACK/);
+    await assert.rejects(() => transitionCase({ caseId, targetStatus: "completed", actorUserId: adminId, actorRole: "admin" }), containsRollbackMarker);
   } finally {
     await pool.query("DROP TRIGGER IF EXISTS s02_08_force_admin_audit_fk_failure ON cases");
     await pool.query("DROP FUNCTION IF EXISTS s02_08_force_admin_audit_fk_failure()");
