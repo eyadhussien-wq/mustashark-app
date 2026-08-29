@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "pg": "8.23.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
