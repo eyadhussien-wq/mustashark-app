@@ -6,11 +6,11 @@ import {
   caseMembershipsTable,
   casesTable,
   legalRepresentationDocumentsTable,
-  lawyerVerificationsTable,
   representationMilestonesTable,
   representationQuotesTable,
   usersTable,
 } from "@workspace/db/schema";
+import { isLawyerOperationallyEligible } from "./lawyerEligibility";
 
 const REQUIRED_DOCUMENT_TYPES = ["poa", "court_proof"] as const;
 type CaseStatus = typeof casesTable.$inferSelect["status"];
@@ -55,15 +55,9 @@ export const createCaseFromAgreement = async (input: {
       .limit(1);
     if (!lawyer) throw new Error("LAWYER_NOT_FOUND");
     if (lawyer.role !== "lawyer") throw new Error("LAWYER_ROLE_REQUIRED");
-    if (lawyer.accountStatus !== "active") throw new Error("LAWYER_NOT_ACTIVE");
 
-    const [verification] = await tx
-      .select({ status: lawyerVerificationsTable.status })
-      .from(lawyerVerificationsTable)
-      .where(eq(lawyerVerificationsTable.userId, lawyer.id))
-      .limit(1);
-    if (!verification || verification.status !== "approved") {
-      throw new Error("LAWYER_PROFESSIONAL_VERIFICATION_REQUIRED");
+    if (!(await isLawyerOperationallyEligible(lawyer.id))) {
+      throw new Error("LAWYER_OPERATIONAL_ELIGIBILITY_REQUIRED");
     }
 
     const [existingCase] = await tx
