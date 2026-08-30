@@ -32,7 +32,7 @@ const {
   financialLedgerTable,
   escrowTransactionsTable,
 } = await import("@workspace/db/schema");
-const { eq, and, sql, notInArray } = await import("drizzle-orm");
+const { eq, and } = await import("drizzle-orm");
 const { signToken } = await import("../lib/jwt");
 const { default: app } = await import("../app");
 
@@ -276,21 +276,12 @@ test("T1: confirming a fully paid payment proof must atomically post Ledger + Es
 after(async () => {
   // Cleanup financial children first, then payment proof, booking, and users.
   // This remains safe if the Red Phase fails before any financial record exists.
-  if (createdLedgerIds.length) {
-    await db
-      .delete(financialLedgerTable)
-      .where(notInArray(financialLedgerTable.id, []));
-    // The test DB is isolated; restrict the destructive cleanup to IDs created
-    // by this test rather than deleting unrelated financial history.
-    for (const id of createdLedgerIds) {
-      await db.delete(financialLedgerTable).where(eq(financialLedgerTable.id, id));
-    }
+  for (const id of createdLedgerIds) {
+    await db.delete(financialLedgerTable).where(eq(financialLedgerTable.id, id));
   }
-
   for (const id of createdEscrowTransactionIds) {
     await db.delete(escrowTransactionsTable).where(eq(escrowTransactionsTable.id, id));
   }
-
   for (const id of createdProofIds) {
     await db.delete(paymentProofsTable).where(eq(paymentProofsTable.id, id));
   }
