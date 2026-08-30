@@ -208,27 +208,12 @@ test("T1: confirming a fully paid payment proof must atomically post Ledger + Es
     assert.equal(bookingAfter?.paymentStatus, "paid");
     assert.equal(bookingAfter?.escrowStatus, "held");
 
-    // FINANCIAL CONTRACT: the same successful payment must create exactly one
-    // authoritative Ledger fact and one compatibility Escrow transaction.
-    const afterLedger = await db
-      .select()
-      .from(financialLedgerTable)
-      .where(eq(financialLedgerTable.bookingId, bookingId));
-    assert.equal(
-      afterLedger.length,
-      1,
-      `T1 RED: expected exactly one financial_ledger entry for booking ${bookingId}, found ${afterLedger.length}`,
-    );
-
-    const ledger = afterLedger[0]!;
-    createdLedgerIds.push(ledger.id);
-    assert.equal(ledger.entryType, "payment");
-    assert.equal(ledger.direction, "credit");
-    assert.equal(ledger.status, "posted");
-    assert.equal(ledger.amount, price);
-    assert.equal(ledger.currency, currency);
-    assert.equal(ledger.bookingId, bookingId);
-    assert.equal(ledger.actorId, lawyerId);
+    // Capture any financial rows created by this request BEFORE asserting them,
+    // so cleanup remains able to remove them even when the Red Phase fails.
+    const afterLedger = await db.select().from(financialLedgerTable).where(eq(financialLedgerTable.bookingId, bookingId));
+    for (const row of afterLedger) {
+      if (!createdLedgerIds.includes(row.id)) createdLedgerIds.push(row.id);
+    }
 
     const afterEscrow = await db
       .select()
@@ -240,10 +225,30 @@ test("T1: confirming a fully paid payment proof must atomically post Ledger + Es
           eq(escrowTransactionsTable.currency, currency),
         ),
       );
-
     const newEscrow = afterEscrow.filter(
       (row) => !beforeEscrow.some((before) => before.id === row.id),
     );
+    for (const row of newEscrow) {
+      if (!createdEscrowTransactionIds.includes(row.id)) createdEscrowTransactionIds.push(row.id);
+    }
+
+    // FINANCIAL CONTRACT: the same successful payment must create exactly one
+    // authoritative Ledger fact and one compatibility Escrow transaction.
+    assert.equal(
+      afterLedger.length,
+      1,
+      `T1 RED: expected exactly one financial_ledger entry for booking ${bookingId}, found ${afterLedger.length}`,
+    );
+
+    const ledger = afterLedger[0]!;
+    assert.equal(ledger.entryType, "payment");
+    assert.equal(ledger.direction, "credit");
+    assert.equal(ledger.status, "posted");
+    assert.equal(ledger.amount, price);
+    assert.equal(ledger.currency, currency);
+    assert.equal(ledger.bookingId, bookingId);
+    assert.equal(ledger.actorId, lawyerId);
+
     assert.equal(
       newEscrow.length,
       1,
@@ -251,7 +256,6 @@ test("T1: confirming a fully paid payment proof must atomically post Ledger + Es
     );
 
     const escrow = newEscrow[0]!;
-    createdEscrowTransactionIds.push(escrow.id);
     assert.equal(escrow.status, "posted");
     assert.equal(escrow.amount, price);
     assert.equal(escrow.currency, currency);
