@@ -106,8 +106,9 @@ const secondLawyer = await login(secondLawyerEmail, lawyerPassword, "lawyer");
 const secondHeaders = { authorization: `Bearer ${secondLawyer.jwt}` };
 
 const monday = nextMonday();
-const lawyerAWindow = { slots: [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 }] };
-const lawyerBWindow = { slots: [{ dayOfWeek: 1, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 }] };
+const schedulingTimezone = "Asia/Qatar";
+const lawyerAWindow = { schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 }] };
+const lawyerBWindow = { schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 }] };
 
 result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { ...lawyerHeaders, "content-type": "application/json" }, body: JSON.stringify(lawyerAWindow) });
 assert(result.status === 200, `primary lawyer fixture failed: ${JSON.stringify(result)}`);
@@ -117,7 +118,7 @@ assert(result.status === 200, `second lawyer fixture failed: ${JSON.stringify(re
 result = await request("/api/availability/lawyers/me", {
   method: "PUT",
   headers: { ...secondHeaders, "content-type": "application/json" },
-  body: JSON.stringify({ lawyerId, slots: [{ dayOfWeek: 1, startTime: "18:00", endTime: "19:00", slotDurationMinutes: 60 }] }),
+  body: JSON.stringify({ lawyerId, schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "18:00", endTime: "19:00", slotDurationMinutes: 60 }] }),
 });
 assert(result.status === 200, `second lawyer self-update failed: ${JSON.stringify(result)}`);
 result = await request(`/api/availability/lawyers/${lawyerId}`, { headers: secondHeaders });
@@ -131,14 +132,14 @@ psql(`INSERT INTO booking_time_blocks (id, booking_id, lawyer_id, scheduled_date
 
 result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: clientHeaders });
 assert(result.status === 200, `available-slots read failed: ${JSON.stringify(result)}`);
-assert(result.body?.timezone === "Asia/Qatar", `timezone contract changed: ${JSON.stringify(result.body)}`);
+assert(result.body?.timezone === schedulingTimezone, `timezone contract changed: ${JSON.stringify(result.body)}`);
 const generated = result.body?.slots;
 assert(Array.isArray(generated), "available-slots response is not an array");
 assert(!generated.some((slot: any) => slot.startTime === "10:00" && slot.endTime === "11:00"), "occupied booking block was returned as available");
 const nineToTen = generated.find((slot: any) => slot.startTime === "09:00" && slot.endTime === "10:00");
 assert(nineToTen, `expected unoccupied 09:00-10:00 slot was not returned: ${JSON.stringify(generated)}`);
-assert(nineToTen.startAtUtc === `${monday}T06:00:00.000Z`, `UTC conversion contract failed for Asia/Qatar: ${JSON.stringify(nineToTen)}`);
-assert(nineToTen.endAtUtc === `${monday}T07:00:00.000Z`, `UTC end conversion contract failed for Asia/Qatar: ${JSON.stringify(nineToTen)}`);
+assert(nineToTen.startAtUtc === `${monday}T06:00:00.000Z`, `UTC conversion contract failed for ${schedulingTimezone}: ${JSON.stringify(nineToTen)}`);
+assert(nineToTen.endAtUtc === `${monday}T07:00:00.000Z`, `UTC end conversion contract failed for ${schedulingTimezone}: ${JSON.stringify(nineToTen)}`);
 
 console.log("S01-03 CONTRACT + SECURITY HARDENING PASSED");
 console.log("- public availability DTO: PASS (no financial/internal fields)");
