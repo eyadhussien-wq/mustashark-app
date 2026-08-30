@@ -49,6 +49,7 @@ const originalAvailability: string[] = [];
 let lawyerId = "";
 let lawyerToken = "";
 let clientToken = "";
+let schedulingTimezone = "";
 const createdBookingIds: string[] = [];
 
 try {
@@ -56,10 +57,12 @@ try {
   lawyerId = lawyerLogin.userId || lawyerLogin.user?.id || "";
   lawyerToken = lawyerLogin.jwt;
   assert(lawyerId, "lawyer login did not return user id");
+  schedulingTimezone = psql(`SELECT scheduling_timezone FROM users WHERE id = ${sqlLiteral(lawyerId)} LIMIT 1;`);
+  assert(schedulingTimezone, "lawyer scheduling timezone is not configured");
   const clientLogin = await login(clientEmail, clientPassword, "client");
   clientToken = clientLogin.jwt;
 
-  let result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ slots: [] }) });
+  let result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${clientToken}` }, body: JSON.stringify({ schedulingTimezone, slots: [] }) });
   assert(result.status === 403, `client availability mutation was not rejected: ${JSON.stringify(result)}`);
   result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${clientToken}` } });
   assert(result.status === 403, `client availability deletion was not rejected: ${JSON.stringify(result)}`);
@@ -68,12 +71,12 @@ try {
   if (original) originalAvailability.push(...original.split("\n"));
 
   const monday = nextDateForDay(1);
-  const initial = { slots: [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 }, { dayOfWeek: 3, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 }] };
-  const modified = { slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 3, startTime: "15:00", endTime: "17:00", slotDurationMinutes: 60 }] };
+  const initial = { schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00", slotDurationMinutes: 60 }, { dayOfWeek: 3, startTime: "14:00", endTime: "16:00", slotDurationMinutes: 60 }] };
+  const modified = { schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 3, startTime: "15:00", endTime: "17:00", slotDurationMinutes: 60 }] };
 
-  result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 1, startTime: "11:00", endTime: "13:00", slotDurationMinutes: 60 }] }) });
+  result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "12:00", slotDurationMinutes: 60 }, { dayOfWeek: 1, startTime: "11:00", endTime: "13:00", slotDurationMinutes: 60 }] }) });
   assert(result.status === 400 && result.body?.error === "availability_slots_overlap", `availability overlap validation failed: ${JSON.stringify(result)}`);
-  result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "10:30", slotDurationMinutes: 60 }] }) });
+  result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ schedulingTimezone, slots: [{ dayOfWeek: 1, startTime: "10:00", endTime: "10:30", slotDurationMinutes: 60 }] }) });
   assert(result.status === 400 && result.body?.error === "availability_window_shorter_than_slot_duration", `availability duration validation failed: ${JSON.stringify(result)}`);
 
   result = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify(initial) });
@@ -89,7 +92,7 @@ try {
   assert(JSON.stringify(result.body.availability.map((x: any) => [x.dayOfWeek, x.startTime.slice(0, 5), x.endTime.slice(0, 5), x.slotDurationMinutes])) === JSON.stringify([[1, "10:00", "12:00", 60], [3, "15:00", "17:00", 60]]), "availability update/read values mismatch");
 
   result = await request(`/api/availability/lawyers/${lawyerId}/slots?date=${monday}`, { headers: { authorization: `Bearer ${lawyerToken}` } });
-  assert(result.status === 200 && result.body.timezone === "Asia/Qatar", `available slots read failed: ${JSON.stringify(result)}`);
+  assert(result.status === 200 && result.body.timezone === schedulingTimezone, `available slots read failed: ${JSON.stringify(result)}`);
   assert(JSON.stringify(result.body.slots.map((x: any) => [x.startTime, x.endTime])) === JSON.stringify([["10:00", "11:00"], ["11:00", "12:00"]]), "slot generation does not match persisted availability");
 
   result = await request("/api/availability/lawyers/me", { method: "DELETE", headers: { authorization: `Bearer ${lawyerToken}` } });
@@ -153,7 +156,7 @@ try {
   if (lawyerToken) {
     const restoreSlots = originalAvailability.map((row) => { const [, day, start, end, duration] = row.split("|"); return { dayOfWeek: Number(day), startTime: start.slice(0, 5), endTime: end.slice(0, 5), slotDurationMinutes: Number(duration) }; });
     try {
-      const restoreResult = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ slots: restoreSlots }) });
+      const restoreResult = await request("/api/availability/lawyers/me", { method: "PUT", headers: { "content-type": "application/json", authorization: `Bearer ${lawyerToken}` }, body: JSON.stringify({ schedulingTimezone, slots: restoreSlots }) });
       assert(restoreResult.status === 200, `availability cleanup restore failed: ${JSON.stringify(restoreResult)}`);
     } catch (error) {
       throw new Error(`availability cleanup restore request failed: ${error instanceof Error ? error.message : String(error)}`);
