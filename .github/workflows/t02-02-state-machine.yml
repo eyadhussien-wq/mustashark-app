@@ -56,6 +56,40 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
 
+      - name: Verify T02-02 database guards
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE
+            constraint_count integer;
+            trigger_count integer;
+          BEGIN
+            SELECT count(*) INTO constraint_count
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'disputes'
+              AND c.conname IN ('disputes_version_positive_ck', 'disputes_closed_outcome_ck');
+
+            IF constraint_count <> 2 THEN
+              RAISE EXCEPTION 'T02-02 DB CHECK guard verification failed: expected 2, got %', constraint_count;
+            END IF;
+
+            SELECT count(*) INTO trigger_count
+            FROM pg_trigger tr
+            JOIN pg_class t ON t.oid = tr.tgrelid
+            WHERE t.relname = 'disputes'
+              AND tr.tgname = 'disputes_state_machine_guard'
+              AND NOT tr.tgisinternal;
+
+            IF trigger_count <> 1 THEN
+              RAISE EXCEPTION 'T02-02 DB terminal/state-machine trigger verification failed: expected 1, got %', trigger_count;
+            END IF;
+          END
+          $$;
+          SQL
+
       - name: Typecheck workspace
         run: pnpm run typecheck
 
