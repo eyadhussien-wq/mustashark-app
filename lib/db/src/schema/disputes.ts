@@ -1,4 +1,5 @@
-import { index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { casesTable } from "./cases";
 import { usersTable } from "./users";
 
@@ -40,6 +41,11 @@ export const disputesTable = pgTable(
     caseIdx: index("disputes_case_id_idx").on(table.caseId),
     lifecycleStateIdx: index("disputes_lifecycle_state_idx").on(table.lifecycleState),
     openedByIdx: index("disputes_opened_by_idx").on(table.openedBy),
+    versionPositiveCk: check("disputes_version_positive_ck", sql`${table.version} > 0`),
+    closedOutcomeCk: check(
+      "disputes_closed_outcome_ck",
+      sql`(${table.lifecycleState} = 'closed' AND ${table.resolutionOutcome} IS NOT NULL) OR (${table.lifecycleState} <> 'closed' AND ${table.resolutionOutcome} IS NULL)`,
+    ),
   }),
 );
 
