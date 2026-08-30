@@ -58,10 +58,10 @@ await pool.query(
 function transition(disputeIdValue: string, from: string, to: string, expectedVersion: number, outcome: string | null = null) {
   return pool.query(
     `UPDATE disputes
-     SET lifecycle_state = $1,
+     SET lifecycle_state = $1::dispute_lifecycle_state,
          resolution_outcome = $2::dispute_resolution_outcome,
          version = version + 1,
-         closed_at = CASE WHEN $1 = 'closed' THEN now() ELSE NULL END,
+         closed_at = CASE WHEN $1::dispute_lifecycle_state = 'closed'::dispute_lifecycle_state THEN now() ELSE NULL END,
          updated_at = now()
      WHERE id = $3 AND lifecycle_state = $4 AND version = $5
      RETURNING lifecycle_state, version`,
