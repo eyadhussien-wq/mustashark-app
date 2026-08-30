@@ -22,7 +22,9 @@ assert.match(client, /scheduledTime:\s*selectedSlot\.startTime/);
 assert.match(client, /scheduledEndTime:\s*selectedSlot\.endTime/);
 
 // S01-04-B: the availability response is a non-financial scheduling contract.
-assert.match(availability, /return res\.json\(\{ ok: true, date, timezone: "Asia\/Qatar", slots \}\)/);
+// The timezone is lawyer-specific and must not be hard-coded in the contract test.
+assert.match(availability, /return res\.json\(\{ ok: true, date, timezone: lawyer\.schedulingTimezone, slots \}\)/);
+assert.match(availability, /schedulingTimezone: lawyer\.schedulingTimezone/);
 const slotsBlock = availability.slice(availability.indexOf("const slots:"), availability.indexOf("return res.json", availability.indexOf("const slots:")));
 for (const forbidden of ["price", "paymentStatus", "escrowStatus"]) {
   assert.equal(slotsBlock.includes(forbidden), false, `availability slot DTO must not expose ${forbidden}`);
