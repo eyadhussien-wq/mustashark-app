@@ -15,20 +15,19 @@ import {
   representationQuotesTable,
   usersTable,
 } from "@workspace/db";
-import { hashPassword } from "../../artifacts/api-server/src/lib/password";
 
 const baseUrl = process.env.GATE_2_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.GATE_2_CLIENT_EMAIL ?? "client@mustashark.com";
 const clientPassword = process.env.GATE_2_CLIENT_PASSWORD ?? "test1234";
 const lawyerEmail = process.env.GATE_2_LAWYER_EMAIL ?? "lawyer@mustashark.com";
 const lawyerPassword = process.env.GATE_2_LAWYER_PASSWORD ?? "test1234";
-const adminEmail = process.env.GATE_2_ADMIN_EMAIL ?? "gate2-admin@mustashark.test";
+const adminEmail = "admin@mustashark.com";
 const stressConcurrency = Number(process.env.GATE_2_STRESS_CONCURRENCY ?? "32");
 
 type JsonBody = Record<string, unknown>;
 type HttpResult = { status: number; body: JsonBody };
 type WalletFixture = { walletId: string; created: boolean; baseline: string; verificationCreated: boolean };
-type AdminFixture = { adminId: string; created: boolean };
+type AdminFixture = { adminId: string };
 
 function asJsonBody(value: unknown): JsonBody {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) return value as JsonBody;
@@ -66,36 +65,10 @@ async function provisionAdminReviewer(): Promise<AdminFixture> {
     .where(eq(usersTable.email, adminEmail))
     .limit(1);
 
-  if (existing) {
-    assert.equal(existing.role, "admin", `CI admin fixture email is not an admin: ${adminEmail}`);
-    assert.equal(existing.accountStatus, "active", "CI admin reviewer must be active");
-    return { adminId: existing.id, created: false };
-  }
-
-  const adminId = `gate2_admin_${crypto.randomUUID()}`;
-  const now = new Date();
-  await db.insert(usersTable).values({
-    id: adminId,
-    name: "Gate 2 CI Admin Reviewer",
-    email: adminEmail,
-    passwordHash: hashPassword(process.env.GATE_2_ADMIN_PASSWORD ?? "gate2-admin-test-password"),
-    role: "admin",
-    country: "qatar",
-    authProvider: "local",
-    accountStatus: "active",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  const [created] = await db
-    .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
-    .from(usersTable)
-    .where(eq(usersTable.id, adminId))
-    .limit(1);
-  assert(created && created.id === adminId, "CI admin reviewer fixture must be persisted");
-  assert.equal(created.role, "admin", "CI admin reviewer fixture must have admin role");
-  assert.equal(created.accountStatus, "active", "CI admin reviewer fixture must be active");
-  return { adminId, created: true };
+  assert(existing, `canonical admin account must exist in the isolated test database: ${adminEmail}`);
+  assert.equal(existing.role, "admin", `canonical admin account has invalid role: ${adminEmail}`);
+  assert.equal(existing.accountStatus, "active", `canonical admin account must be active: ${adminEmail}`);
+  return { adminId: existing.id };
 }
 
 async function ensureApprovedLawyerVerification(lawyerId: string, adminId: string): Promise<{ created: boolean }> {
@@ -255,7 +228,7 @@ assert(client && lawyer, "CI users must exist");
 const adminFixture = await provisionAdminReviewer();
 const walletFixture = await provisionApprovedLawyerWallet(lawyer.id, adminFixture.adminId);
 console.log(`- Professional approval + wallet fixture: ${walletFixture.created ? "approved and provisioned" : "approved/reused"}`);
-console.log(`- Admin reviewer fixture: ${adminFixture.created ? "provisioned" : "reused"}`);
+console.log(`- Admin reviewer fixture: canonical ${adminEmail} (${adminFixture.adminId})`);
 
 let fixtureA: Awaited<ReturnType<typeof fixture>> | undefined;
 let fixtureB: Awaited<ReturnType<typeof fixture>> | undefined;
@@ -361,9 +334,6 @@ try {
   }
   if (walletFixture.verificationCreated) {
     await db.delete(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, lawyer.id));
-  }
-  if (adminFixture.created) {
-    await db.delete(usersTable).where(eq(usersTable.id, adminFixture.adminId));
   }
   await pool.end();
 }
