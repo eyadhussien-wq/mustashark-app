@@ -146,7 +146,7 @@ export async function reviewLawyerVerification(req: Request, res: Response) {
       if (current.status !== "pending") throw new Error("VERIFICATION_NOT_PENDING");
 
       const [lawyer] = await tx
-        .select({ id: usersTable.id, role: usersTable.role })
+        .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
         .from(usersTable)
         .where(eq(usersTable.id, current.userId))
         .limit(1);
@@ -166,6 +166,13 @@ export async function reviewLawyerVerification(req: Request, res: Response) {
         .returning();
       if (!updated) throw new Error("VERIFICATION_CONFLICT");
 
+      if (parsed.data.status === "approved") {
+        await tx
+          .update(usersTable)
+          .set({ accountStatus: "active", statusReason: null, updatedAt: now })
+          .where(and(eq(usersTable.id, lawyer.id), eq(usersTable.role, "lawyer")));
+      }
+
       await tx.insert(adminAuditLogsTable).values({
         id: `audit_${randomUUID()}`,
         adminId,
@@ -173,8 +180,8 @@ export async function reviewLawyerVerification(req: Request, res: Response) {
         entityType: "lawyer_verification",
         entityId: updated.id,
         description: `Lawyer professional verification ${parsed.data.status}`,
-        beforeData: { status: current.status, reviewedBy: current.reviewedBy, reviewedAt: current.reviewedAt },
-        afterData: { status: updated.status, reviewedBy: updated.reviewedBy, reviewedAt: updated.reviewedAt },
+        beforeData: { status: current.status, reviewedBy: current.reviewedBy, reviewedAt: current.reviewedAt, accountStatus: lawyer.accountStatus },
+        afterData: { status: updated.status, reviewedBy: updated.reviewedBy, reviewedAt: updated.reviewedAt, accountStatus: parsed.data.status === "approved" ? "active" : lawyer.accountStatus },
       });
 
       return updated;
