@@ -11,13 +11,16 @@ export type AllocateMilestoneResult =
   | { replay: false; status: 200; body: { ok: true; milestone: unknown; escrowAccount: unknown; transaction: unknown } }
   | { error: "milestone_not_found" | "forbidden" | "milestone_not_allocatable" | "escrow_account_not_found" | "insufficient_unallocated_funds" };
 
+type AllocateMilestoneError = Extract<AllocateMilestoneResult, { error: string }>;
+type AllocateMilestoneErrorCode = AllocateMilestoneError["error"];
+
 /** Allocates the server-owned milestone amount atomically and idempotently. */
 export async function allocateMilestone(req: Request, milestoneId: string, clientId: string): Promise<AllocateMilestoneResult> {
   return db.transaction(async (tx) => {
     const idempotency = await claimIdempotency(tx, req, clientId);
     if (idempotency.replay) return idempotency;
 
-    const persistError = async (error: AllocateMilestoneResult["error"], status: number): Promise<AllocateMilestoneResult> => {
+    const persistError = async (error: AllocateMilestoneErrorCode, status: number): Promise<AllocateMilestoneResult> => {
       const body = { ok: false, error };
       await persistIdempotencyResponse(tx, req, clientId, status, body);
       return { error };
