@@ -8,6 +8,7 @@
     "seed-admin": "tsx ./src/seed-admin.ts",
     "t01-state-machine-test": "tsx ./t01-consultation-state-machine-test.ts",
     "test-concurrency": "tsx ./src/test-concurrency.ts",
+    "gate-2:financial-concurrency": "tsx ./src/gate-2-financial-concurrency-test.ts",
     "x1-booking-cancel-test": "tsx ./src/x1-booking-cancel-test.ts",
     "s01-02-availability-test": "tsx ./src/s01-02-availability-test.ts",
     "s01-03-idempotency-test": "tsx ./src/s01-03-idempotency-test.ts",
