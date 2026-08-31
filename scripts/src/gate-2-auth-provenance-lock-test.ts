@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   db,
   lawyerVerificationsTable,
@@ -14,6 +14,7 @@ const clientPassword = process.env.GATE_2_CLIENT_PASSWORD ?? "Gate2RealAuth!2026
 const lawyerEmail = process.env.GATE_2_LAWYER_EMAIL ?? "lawyer@mustashark.com";
 const lawyerPassword = process.env.GATE_2_LAWYER_PASSWORD ?? "Gate2RealAuth!2026";
 const adminEmail = "admin@mustashark.com";
+const adminPassword = process.env.GATE_2_ADMIN_PASSWORD ?? "test1234";
 
 assert.equal(
   process.env.MUSTASHAREK_DEMO_AUTH_ENABLED,
@@ -21,10 +22,13 @@ assert.equal(
   "Gate #2 financial auth provenance requires demo auth to be explicitly disabled",
 );
 
-async function request(path: string, body: unknown) {
+async function request(path: string, body: unknown, token?: string) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   const text = await response.text();
@@ -69,62 +73,37 @@ async function ensureLocalUser(input: {
   return user;
 }
 
-async function ensureApprovedLawyer(lawyerId: string, adminId: string) {
-  const [existing] = await db
-    .select({ id: lawyerVerificationsTable.id, status: lawyerVerificationsTable.status })
-    .from(lawyerVerificationsTable)
-    .where(eq(lawyerVerificationsTable.userId, lawyerId))
-    .limit(1);
-
-  if (existing?.status === "approved") return;
-
-  if (existing) {
-    assert.equal(existing.status, "pending", `unexpected verification state: ${existing.status}`);
-    await db
-      .update(lawyerVerificationsTable)
-      .set({
-        status: "approved",
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-        rejectionReason: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(lawyerVerificationsTable.id, existing.id),
-          eq(lawyerVerificationsTable.status, "pending"),
-        ),
-      );
-    return;
-  }
-
+async function createPendingLawyerVerification(lawyerId: string) {
   const verificationId = crypto.randomUUID();
   const now = new Date();
-  await db.insert(lawyerVerificationsTable).values({
-    id: verificationId,
-    userId: lawyerId,
-    licenseNumber: `GATE2-${lawyerId.slice(0, 8)}`,
-    barAssociation: "CI Professional Verification Fixture",
-    documentStorageKey: `gate2/verification/${verificationId}`,
-    status: "pending",
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db
-    .update(lawyerVerificationsTable)
-    .set({
-      status: "approved",
-      reviewedBy: adminId,
-      reviewedAt: new Date(),
-      rejectionReason: null,
-      updatedAt: new Date(),
+  const [created] = await db
+    .insert(lawyerVerificationsTable)
+    .values({
+      id: verificationId,
+      userId: lawyerId,
+      licenseNumber: `GATE2-${lawyerId.slice(0, 8)}`,
+      barAssociation: "CI Professional Verification Fixture",
+      documentStorageKey: `gate2/verification/${verificationId}`,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
     })
-    .where(
-      and(
-        eq(lawyerVerificationsTable.id, verificationId),
-        eq(lawyerVerificationsTable.status, "pending"),
-      ),
-    );
+    .returning({ id: lawyerVerificationsTable.id, status: lawyerVerificationsTable.status });
+
+  assert.equal(created?.status, "pending", "lawyer fixture must enter pending verification before admin review");
+  return created!.id;
+}
+
+async function login(email: string, password: string, role: "client" | "lawyer") {
+  const result = await request("/api/auth/local-auth", { email, password, role });
+  assert.equal(result.status, 200, `real ${role} login failed: ${JSON.stringify(result.body)}`);
+  assert.equal(typeof result.body.jwt, "string", `${role} login response missing jwt`);
+  assert.equal(
+    (result.body.user as Record<string, unknown> | undefined)?.authProvider,
+    "local",
+    `${role} login must report local auth provenance`,
+  );
+  return result.body.jwt as string;
 }
 
 const [admin] = await db
@@ -151,32 +130,57 @@ const lawyer = await ensureLocalUser({
   name: "Gate 2 Real Lawyer",
   phone: "+97452222222",
 });
+assert.equal(lawyer.accountStatus, "pending", "new lawyer fixture must start pending");
 
-await ensureApprovedLawyer(lawyer.id, admin.id);
+const verificationId = await createPendingLawyerVerification(lawyer.id);
 
-const clientLogin = await request("/api/auth/local-auth", {
-  email: clientEmail,
-  password: clientPassword,
-  role: "client",
+const adminLogin = await request("/api/admin/login", {
+  email: adminEmail,
+  password: adminPassword,
 });
-assert.equal(clientLogin.status, 200, `real client login failed: ${JSON.stringify(clientLogin.body)}`);
-assert.equal(clientLogin.body?.user && (clientLogin.body.user as Record<string, unknown>).id, client.id);
-assert.equal(clientLogin.body?.user && (clientLogin.body.user as Record<string, unknown>).authProvider, "local");
-assert.equal(typeof clientLogin.body?.jwt, "string");
+assert.equal(adminLogin.status, 200, `canonical admin login failed: ${JSON.stringify(adminLogin.body)}`);
+const adminToken = adminLogin.body.token;
+assert.equal(typeof adminToken, "string", "canonical admin login must return a token");
 
-const lawyerLogin = await request("/api/auth/local-auth", {
-  email: lawyerEmail,
-  password: lawyerPassword,
-  role: "lawyer",
-});
-assert.equal(lawyerLogin.status, 200, `real lawyer login failed after approval: ${JSON.stringify(lawyerLogin.body)}`);
-assert.equal(lawyerLogin.body?.user && (lawyerLogin.body.user as Record<string, unknown>).id, lawyer.id);
-assert.equal(lawyerLogin.body?.user && (lawyerLogin.body.user as Record<string, unknown>).authProvider, "local");
-assert.equal(typeof lawyerLogin.body?.jwt, "string");
+const review = await request(
+  `/api/admin/lawyer-verifications/${verificationId}/review`,
+  { status: "approved" },
+  adminToken as string,
+);
+assert.equal(review.status, 200, `canonical admin approval failed: ${JSON.stringify(review.body)}`);
+assert.equal(
+  (review.body.verification as Record<string, unknown> | undefined)?.status,
+  "approved",
+  "admin review endpoint must return approved verification",
+);
+
+const [approvedVerification] = await db
+  .select({ status: lawyerVerificationsTable.status, reviewedBy: lawyerVerificationsTable.reviewedBy })
+  .from(lawyerVerificationsTable)
+  .where(eq(lawyerVerificationsTable.id, verificationId))
+  .limit(1);
+assert.equal(approvedVerification?.status, "approved");
+assert.equal(approvedVerification?.reviewedBy, admin.id, "approval must be attributed to canonical admin");
+
+const [approvedLawyer] = await db
+  .select({ accountStatus: usersTable.accountStatus, statusReason: usersTable.statusReason })
+  .from(usersTable)
+  .where(eq(usersTable.id, lawyer.id))
+  .limit(1);
+assert.equal(approvedLawyer?.accountStatus, "active", "approved lawyer must become login-eligible");
+assert.equal(approvedLawyer?.statusReason, null, "approved lawyer must clear verification-required status reason");
+
+const clientToken = await login(clientEmail, clientPassword, "client");
+const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
+assert(clientToken && lawyerToken);
 
 console.log("Gate #2 Auth Provenance Lock PASSED");
 console.log("- MUSTASHAREK_DEMO_AUTH_ENABLED=false: PASS");
-console.log("- canonical admin reviewer: PASS");
+console.log("- canonical admin identity: PASS");
+console.log("- lawyer starts pending: PASS");
+console.log("- canonical admin API approval: PASS");
+console.log("- verification reviewer is canonical admin: PASS");
+console.log("- approved lawyer accountStatus=active: PASS");
 console.log("- client authenticated through DB-backed local auth: PASS");
 console.log("- lawyer authenticated only after professional approval: PASS");
 console.log("- JWT identities match DB users: PASS");
