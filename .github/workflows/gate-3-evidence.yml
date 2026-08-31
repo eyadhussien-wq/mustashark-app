@@ -50,6 +50,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/scripts seed-admin
+      - name: Provision isolated local-auth test identities
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node ./artifacts/api-server/scripts/seed-ci-test-users.mjs
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -76,10 +80,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           GATE_3_BASE_URL: http://127.0.0.1:8081
-          GATE_3_CLIENT_EMAIL: client@mustashark.com
-          GATE_3_CLIENT_PASSWORD: Gate2RealAuth!2026
-          GATE_3_LAWYER_EMAIL: lawyer@mustashark.com
-          GATE_3_LAWYER_PASSWORD: Gate2RealAuth!2026
           MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
         run: pnpm --filter @workspace/scripts exec tsx ./src/gate-3-evidence-tests.ts
       - name: Dump API logs on failure
