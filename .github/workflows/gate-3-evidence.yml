@@ -1,0 +1,91 @@
+name: "Gate #3 Evidence Validation"
+
+on:
+  push:
+    branches:
+      - security/gate-2-financial-guards
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  gate-3-evidence:
+    name: Gate #3 G3-D/G3-E/G3-G Evidence Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Provision isolated PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+      - name: Provision canonical admin identity
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/scripts seed-admin
+      - name: Build API server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/api-server build
+      - name: Start API server with demo auth disabled
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          NODE_ENV: production
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
+          PORT: "8081"
+          SESSION_SECRET: gate-3-evidence-validation-secret
+        run: |
+          pnpm --filter @workspace/api-server start > /tmp/gate-3-api.log 2>&1 &
+          echo $! > /tmp/gate-3-api.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/api/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/gate-3-api.log
+          exit 1
+      - name: Run Gate #3 evidence tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          GATE_3_BASE_URL: http://127.0.0.1:8081
+          GATE_3_CLIENT_EMAIL: client@mustashark.com
+          GATE_3_CLIENT_PASSWORD: Gate2RealAuth!2026
+          GATE_3_LAWYER_EMAIL: lawyer@mustashark.com
+          GATE_3_LAWYER_PASSWORD: Gate2RealAuth!2026
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
+        run: pnpm --filter @workspace/scripts exec tsx ./src/gate-3-evidence-tests.ts
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/gate-3-api.log
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/gate-3-api.pid ]; then kill "$(cat /tmp/gate-3-api.pid)" || true; fi
