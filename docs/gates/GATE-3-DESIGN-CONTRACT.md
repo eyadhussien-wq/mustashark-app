@@ -1,187 +1,186 @@
-# MUSTASHAREK — Gate #3 Design / Implementation Contract
+# MUSTASHAREK — Gate #3 Baseline Contract
 
-**Status:** `ARCHITECTURAL INVENTORY / CONTRACT DRAFT — NOT APPROVED`
+**Status:** `APPROVED BASELINE — READY FOR CONTROLLED IMPLEMENTATION`
 
 **Evidence baseline:** `06c704f4e046a41982a0c439fcb7765673ab0151`
 
 **Branch:** `security/gate-2-financial-guards`
 
-**Latest G3-F verification:** `2026-08-31 — Remote Git + live DB schema/state inspection`
+**Approval basis:** Remote-Git inventory + verified repository route/controller provenance + accepted administrative audit baseline.
 
-**Scope rule:** This document is governance/design documentation only. No Gate #3 implementation, migration, merge, or production change is authorized by this document.
+**Governance rule:** Gate #3 implementation is authorized only on an isolated branch and must remain fail-closed with respect to `main` and Production. No migration or production change is implied by this contract.
 
 ---
 
-## Part I — Verified Current State (Remote Git Evidence)
+## Part I — Approved Baseline Scope
 
-### 1. Roadmap authority
+Gate #3 MVP Baseline covers the following real security/control surfaces:
 
-`docs/roadmap/MASTER-ROADMAP.md` is the canonical architectural reference and explicitly requires repository validation before implementation. Its S02 sequence identifies:
+1. Administrative identity and RBAC.
+2. Human-in-the-loop lawyer verification and approval.
+3. Transactional administrative audit persistence.
+4. Existing authenticated dispute controls.
+5. Existing authenticated release/refund authorization boundaries.
+6. Administrative monitoring/intervention surfaces already present in the repository.
+7. Evidence-driven CI/security verification for the implemented baseline.
 
-- `S02.7` — Milestones & Escrow Release
-- `S02.7.5` — Active Case Final State & Notification Synchronization — closed / PR #80 merged
-- `S02.7.6` — Audit Trail / Activity Log — **TEMPORARILY BLOCKED** because there is no ready case-specific Backend Audit Trail API; mocks and architectural bypasses are prohibited
-- `S02.7.7` — Investor Attachments Sync — already satisfied by existing document APIs/UI
-- `S02.8` — Admin Monitoring & Intervention
+The baseline explicitly excludes any undocumented or mock-only capability.
 
-The roadmap also defines T02 (Dispute & Resolution) as a separate lifecycle containing architecture/data audit, state machine, financial transaction safety, Admin Dispute API, Admin Resolution Controls, security/authorization, dashboard monitoring, tests/idempotency, and final CI/security verification.
+---
 
-### 2. API route surface
+## G3-A — Admin Identity & RBAC
 
-`artifacts/api-server/src/routes/index.ts` registers the current API route modules, including:
+**Classification:** `VERIFIED BASELINE`
 
-- `admin`
-- `cases`
-- `fundMilestone`
-- `allocateMilestone`
-- `createMilestoneProof`
-- `createMilestoneReleaseRequest`
-- `disputeMilestoneRelease`
-- `releaseMilestone`
-- `refundMilestone`
+**Repository evidence:**
 
-This establishes that the milestone/release/dispute/refund surface is implemented as real API modules rather than a test-only abstraction.
+- `artifacts/api-server/src/middlewares/requireAdmin.ts`
+- `artifacts/api-server/src/routes/admin.ts`
 
-### 3. Administrative control and RBAC
+`requireAdmin` requires a Bearer token, verifies the JWT role, then performs a live database lookup against `usersTable` to confirm the authenticated identity still has the `admin` role. Failure is fail-closed. fileciteturn249file0L2-L6
 
-`artifacts/api-server/src/routes/admin.ts` exposes real administrative endpoints protected by `requireAdmin`, including:
+Administrative endpoints are protected by `requireAdmin`, including lawyer verification review, monitoring, deletion review, profile-change review, bank-account review and moderation. fileciteturn250file0L2-L6
 
-- `/admin/overview`
-- `/admin/lawyers`
-- `/admin/clients`
-- `/admin/consultations`
-- `/admin/offices`
+**Acceptance invariant:** administrative control cannot be exercised solely from an unverified/stale token claim.
+
+---
+
+## G3-B — Human-in-the-Loop Lawyer Approval
+
+**Classification:** `VERIFIED BASELINE`
+
+**Repository evidence:**
+
+- `artifacts/api-server/src/controllers/lawyerVerification.ts`
 - `/admin/lawyer-verifications/pending`
 - `/admin/lawyer-verifications/:id/review`
-- deletion-request review endpoints
-- profile-change review endpoints
-- bank-account review endpoints
-- text-review moderation endpoints
 
-`artifacts/api-server/src/middlewares/requireAdmin.ts` verifies the JWT role and then performs a live database lookup against `usersTable` to confirm the authenticated user is still an `admin`. Failure is fail-closed.
+The approval flow is transactional: pending verification is loaded, the lawyer is checked, the verification is updated with `reviewedBy`/`reviewedAt`, approval changes `accountStatus` to `active`, and an administrative audit record is written in the same transaction. fileciteturn251file0L2-L6
 
-### 4. Lawyer verification / administrative approval
-
-`artifacts/api-server/src/controllers/lawyerVerification.ts` contains the real approval lifecycle. The approval operation executes in a database transaction and:
-
-1. loads the pending verification;
-2. loads the corresponding lawyer;
-3. atomically changes verification status and records `reviewedBy` / `reviewedAt`;
-4. on approval, changes the lawyer `accountStatus` to `active`;
-5. writes an `admin_audit_logs` record with before/after state.
-
-This is relevant to Gate #3 because administrative intervention must be treated as a real security boundary, not a fixture-only shortcut.
-
-### 5. Administrative audit-log persistence
-
-`lib/db/src/schema/adminAuditLogs.ts` defines the real `admin_audit_logs` table with:
-
-- `adminId`
-- `action`
-- `entityType`
-- `entityId`
-- `description`
-- `beforeData`
-- `afterData`
-- `createdAt`
-
-The schema has a primary key on `id`, a foreign key from `admin_id` to `users.id`, and required fields for administrator attribution, action, entity type, and creation time.
-
-### 6. Dispute / release / refund API provenance
-
-Current real routes include:
-
-- `POST /representation-release-requests/:releaseRequestId/dispute` — authenticated client, role checked
-- `GET /representation-milestones/:milestoneId/release-request` — authenticated client, role checked
-- `POST /representation-release-requests/:releaseRequestId/release` — authenticated client, role checked
-- `POST /representation-milestones/:milestoneId/refund` — authenticated client, role checked
-
-These are real backend routes and must be evaluated as part of any Gate #3 financial-control boundary that includes dispute or release intervention.
+**Acceptance invariant:** a lawyer cannot enter the active production login path merely because a fixture or client claims approval; the authoritative DB state must be changed through the protected administrative lifecycle.
 
 ---
 
-## Part II — Gate #3 Contract Draft
+## G3-C — Administrative Audit Persistence
 
-The following matrix is **provisional**. Each item remains subject to evidence completion and architectural approval before implementation.
+**Classification:** `ACCEPTED BASELINE`
 
-| ID | Control / Contract Area | Verified Repository Basis | Current Classification | Implementation Authorization |
-|---|---|---|---|---|
-| G3-A | Admin identity & RBAC | `requireAdmin.ts`, `admin.ts` | **VERIFIED FOUNDATION** | Not yet authorized |
-| G3-B | Administrative lawyer approval | `lawyerVerification.ts` + verification route | **VERIFIED FOUNDATION** | Not yet authorized |
-| G3-C | Administrative audit persistence | `adminAuditLogs.ts` + approval transaction | **ACCEPTED BASELINE FOR ADMIN AUDIT** | Not yet authorized |
-| G3-D | Dispute controls | `disputeMilestoneRelease.ts` + T02 roadmap | **PARTIALLY VERIFIED** | Not yet authorized |
-| G3-E | Release / refund authorization boundary | release/refund route modules | **PARTIALLY VERIFIED** | Not yet authorized |
-| G3-F | Case-specific Audit Trail / Activity Log API | roadmap S02.7.6 + repository inventory + live DB verification | **DEFERRED FEATURE / NOT A G3 BLOCKER FOR ADMIN AUDIT BASELINE** | Case-specific API still requires a separate approved contract before implementation |
-| G3-G | Admin monitoring & intervention | `adminData.ts` + admin routes; S02.8 | **PARTIALLY VERIFIED** | Not yet authorized |
-| G3-H | Evidence, tests, CI, security verification | roadmap execution protocol + QA registry | **REQUIRES GATE DEFINITION** | Not yet authorized |
+**Baseline control:** `admin_audit_logs` is the authoritative MVP administrative audit persistence layer.
+
+It records administrator attribution, action, entity type/id, description, before/after data and creation time. The lawyer approval transaction writes this evidence atomically with the state transition. fileciteturn251file0L2-L6
+
+**Explicit limitation:** this does not constitute a case-specific Activity Log API.
 
 ---
 
-## G3-F — Final Classification Decision
+## G3-D — Dispute Controls
 
-### Evidence reviewed
+**Classification:** `BASELINE ROUTE VERIFIED / BEHAVIOR EVIDENCE REQUIRED`
 
-**Remote Git evidence:**
+**Repository evidence:** `disputeMilestoneRelease.ts` provides a real authenticated client-only controller and delegates to the real dispute service. It validates the release-request identifier and dispute reason and maps authorization/idempotency failures to explicit HTTP responses. fileciteturn253file0L2-L6
 
-- `lib/db/src/schema/adminAuditLogs.ts` defines a real persistent administrative audit table.
-- The table records `admin_id`, `action`, `entity_type`, `entity_id`, `description`, `before_data`, `after_data`, and `created_at`.
-- `admin_id` is constrained by a foreign key to `users.id`.
-- `artifacts/api-server/src/controllers/lawyerVerification.ts` writes the audit row inside the same database transaction that updates verification state and, for approval, changes the lawyer account status to `active`.
-- `artifacts/api-server/src/routes/admin.ts` exposes the real administrative review boundary and protects it with `requireAdmin`.
+**Implementation requirement:** the controlled implementation phase must add/verify assertions for ownership, state transition, idempotency and financial atomicity without weakening existing authorization.
 
-**Live database evidence:**
-
-- `public.admin_audit_logs` exists.
-- Actual columns match the repository schema: `id`, `admin_id`, `action`, `entity_type`, `entity_id`, `description`, `before_data`, `after_data`, `created_at`.
-- The live database confirms the `admin_id → users.id` foreign key and primary key on `id`.
-- The current table contains **0 rows** at inspection time. Therefore no historical production-like audit records are claimed as evidence by this inspection.
-
-### Decision
-
-`admin_audit_logs` is sufficient to establish an **Accepted Baseline for administrative audit persistence** for Gate #3 because it provides attributable, entity-scoped, action-scoped, timestamped state-change evidence and is written transactionally by the real administrative approval flow.
-
-However, this table **does not prove the existence of a case-specific Audit Trail / Activity Log API**. The roadmap's `S02.7.6` statement remains technically valid: the repository does not currently establish a ready dedicated case-level audit API, and no mock or undocumented endpoint may be substituted.
-
-Therefore:
-
-- **G3-F is not a blocker for the minimum administrative audit baseline.**
-- **S02.7.6 Case-specific Audit Trail API is classified as `DEFERRED FEATURE`.**
-- If a future Gate explicitly requires case-level activity-history retrieval, a separate API contract must be designed and approved before implementation.
-- No implementation is authorized merely by this classification.
+**No status upgrade to fully behavior-verified is permitted until those assertions produce CI evidence.**
 
 ---
 
-## Gate #3 Evidence Standard
+## G3-E — Release / Refund Authorization Boundary
 
-Every future Gate #3 acceptance claim must map to:
+**Classification:** `BASELINE ROUTE VERIFIED / BEHAVIOR EVIDENCE REQUIRED`
+
+Release and refund controllers require an authenticated client and enforce the client role before entering the underlying services. They explicitly map idempotency and financial transaction errors instead of swallowing them. fileciteturn254file0L2-L6 fileciteturn255file0L2-L6
+
+**Implementation requirement:** controlled tests must prove mutually exclusive financial outcomes under the relevant release/refund races and verify terminal idempotency replay.
+
+---
+
+## G3-F — Case-specific Audit Trail / Activity API
+
+**Classification:** `DEFERRED FEATURE — NOT A BASELINE BLOCKER`
+
+`admin_audit_logs` is accepted for administrative state-change auditing. A dedicated case-level Activity Log API is not part of this MVP baseline.
+
+No mock endpoint, undocumented route or architectural bypass may be introduced to simulate it.
+
+If case-specific activity retrieval becomes a release requirement, it must receive a separate approved contract before implementation.
+
+---
+
+## G3-G — Administrative Monitoring & Intervention
+
+**Classification:** `BASELINE SURFACE VERIFIED / BEHAVIOR EVIDENCE REQUIRED`
+
+The repository contains real protected administrative monitoring and intervention surfaces through `admin.ts` and related controllers. fileciteturn250file0L2-L6
+
+**Implementation requirement:** tests must demonstrate that administrative intervention respects RBAC, target ownership/state constraints, and audit attribution.
+
+---
+
+## G3-H — Evidence, CI & Security Verification
+
+**Classification:** `APPROVED CONTROL REQUIREMENT`
+
+Every Gate #3 acceptance claim must map to:
 
 `Gate ID → Requirement → Repository File(s) → Database Table(s) → API/Service → Authorization Boundary → Test → CI Run → Raw Evidence → Classification`
 
-A green CI result alone is not sufficient evidence for a security or financial control. The underlying assertion, route, state transition, and relevant database effect must be traceable.
+A green CI check alone is insufficient. The relevant assertion and resulting state transition must be traceable.
 
 ---
 
-## Explicit Non-Goals for This Document
+## Controlled Implementation Rules
 
-- No production modification.
-- No migration.
-- No financial-core implementation.
-- No modification of Gate #2 guards.
-- No PR merge.
-- No change to `main`.
-- No mock implementation to bypass an absent API.
-- No final declaration that Gate #3 is approved.
+The implementation authorization granted by this contract is bounded as follows:
+
+- **Allowed:** code/tests required to satisfy the approved baseline on the isolated Gate #3 branch.
+- **Allowed:** additional test fixtures that use the real production lifecycle and canonical identities.
+- **Allowed:** CI/test instrumentation required to produce raw evidence.
+- **Forbidden:** weakening or bypassing `requireAdmin`/authorization.
+- **Forbidden:** mocks that substitute for missing production APIs.
+- **Forbidden:** changes to Gate #2 financial guards unless a separate approved change is issued.
+- **Forbidden:** migrations unless separately reviewed and explicitly authorized.
+- **Forbidden:** changes to `main`.
+- **Forbidden:** Production changes.
+
+### Stop conditions
+
+Implementation must stop immediately and return to architectural review if:
+
+1. an existing API contract must be weakened to satisfy a test;
+2. a financial invariant requires bypassing an authorization boundary;
+3. a new schema/migration becomes necessary for the claimed baseline;
+4. a test can pass only through a mock or undocumented route;
+5. a concurrency test produces a non-deterministic financial outcome.
+
+---
+
+## Final MVP Baseline Decision
+
+Gate #3 is now an **approved contract baseline**, not a declaration that every behavioral assertion has already passed.
+
+The distinction is intentional:
+
+- **Contract readiness:** `APPROVED 🟢`
+- **Implementation:** `AUTHORIZED / CONTROLLED 🟢`
+- **Behavioral evidence:** `PENDING EXECUTION 🟡`
+- **Case-specific Audit API:** `DEFERRED ⚪`
+
+This prevents the common governance error of converting architectural approval into an unsupported claim of runtime success.
 
 ---
 
 ## Current Governance State
 
-- **Gate #2:** `PASSED & DOCUMENTED` per prior approved evidence package; this document does not alter Gate #2.
-- **Gate #3:** `UNDER ARCHITECTURAL INVENTORY / CONTRACT DRAFT`.
-- **G3-F:** `DEFERRED FEATURE / ACCEPTED ADMIN-AUDIT BASELINE`.
-- **PR #121:** remains `DRAFT`; merge remains prohibited.
-- **Main / Production:** untouched by this document.
+- **Gate #2:** `PASSED & DOCUMENTED 🟢`
+- **Gate #3 Contract:** `APPROVED BASELINE & READY FOR IMPLEMENTATION 🟢`
+- **Gate #3 Implementation:** `AUTHORIZED — ISOLATED / CONTROLLED 🟢`
+- **G3-D/G3-E/G3-G:** route/control provenance verified; behavioral evidence still required
+- **G3-F:** deferred, not a baseline blocker
+- **PR #121:** `DRAFT 🟡`
+- **main:** `UNTOUCHED 🔒`
+- **Production:** `UNTOUCHED 🔒`
 
-## Next Required Step
+## Next Execution Gate
 
-Complete the remaining Remote-Git inventory for G3-A, G3-B, G3-D, G3-E, G3-G and G3-H, then submit the complete Part II contract for explicit architectural approval before any Gate #3 implementation begins.
+Begin controlled implementation/testing on the isolated branch, starting with behavioral evidence for G3-D, G3-E and G3-G. Do not declare Gate #3 runtime-passed until the corresponding CI assertions and raw evidence are available.
