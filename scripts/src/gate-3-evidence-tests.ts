@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   db,
   pool,
@@ -109,7 +109,7 @@ async function cleanup(f: Awaited<ReturnType<typeof makeSettlementFixture>>) {
 }
 
 const clientToken = await login(clientEmail, clientPassword, "client");
-const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
+await login(lawyerEmail, lawyerPassword, "lawyer");
 const adminToken = await adminLogin();
 const [client] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, clientEmail)).limit(1);
 const [lawyer] = await db.select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.email, lawyerEmail)).limit(1);
@@ -123,20 +123,19 @@ assert.equal(admin.accountStatus, "active");
 console.log("=== G3-D Dispute Controls ===");
 const disputeFixture = await makeSettlementFixture(client.id, lawyer.id, "pending");
 try {
-  const disputeKey = `g3-dispute-${crypto.randomUUID()}`;
   const [dispute, duplicate] = await Promise.all([
-    request(`/representation-release-requests/${disputeFixture.requestId}/dispute`, "POST", clientToken, { disputeReason: "Gate 3 evidence dispute" }, disputeKey),
-    request(`/representation-release-requests/${disputeFixture.requestId}/dispute`, "POST", clientToken, { disputeReason: "Gate 3 evidence dispute" }, `g3-dispute-race-${crypto.randomUUID()}`),
+    request(`/api/representation-release-requests/${disputeFixture.requestId}/dispute`, "POST", clientToken, { disputeReason: "Gate 3 evidence dispute" }, `g3-dispute-${crypto.randomUUID()}`),
+    request(`/api/representation-release-requests/${disputeFixture.requestId}/dispute`, "POST", clientToken, { disputeReason: "Gate 3 evidence dispute" }, `g3-dispute-race-${crypto.randomUUID()}`),
   ]);
   assert.equal(dispute.status, 200, `dispute must transition pending request: ${JSON.stringify(dispute)}`);
-  assert.ok([200, 409].includes(duplicate.status), `duplicate dispute must be terminal/conflict: ${JSON.stringify(duplicate)}`);
+  assert.equal(duplicate.status, 409, `concurrent second dispute must conflict after terminal transition: ${JSON.stringify(duplicate)}`);
   const [requestRow] = await db.select({ status: milestoneReleaseRequestsTable.status }).from(milestoneReleaseRequestsTable).where(eq(milestoneReleaseRequestsTable.id, disputeFixture.requestId)).limit(1);
   const [proofRow] = await db.select({ status: milestoneProofsTable.status }).from(milestoneProofsTable).where(eq(milestoneProofsTable.id, disputeFixture.proofId)).limit(1);
   const [milestoneRow] = await db.select({ status: representationMilestonesTable.status }).from(representationMilestonesTable).where(eq(representationMilestonesTable.id, disputeFixture.milestoneId)).limit(1);
   assert.equal(requestRow?.status, "disputed");
   assert.equal(proofRow?.status, "disputed");
   assert.equal(milestoneRow?.status, "disputed");
-  console.log(`G3-D PASS | dispute transition=disputed | duplicate=${duplicate.status}`);
+  console.log(`G3-D PASS | winner=200 | duplicate=${duplicate.status} | request=${requestRow?.status} | proof=${proofRow?.status} | milestone=${milestoneRow?.status}`);
 } finally {
   await cleanup(disputeFixture);
 }
@@ -147,8 +146,8 @@ try {
   const [walletBefore] = await db.select({ id: lawyerWalletsTable.id, availableBalance: lawyerWalletsTable.availableBalance }).from(lawyerWalletsTable).where(eq(lawyerWalletsTable.lawyerId, lawyer.id)).limit(1);
   assert(walletBefore, "approved lawyer wallet must exist before G3-E settlement race");
   const [release, refund] = await Promise.all([
-    request(`/representation-release-requests/${settlementFixture.requestId}/release`, "POST", clientToken, {}, `g3-release-${crypto.randomUUID()}`),
-    request(`/representation-milestones/${settlementFixture.milestoneId}/refund`, "POST", clientToken, {}, `g3-refund-${crypto.randomUUID()}`),
+    request(`/api/representation-release-requests/${settlementFixture.requestId}/release`, "POST", clientToken, {}, `g3-release-${crypto.randomUUID()}`),
+    request(`/api/representation-milestones/${settlementFixture.milestoneId}/refund`, "POST", clientToken, {}, `g3-refund-${crypto.randomUUID()}`),
   ]);
   const winners = [release, refund].filter((r) => r.status === 200).length;
   const conflicts = [release, refund].filter((r) => r.status === 409).length;
@@ -157,30 +156,30 @@ try {
   const [finalMilestone] = await db.select({ status: representationMilestonesTable.status }).from(representationMilestonesTable).where(eq(representationMilestonesTable.id, settlementFixture.milestoneId)).limit(1);
   const [finalEscrow] = await db.select({ releasedAmount: escrowAccountsTable.releasedAmount, refundedAmount: escrowAccountsTable.refundedAmount }).from(escrowAccountsTable).where(eq(escrowAccountsTable.id, settlementFixture.escrowId)).limit(1);
   assert(finalMilestone && finalEscrow, "settlement state must remain observable");
-  assert.ok(["released", "cancelled"].includes(finalMilestone.status), `unexpected terminal milestone: ${finalMilestone.status}`);
+  assert.ok(["released", "cancelled"].includes(finalMilestone.status));
   assert.equal(Number(finalEscrow.releasedAmount) + Number(finalEscrow.refundedAmount), 50, "escrow settlement must conserve the milestone amount");
   const [walletAfter] = await db.select({ availableBalance: lawyerWalletsTable.availableBalance }).from(lawyerWalletsTable).where(eq(lawyerWalletsTable.id, walletBefore.id)).limit(1);
   assert(walletAfter, "lawyer wallet must remain present");
-  if (release.status === 409) assert.equal(walletAfter.availableBalance, walletBefore.availableBalance, "refund winner must not mutate lawyer wallet");
+  if (refund.status === 200) assert.equal(walletAfter.availableBalance, walletBefore.availableBalance, "refund winner must not mutate lawyer wallet");
   console.log(`G3-E PASS | release=${release.status} refund=${refund.status} | milestone=${finalMilestone.status} | escrow_settled=50.00`);
 } finally {
   await cleanup(settlementFixture);
 }
 
 console.log("=== G3-G Administrative Monitoring & Intervention ===");
-const overview = await request("/admin/overview", "GET", adminToken);
+const overview = await request("/api/admin/overview", "GET", adminToken);
 assert.equal(overview.status, 200, `admin overview must be accessible to canonical admin: ${JSON.stringify(overview)}`);
-const lawyers = await request("/admin/lawyers", "GET", adminToken);
+const lawyers = await request("/api/admin/lawyers", "GET", adminToken);
 assert.equal(lawyers.status, 200, `admin lawyer monitoring must be accessible: ${JSON.stringify(lawyers)}`);
-const forbiddenOverview = await request("/admin/overview", "GET", clientToken);
+const forbiddenOverview = await request("/api/admin/overview", "GET", clientToken);
 assert.equal(forbiddenOverview.status, 401, `client must be denied admin monitoring: ${JSON.stringify(forbiddenOverview)}`);
-const [auditBefore] = await db.select({ id: adminAuditLogsTable.id }).from(adminAuditLogsTable).where(eq(adminAuditLogsTable.adminId, admin.id)).limit(1);
+
 const verificationId = `gate3-audit-${crypto.randomUUID()}`;
 await db.insert(lawyerVerificationsTable).values({
   id: verificationId, userId: lawyer.id, licenseNumber: `G3-${verificationId.slice(-8)}`, barAssociation: "Gate 3 Evidence", documentStorageKey: `gate3/${verificationId}`, status: "pending", createdAt: new Date(), updatedAt: new Date(),
 });
 try {
-  const reviewed = await request(`/admin/lawyer-verifications/${verificationId}/review`, "PATCH", adminToken, { status: "approved" });
+  const reviewed = await request(`/api/admin/lawyer-verifications/${verificationId}/review`, "PATCH", adminToken, { status: "approved" });
   assert.equal(reviewed.status, 200, `canonical admin intervention must approve verification: ${JSON.stringify(reviewed)}`);
   const [audit] = await db.select({ adminId: adminAuditLogsTable.adminId, action: adminAuditLogsTable.action, entityId: adminAuditLogsTable.entityId }).from(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, verificationId)).limit(1);
   assert(audit, "admin approval must emit an audit record");
@@ -188,8 +187,7 @@ try {
   assert.equal(audit.action, "LAWYER_VERIFICATION_APPROVED");
   const [lawyerAfter] = await db.select({ accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.id, lawyer.id)).limit(1);
   assert.equal(lawyerAfter?.accountStatus, "active");
-  console.log(`G3-G PASS | overview=200 lawyers=200 client_denied=${forbiddenOverview.status} | audit_admin=${audit.adminId} | audit_action=${audit.action}`);
-  void auditBefore;
+  console.log(`G3-G PASS | overview=200 | lawyers=200 | client_denied=${forbiddenOverview.status} | audit_admin=${audit.adminId} | audit_action=${audit.action}`);
 } finally {
   await db.delete(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, verificationId));
   await db.delete(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.id, verificationId));
