@@ -46,6 +46,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
+      - name: Provision canonical admin identity in isolated DB
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/scripts seed-admin
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
