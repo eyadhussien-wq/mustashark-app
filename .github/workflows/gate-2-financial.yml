@@ -1,4 +1,4 @@
-name: Gate #2 Financial Validation
+name: "Gate #2 Financial Validation"
 
 on:
   push:
@@ -30,32 +30,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.26.1
           run_install: false
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Provision isolated PostgreSQL
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
-
       - name: Build API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/api-server build
-
       - name: Start API server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -66,7 +60,6 @@ jobs:
         run: |
           pnpm --filter @workspace/api-server start > /tmp/gate-2-api.log 2>&1 &
           echo $! > /tmp/gate-2-api.pid
-
       - name: Wait for API health
         run: |
           for i in $(seq 1 30); do
@@ -75,7 +68,6 @@ jobs:
           done
           cat /tmp/gate-2-api.log
           exit 1
-
       - name: Run Gate #2 financial integration and concurrency tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -85,11 +77,9 @@ jobs:
           GATE_2_LAWYER_EMAIL: lawyer@mustashark.com
           GATE_2_LAWYER_PASSWORD: test1234
         run: pnpm --filter @workspace/scripts gate-2:financial-concurrency
-
       - name: Dump API logs on failure
         if: failure()
         run: cat /tmp/gate-2-api.log
-
       - name: Stop API server
         if: always()
         run: |
