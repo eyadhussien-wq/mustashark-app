@@ -25,7 +25,7 @@ const stressConcurrency = Number(process.env.GATE_2_STRESS_CONCURRENCY ?? "32");
 
 type JsonBody = Record<string, unknown>;
 type HttpResult = { status: number; body: JsonBody };
-type WalletFixture = { walletId: string; created: boolean; baseline: string };
+type WalletFixture = { walletId: string; created: boolean; baseline: string; verificationCreated: boolean };
 
 function asJsonBody(value: unknown): JsonBody {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) return value as JsonBody;
@@ -35,7 +35,7 @@ function asJsonBody(value: unknown): JsonBody {
 async function post(path: string, body: unknown, token: string, key: string): Promise<HttpResult> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json`, "Idempotency-Key": key },
     body: JSON.stringify(body),
   });
   const text = await response.text();
@@ -56,7 +56,84 @@ async function login(email: string, password: string, role: "client" | "lawyer")
   return body.jwt as string;
 }
 
+async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ created: boolean }> {
+  const [lawyer] = await db
+    .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
+    .from(usersTable)
+    .where(eq(usersTable.id, lawyerId))
+    .limit(1);
+  assert(lawyer, "CI lawyer must exist");
+  assert.equal(lawyer.role, "lawyer", "CI financial fixture requires a lawyer account");
+  assert.equal(lawyer.accountStatus, "active", "CI financial fixture requires an active lawyer account");
+
+  const [existingVerification] = await db
+    .select({ id: lawyerVerificationsTable.id, status: lawyerVerificationsTable.status })
+    .from(lawyerVerificationsTable)
+    .where(eq(lawyerVerificationsTable.userId, lawyerId))
+    .limit(1);
+
+  if (existingVerification?.status === "approved") return { created: false };
+
+  if (existingVerification) {
+    assert.equal(existingVerification.status, "pending", `unexpected lawyer verification state: ${existingVerification.status}`);
+    const [admin] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.role, "admin"))
+      .limit(1);
+    assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
+    const reviewedAt = new Date();
+    await db.update(lawyerVerificationsTable).set({
+      status: "approved",
+      reviewedBy: admin.id,
+      reviewedAt,
+      rejectionReason: null,
+      updatedAt: reviewedAt,
+    }).where(eq(lawyerVerificationsTable.id, existingVerification.id));
+    return { created: false };
+  }
+
+  const [admin] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.role, "admin"))
+    .limit(1);
+  assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
+
+  const verificationId = crypto.randomUUID();
+  const now = new Date();
+  await db.insert(lawyerVerificationsTable).values({
+    id: verificationId,
+    userId: lawyerId,
+    licenseNumber: `GATE2-${lawyerId.slice(0, 8)}`,
+    barAssociation: "CI Professional Verification Fixture",
+    documentStorageKey: `gate2/verification/${verificationId}`,
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const reviewedAt = new Date();
+  await db.update(lawyerVerificationsTable).set({
+    status: "approved",
+    reviewedBy: admin.id,
+    reviewedAt,
+    rejectionReason: null,
+    updatedAt: reviewedAt,
+  }).where(and(eq(lawyerVerificationsTable.id, verificationId), eq(lawyerVerificationsTable.status, "pending")));
+
+  const [approved] = await db
+    .select({ status: lawyerVerificationsTable.status })
+    .from(lawyerVerificationsTable)
+    .where(eq(lawyerVerificationsTable.id, verificationId))
+    .limit(1);
+  assert.equal(approved?.status, "approved", "professional verification fixture must complete its approval transition");
+  return { created: true };
+}
+
 async function provisionApprovedLawyerWallet(lawyerId: string): Promise<WalletFixture> {
+  const verificationFixture = await ensureApprovedLawyerVerification(lawyerId);
+
   const [verification] = await db
     .select({ status: lawyerVerificationsTable.status })
     .from(lawyerVerificationsTable)
@@ -75,7 +152,7 @@ async function provisionApprovedLawyerWallet(lawyerId: string): Promise<WalletFi
     .where(eq(lawyerWalletsTable.lawyerId, lawyerId))
     .limit(1);
 
-  if (existing) return { walletId: existing.id, created: false, baseline: existing.availableBalance };
+  if (existing) return { walletId: existing.id, created: false, baseline: existing.availableBalance, verificationCreated: verificationFixture.created };
 
   const now = new Date();
   const walletId = crypto.randomUUID();
@@ -88,7 +165,7 @@ async function provisionApprovedLawyerWallet(lawyerId: string): Promise<WalletFi
     createdAt: now,
     updatedAt: now,
   });
-  return { walletId, created: true, baseline: "0.00" };
+  return { walletId, created: true, baseline: "0.00", verificationCreated: verificationFixture.created };
 }
 
 async function fixture(clientId: string, lawyerId: string, deposited: string) {
@@ -138,7 +215,7 @@ const [client] = await db.select().from(usersTable).where(eq(usersTable.email, c
 const [lawyer] = await db.select().from(usersTable).where(eq(usersTable.email, lawyerEmail)).limit(1);
 assert(client && lawyer, "CI users must exist");
 const walletFixture = await provisionApprovedLawyerWallet(lawyer.id);
-console.log(`- Approved lawyer wallet fixture: ${walletFixture.created ? "provisioned" : "reused"}`);
+console.log(`- Professional approval + wallet fixture: ${walletFixture.created ? "approved and provisioned" : "approved/reused"}`);
 
 let fixtureA: Awaited<ReturnType<typeof fixture>> | undefined;
 let fixtureB: Awaited<ReturnType<typeof fixture>> | undefined;
@@ -241,6 +318,9 @@ try {
   if (walletFixture.created) {
     await db.delete(lawyerWalletTransactionsTable).where(eq(lawyerWalletTransactionsTable.walletId, walletFixture.walletId));
     await db.delete(lawyerWalletsTable).where(eq(lawyerWalletsTable.id, walletFixture.walletId));
+  }
+  if (walletFixture.verificationCreated) {
+    await db.delete(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, lawyer.id));
   }
   await pool.end();
 }
