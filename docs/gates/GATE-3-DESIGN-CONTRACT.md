@@ -6,6 +6,8 @@
 
 **Branch:** `security/gate-2-financial-guards`
 
+**Latest G3-F verification:** `2026-08-31 — Remote Git + live DB schema/state inspection`
+
 **Scope rule:** This document is governance/design documentation only. No Gate #3 implementation, migration, merge, or production change is authorized by this document.
 
 ---
@@ -83,7 +85,7 @@ This is relevant to Gate #3 because administrative intervention must be treated 
 - `afterData`
 - `createdAt`
 
-The schema is therefore real persistence infrastructure. However, this does **not** by itself prove the existence of a case-specific Audit Trail / Activity Log API required by S02.7.6.
+The schema has a primary key on `id`, a foreign key from `admin_id` to `users.id`, and required fields for administrator attribution, action, entity type, and creation time.
 
 ### 6. Dispute / release / refund API provenance
 
@@ -106,27 +108,46 @@ The following matrix is **provisional**. Each item remains subject to evidence c
 |---|---|---|---|---|
 | G3-A | Admin identity & RBAC | `requireAdmin.ts`, `admin.ts` | **VERIFIED FOUNDATION** | Not yet authorized |
 | G3-B | Administrative lawyer approval | `lawyerVerification.ts` + verification route | **VERIFIED FOUNDATION** | Not yet authorized |
-| G3-C | Administrative audit persistence | `adminAuditLogs.ts` + approval transaction | **VERIFIED FOUNDATION / API GAP POSSIBLE** | Not yet authorized |
+| G3-C | Administrative audit persistence | `adminAuditLogs.ts` + approval transaction | **ACCEPTED BASELINE FOR ADMIN AUDIT** | Not yet authorized |
 | G3-D | Dispute controls | `disputeMilestoneRelease.ts` + T02 roadmap | **PARTIALLY VERIFIED** | Not yet authorized |
 | G3-E | Release / refund authorization boundary | release/refund route modules | **PARTIALLY VERIFIED** | Not yet authorized |
-| G3-F | Case-specific Audit Trail / Activity Log API | roadmap S02.7.6 says no ready backend API | **BLOCKED / REQUIRES INVENTORY** | Prohibited until resolved |
+| G3-F | Case-specific Audit Trail / Activity Log API | roadmap S02.7.6 + repository inventory + live DB verification | **DEFERRED FEATURE / NOT A G3 BLOCKER FOR ADMIN AUDIT BASELINE** | Case-specific API still requires a separate approved contract before implementation |
 | G3-G | Admin monitoring & intervention | `adminData.ts` + admin routes; S02.8 | **PARTIALLY VERIFIED** | Not yet authorized |
 | G3-H | Evidence, tests, CI, security verification | roadmap execution protocol + QA registry | **REQUIRES GATE DEFINITION** | Not yet authorized |
 
 ---
 
-## Audit Trail Decision Gate
+## G3-F — Final Classification Decision
 
-`S02.7.6` is **not automatically promoted to a Gate #3 blocker solely because the roadmap marks it temporarily blocked**.
+### Evidence reviewed
 
-Before any implementation decision, the following must be established from Remote Git evidence:
+**Remote Git evidence:**
 
-1. whether a case-specific Audit Trail backend API exists elsewhere under another name;
-2. whether existing `admin_audit_logs` persistence is intended to satisfy the required control or only administrative review history;
-3. whether Gate #3 requires case-level activity history as a security invariant;
-4. whether the missing API is a true blocker or a deferred feature outside the Gate #3 acceptance boundary.
+- `lib/db/src/schema/adminAuditLogs.ts` defines a real persistent administrative audit table.
+- The table records `admin_id`, `action`, `entity_type`, `entity_id`, `description`, `before_data`, `after_data`, and `created_at`.
+- `admin_id` is constrained by a foreign key to `users.id`.
+- `artifacts/api-server/src/controllers/lawyerVerification.ts` writes the audit row inside the same database transaction that updates verification state and, for approval, changes the lawyer account status to `active`.
+- `artifacts/api-server/src/routes/admin.ts` exposes the real administrative review boundary and protects it with `requireAdmin`.
 
-No mock endpoint or alternate undocumented path may be used to close this decision.
+**Live database evidence:**
+
+- `public.admin_audit_logs` exists.
+- Actual columns match the repository schema: `id`, `admin_id`, `action`, `entity_type`, `entity_id`, `description`, `before_data`, `after_data`, `created_at`.
+- The live database confirms the `admin_id → users.id` foreign key and primary key on `id`.
+- The current table contains **0 rows** at inspection time. Therefore no historical production-like audit records are claimed as evidence by this inspection.
+
+### Decision
+
+`admin_audit_logs` is sufficient to establish an **Accepted Baseline for administrative audit persistence** for Gate #3 because it provides attributable, entity-scoped, action-scoped, timestamped state-change evidence and is written transactionally by the real administrative approval flow.
+
+However, this table **does not prove the existence of a case-specific Audit Trail / Activity Log API**. The roadmap's `S02.7.6` statement remains technically valid: the repository does not currently establish a ready dedicated case-level audit API, and no mock or undocumented endpoint may be substituted.
+
+Therefore:
+
+- **G3-F is not a blocker for the minimum administrative audit baseline.**
+- **S02.7.6 Case-specific Audit Trail API is classified as `DEFERRED FEATURE`.**
+- If a future Gate explicitly requires case-level activity-history retrieval, a separate API contract must be designed and approved before implementation.
+- No implementation is authorized merely by this classification.
 
 ---
 
@@ -157,9 +178,10 @@ A green CI result alone is not sufficient evidence for a security or financial c
 
 - **Gate #2:** `PASSED & DOCUMENTED` per prior approved evidence package; this document does not alter Gate #2.
 - **Gate #3:** `UNDER ARCHITECTURAL INVENTORY / CONTRACT DRAFT`.
+- **G3-F:** `DEFERRED FEATURE / ACCEPTED ADMIN-AUDIT BASELINE`.
 - **PR #121:** remains `DRAFT`; merge remains prohibited.
 - **Main / Production:** untouched by this document.
 
 ## Next Required Step
 
-Complete the remaining Remote-Git inventory for each provisional G3 control, resolve the S02.7.6 Audit Trail classification, then submit Part II for explicit architectural approval before any Gate #3 implementation begins.
+Complete the remaining Remote-Git inventory for G3-A, G3-B, G3-D, G3-E, G3-G and G3-H, then submit the complete Part II contract for explicit architectural approval before any Gate #3 implementation begins.
