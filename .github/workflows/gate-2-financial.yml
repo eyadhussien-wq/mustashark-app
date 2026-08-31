@@ -15,7 +15,7 @@ jobs:
   financial-integration-concurrency:
     name: Financial Integration & Concurrency Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     services:
       postgres:
         image: postgres:16
@@ -54,11 +54,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/api-server build
-      - name: Start API server
+      - name: Start API server with demo auth disabled
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           NODE_ENV: production
-          MUSTASHAREK_DEMO_AUTH_ENABLED: "true"
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
           PORT: "8081"
           SESSION_SECRET: gate-2-financial-validation-secret
         run: |
@@ -72,14 +72,25 @@ jobs:
           done
           cat /tmp/gate-2-api.log
           exit 1
+      - name: Run Gate #2 Auth Provenance Lock
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+          GATE_2_BASE_URL: http://127.0.0.1:8081
+          GATE_2_CLIENT_EMAIL: client@mustashark.com
+          GATE_2_CLIENT_PASSWORD: Gate2RealAuth!2026
+          GATE_2_LAWYER_EMAIL: lawyer@mustashark.com
+          GATE_2_LAWYER_PASSWORD: Gate2RealAuth!2026
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
+        run: pnpm --filter @workspace/scripts exec tsx ./src/gate-2-auth-provenance-lock-test.ts
       - name: Run Gate #2 financial integration and concurrency tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
           GATE_2_BASE_URL: http://127.0.0.1:8081
           GATE_2_CLIENT_EMAIL: client@mustashark.com
-          GATE_2_CLIENT_PASSWORD: test1234
+          GATE_2_CLIENT_PASSWORD: Gate2RealAuth!2026
           GATE_2_LAWYER_EMAIL: lawyer@mustashark.com
-          GATE_2_LAWYER_PASSWORD: test1234
+          GATE_2_LAWYER_PASSWORD: Gate2RealAuth!2026
+          MUSTASHAREK_DEMO_AUTH_ENABLED: "false"
         run: pnpm --filter @workspace/scripts gate-2:financial-concurrency
       - name: Dump API logs on failure
         if: failure()
