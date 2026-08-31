@@ -15,7 +15,7 @@ import {
   representationQuotesTable,
   usersTable,
 } from "@workspace/db";
-import { hashPassword } from "../../../artifacts/api-server/src/lib/password";
+import { hashPassword } from "../../artifacts/api-server/src/lib/password";
 
 const baseUrl = process.env.GATE_2_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.GATE_2_CLIENT_EMAIL ?? "client@mustashark.com";
