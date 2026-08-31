@@ -17,16 +17,22 @@ export async function allocateMilestone(req: Request, milestoneId: string, clien
     const idempotency = await claimIdempotency(tx, req, clientId);
     if (idempotency.replay) return idempotency;
 
+    const persistError = async (error: AllocateMilestoneResult["error"], status: number): Promise<AllocateMilestoneResult> => {
+      const body = { ok: false, error };
+      await persistIdempotencyResponse(tx, req, clientId, status, body);
+      return { error };
+    };
+
     const locked = await lockEscrowForMilestone(tx, milestoneId);
-    if (!locked) return { error: "milestone_not_found" };
+    if (!locked) return persistError("milestone_not_found", 404);
 
     const [quote] = await tx.select().from(representationQuotesTable).where(eq(representationQuotesTable.id, locked.milestone.quoteId)).limit(1);
-    if (!quote) return { error: "milestone_not_found" };
-    if (quote.clientId !== clientId) return { error: "forbidden" };
-    if (locked.milestone.status !== "funded") return { error: "milestone_not_allocatable" };
+    if (!quote) return persistError("milestone_not_found", 404);
+    if (quote.clientId !== clientId) return persistError("forbidden", 403);
+    if (locked.milestone.status !== "funded") return persistError("milestone_not_allocatable", 409);
 
     const amount = locked.milestone.amount;
-    if (!(await assertEscrowCapacity(tx, locked.escrow.id, amount))) return { error: "insufficient_unallocated_funds" };
+    if (!(await assertEscrowCapacity(tx, locked.escrow.id, amount))) return persistError("insufficient_unallocated_funds", 409);
 
     const now = new Date();
     const [updatedEscrow] = await tx
