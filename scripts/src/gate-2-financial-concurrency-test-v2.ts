@@ -15,17 +15,20 @@ import {
   representationQuotesTable,
   usersTable,
 } from "@workspace/db";
+import { hashPassword } from "../../../artifacts/api-server/src/lib/password";
 
 const baseUrl = process.env.GATE_2_BASE_URL ?? "http://127.0.0.1:8081";
 const clientEmail = process.env.GATE_2_CLIENT_EMAIL ?? "client@mustashark.com";
 const clientPassword = process.env.GATE_2_CLIENT_PASSWORD ?? "test1234";
 const lawyerEmail = process.env.GATE_2_LAWYER_EMAIL ?? "lawyer@mustashark.com";
 const lawyerPassword = process.env.GATE_2_LAWYER_PASSWORD ?? "test1234";
+const adminEmail = process.env.GATE_2_ADMIN_EMAIL ?? "gate2-admin@mustashark.test";
 const stressConcurrency = Number(process.env.GATE_2_STRESS_CONCURRENCY ?? "32");
 
 type JsonBody = Record<string, unknown>;
 type HttpResult = { status: number; body: JsonBody };
 type WalletFixture = { walletId: string; created: boolean; baseline: string; verificationCreated: boolean };
+type AdminFixture = { adminId: string; created: boolean };
 
 function asJsonBody(value: unknown): JsonBody {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) return value as JsonBody;
@@ -56,7 +59,46 @@ async function login(email: string, password: string, role: "client" | "lawyer")
   return body.jwt as string;
 }
 
-async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ created: boolean }> {
+async function provisionAdminReviewer(): Promise<AdminFixture> {
+  const [existing] = await db
+    .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
+    .from(usersTable)
+    .where(eq(usersTable.email, adminEmail))
+    .limit(1);
+
+  if (existing) {
+    assert.equal(existing.role, "admin", `CI admin fixture email is not an admin: ${adminEmail}`);
+    assert.equal(existing.accountStatus, "active", "CI admin reviewer must be active");
+    return { adminId: existing.id, created: false };
+  }
+
+  const adminId = `gate2_admin_${crypto.randomUUID()}`;
+  const now = new Date();
+  await db.insert(usersTable).values({
+    id: adminId,
+    name: "Gate 2 CI Admin Reviewer",
+    email: adminEmail,
+    passwordHash: hashPassword(process.env.GATE_2_ADMIN_PASSWORD ?? "gate2-admin-test-password"),
+    role: "admin",
+    country: "qatar",
+    authProvider: "local",
+    accountStatus: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const [created] = await db
+    .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
+    .from(usersTable)
+    .where(eq(usersTable.id, adminId))
+    .limit(1);
+  assert(created && created.id === adminId, "CI admin reviewer fixture must be persisted");
+  assert.equal(created.role, "admin", "CI admin reviewer fixture must have admin role");
+  assert.equal(created.accountStatus, "active", "CI admin reviewer fixture must be active");
+  return { adminId, created: true };
+}
+
+async function ensureApprovedLawyerVerification(lawyerId: string, adminId: string): Promise<{ created: boolean }> {
   const [lawyer] = await db
     .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
     .from(usersTable)
@@ -66,6 +108,15 @@ async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ cre
   assert.equal(lawyer.role, "lawyer", "CI financial fixture requires a lawyer account");
   assert.equal(lawyer.accountStatus, "active", "CI financial fixture requires an active lawyer account");
 
+  const [admin] = await db
+    .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus })
+    .from(usersTable)
+    .where(eq(usersTable.id, adminId))
+    .limit(1);
+  assert(admin, "CI admin reviewer must exist");
+  assert.equal(admin.role, "admin", "CI verification reviewer must be an admin");
+  assert.equal(admin.accountStatus, "active", "CI verification reviewer must be active");
+
   const [existingVerification] = await db
     .select({ id: lawyerVerificationsTable.id, status: lawyerVerificationsTable.status })
     .from(lawyerVerificationsTable)
@@ -73,13 +124,6 @@ async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ cre
     .limit(1);
 
   if (existingVerification?.status === "approved") return { created: false };
-
-  const [admin] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.role, "admin"))
-    .limit(1);
-  assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
 
   if (existingVerification) {
     assert.equal(existingVerification.status, "pending", `unexpected lawyer verification state: ${existingVerification.status}`);
@@ -125,8 +169,8 @@ async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ cre
   return { created: true };
 }
 
-async function provisionApprovedLawyerWallet(lawyerId: string): Promise<WalletFixture> {
-  const verificationFixture = await ensureApprovedLawyerVerification(lawyerId);
+async function provisionApprovedLawyerWallet(lawyerId: string, adminId: string): Promise<WalletFixture> {
+  const verificationFixture = await ensureApprovedLawyerVerification(lawyerId, adminId);
 
   const [verification] = await db
     .select({ status: lawyerVerificationsTable.status })
@@ -208,8 +252,10 @@ const lawyerToken = await login(lawyerEmail, lawyerPassword, "lawyer");
 const [client] = await db.select().from(usersTable).where(eq(usersTable.email, clientEmail)).limit(1);
 const [lawyer] = await db.select().from(usersTable).where(eq(usersTable.email, lawyerEmail)).limit(1);
 assert(client && lawyer, "CI users must exist");
-const walletFixture = await provisionApprovedLawyerWallet(lawyer.id);
+const adminFixture = await provisionAdminReviewer();
+const walletFixture = await provisionApprovedLawyerWallet(lawyer.id, adminFixture.adminId);
 console.log(`- Professional approval + wallet fixture: ${walletFixture.created ? "approved and provisioned" : "approved/reused"}`);
+console.log(`- Admin reviewer fixture: ${adminFixture.created ? "provisioned" : "reused"}`);
 
 let fixtureA: Awaited<ReturnType<typeof fixture>> | undefined;
 let fixtureB: Awaited<ReturnType<typeof fixture>> | undefined;
@@ -315,6 +361,9 @@ try {
   }
   if (walletFixture.verificationCreated) {
     await db.delete(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, lawyer.id));
+  }
+  if (adminFixture.created) {
+    await db.delete(usersTable).where(eq(usersTable.id, adminFixture.adminId));
   }
   await pool.end();
 }
