@@ -245,6 +245,7 @@ export async function localAuth(req: Request, res: Response) {
         specialization: existing.specialization,
         bio: existing.bio,
         hourlyRate: existing.hourlyRate ? parseFloat(existing.hourlyRate) : null,
+        authProvider: existing.authProvider,
       } });
     }
 
@@ -302,6 +303,7 @@ export async function localAuth(req: Request, res: Response) {
       specialization: specialization ?? null,
       bio: bio ?? null,
       hourlyRate: hourlyRate ?? null,
+      authProvider: "local",
     } });
   } catch (err) {
     req.log.error(err, "localAuth failed");
