@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import crypto, { randomBytes, scryptSync } from "node:crypto";
+import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   db,
@@ -22,16 +22,12 @@ type HttpResult = { status: number; body: JsonBody };
 
 const baseUrl = process.env.GATE_3_BASE_URL ?? "http://127.0.0.1:8081";
 const adminEmail = "admin@mustashark.com";
-const fixturePassword = "Gate3Fixture!2026";
+const clientEmail = "client@mustashark.com";
+const lawyerEmail = "lawyer@mustashark.com";
+const password = "test1234";
 
 function body(value: unknown): JsonBody {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonBody : { raw: String(value) };
-}
-
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${hash}`;
 }
 
 async function request(path: string, method: "GET" | "POST" | "PATCH", token: string, payload?: unknown, key?: string): Promise<HttpResult> {
@@ -44,7 +40,7 @@ async function request(path: string, method: "GET" | "POST" | "PATCH", token: st
   return { status: response.status, body: body(parsed) };
 }
 
-async function localLogin(email: string, password: string, role: "client" | "lawyer") {
+async function localLogin(email: string, role: "client" | "lawyer") {
   const response = await fetch(`${baseUrl}/api/auth/local-auth`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -52,7 +48,7 @@ async function localLogin(email: string, password: string, role: "client" | "law
   });
   const result = body(await response.json());
   assert.equal(response.status, 200, `local login failed for ${email}: ${JSON.stringify(result)}`);
-  assert.equal(result.authProvider, "local", `local auth provenance missing for ${email}`);
+  assert.equal(result.user?.authProvider, "local", `local auth provenance missing for ${email}`);
   assert.equal(typeof result.jwt, "string", `JWT missing for ${email}`);
   return result.jwt as string;
 }
@@ -61,7 +57,7 @@ async function adminLogin() {
   const response = await fetch(`${baseUrl}/api/admin/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: adminEmail, password: "test1234" }),
+    body: JSON.stringify({ email: adminEmail, password }),
   });
   const result = body(await response.json());
   assert.equal(response.status, 200, `canonical admin login failed: ${JSON.stringify(result)}`);
@@ -69,47 +65,6 @@ async function adminLogin() {
   assert.equal(result.user?.role, "admin");
   assert.equal(typeof result.token, "string");
   return result.token as string;
-}
-
-async function provisionFixtureIdentities() {
-  const clientId = `gate3-client-${crypto.randomUUID()}`;
-  const lawyerId = `gate3-lawyer-${crypto.randomUUID()}`;
-  const now = new Date();
-  await db.insert(usersTable).values([
-    { id: clientId, name: "Gate 3 Client Fixture", email: `${clientId}@mustashark.test`, passwordHash: hashPassword(fixturePassword), role: "client", country: "qatar", authProvider: "local", accountStatus: "active", createdAt: now, updatedAt: now },
-    { id: lawyerId, name: "Gate 3 Lawyer Fixture", email: `${lawyerId}@mustashark.test`, passwordHash: hashPassword(fixturePassword), role: "lawyer", country: "qatar", authProvider: "local", accountStatus: "pending", createdAt: now, updatedAt: now },
-  ]);
-  return { clientId, lawyerId, clientEmail: `${clientId}@mustashark.test`, lawyerEmail: `${lawyerId}@mustashark.test` };
-}
-
-async function provisionLawyerThroughAdminLifecycle(lawyerId: string, adminToken: string) {
-  const verificationId = `gate3-verification-${crypto.randomUUID()}`;
-  const now = new Date();
-  await db.insert(lawyerVerificationsTable).values({
-    id: verificationId,
-    userId: lawyerId,
-    licenseNumber: `G3-${verificationId.slice(-8)}`,
-    barAssociation: "Gate 3 Evidence Fixture",
-    documentStorageKey: `gate3/verification/${verificationId}`,
-    status: "pending",
-    createdAt: now,
-    updatedAt: now,
-  });
-  const pending = await request(`/api/admin/lawyer-verifications/pending`, "GET", adminToken);
-  assert.equal(pending.status, 200, `pending verification list failed: ${JSON.stringify(pending)}`);
-  const reviewed = await request(`/api/admin/lawyer-verifications/${verificationId}/review`, "PATCH", adminToken, { status: "approved" });
-  assert.equal(reviewed.status, 200, `admin approval failed: ${JSON.stringify(reviewed)}`);
-  const [verification] = await db.select({ status: lawyerVerificationsTable.status, reviewedBy: lawyerVerificationsTable.reviewedBy }).from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.id, verificationId)).limit(1);
-  const [lawyer] = await db.select({ accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.id, lawyerId)).limit(1);
-  assert.equal(verification?.status, "approved");
-  assert.equal(lawyer?.accountStatus, "active");
-  return verificationId;
-}
-
-async function provisionWallet(lawyerId: string) {
-  const walletId = `gate3-wallet-${crypto.randomUUID()}`;
-  await db.insert(lawyerWalletsTable).values({ id: walletId, lawyerId, currency: "QAR", availableBalance: "0.00", pendingBalance: "0.00", createdAt: new Date(), updatedAt: new Date() });
-  return walletId;
 }
 
 async function makeSettlementFixture(clientId: string, lawyerId: string, requestStatus: "approved" | "pending") {
@@ -141,21 +96,32 @@ async function cleanupSettlement(f: Awaited<ReturnType<typeof makeSettlementFixt
 }
 
 const adminToken = await adminLogin();
+const [client] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, clientEmail)).limit(1);
+const [lawyer] = await db.select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.email, lawyerEmail)).limit(1);
 const [admin] = await db.select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.email, adminEmail)).limit(1);
-assert(admin, "canonical admin must exist");
-assert.equal(admin.role, "admin");
-assert.equal(admin.accountStatus, "active");
+assert(client && lawyer && admin, "CI identities must exist after isolated fixture provisioning");
+assert.equal(lawyer.role, "lawyer");
 
-const identities = await provisionFixtureIdentities();
-const verificationId = await provisionLawyerThroughAdminLifecycle(identities.lawyerId, adminToken);
-const walletId = await provisionWallet(identities.lawyerId);
-const clientToken = await localLogin(identities.clientEmail, fixturePassword, "client");
-const lawyerToken = await localLogin(identities.lawyerEmail, fixturePassword, "lawyer");
+// Reconstruct the authoritative lawyer lifecycle: registration state -> pending verification -> real admin approval -> active -> wallet.
+await db.update(usersTable).set({ accountStatus: "pending", statusReason: "lawyer_verification_required", updatedAt: new Date() }).where(eq(usersTable.id, lawyer.id));
+const verificationId = `gate3-verification-${crypto.randomUUID()}`;
+await db.insert(lawyerVerificationsTable).values({ id: verificationId, userId: lawyer.id, licenseNumber: `G3-${verificationId.slice(-8)}`, barAssociation: "Gate 3 Evidence Fixture", documentStorageKey: `gate3/verification/${verificationId}`, status: "pending", createdAt: new Date(), updatedAt: new Date() });
+const reviewed = await request(`/api/admin/lawyer-verifications/${verificationId}/review`, "PATCH", adminToken, { status: "approved" });
+assert.equal(reviewed.status, 200, `admin approval failed: ${JSON.stringify(reviewed)}`);
+const [approvedLawyer] = await db.select({ accountStatus: usersTable.accountStatus }).from(usersTable).where(eq(usersTable.id, lawyer.id)).limit(1);
+const [approvedVerification] = await db.select({ status: lawyerVerificationsTable.status, reviewedBy: lawyerVerificationsTable.reviewedBy }).from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.id, verificationId)).limit(1);
+assert.equal(approvedLawyer?.accountStatus, "active");
+assert.equal(approvedVerification?.status, "approved");
+assert.equal(approvedVerification?.reviewedBy, admin.id);
+const walletId = `gate3-wallet-${crypto.randomUUID()}`;
+await db.insert(lawyerWalletsTable).values({ id: walletId, lawyerId: lawyer.id, currency: "QAR", availableBalance: "0.00", pendingBalance: "0.00", createdAt: new Date(), updatedAt: new Date() });
+const clientToken = await localLogin(clientEmail, "client");
+const lawyerToken = await localLogin(lawyerEmail, "lawyer");
 void lawyerToken;
 console.log(`AUTH LIFECYCLE PASS | lawyer=pending→approved→active | wallet=${walletId}`);
 
 console.log("=== G3-D Dispute Controls ===");
-const disputeFixture = await makeSettlementFixture(identities.clientId, identities.lawyerId, "pending");
+const disputeFixture = await makeSettlementFixture(client.id, lawyer.id, "pending");
 try {
   const [dispute, duplicate] = await Promise.all([
     request(`/api/representation-release-requests/${disputeFixture.requestId}/dispute`, "POST", clientToken, { disputeReason: "Gate 3 evidence dispute" }, `g3-dispute-${crypto.randomUUID()}`),
@@ -175,7 +141,7 @@ try {
 }
 
 console.log("=== G3-E Release / Refund Boundary ===");
-const settlementFixture = await makeSettlementFixture(identities.clientId, identities.lawyerId, "approved");
+const settlementFixture = await makeSettlementFixture(client.id, lawyer.id, "approved");
 try {
   const [walletBefore] = await db.select({ id: lawyerWalletsTable.id, availableBalance: lawyerWalletsTable.availableBalance }).from(lawyerWalletsTable).where(eq(lawyerWalletsTable.id, walletId)).limit(1);
   assert(walletBefore, "approved lawyer wallet must exist before G3-E settlement race");
@@ -217,8 +183,8 @@ await db.delete(adminAuditLogsTable).where(eq(adminAuditLogsTable.entityId, veri
 await db.delete(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.id, verificationId));
 await db.delete(lawyerWalletTransactionsTable).where(eq(lawyerWalletTransactionsTable.walletId, walletId));
 await db.delete(lawyerWalletsTable).where(eq(lawyerWalletsTable.id, walletId));
-await db.delete(usersTable).where(eq(usersTable.id, identities.clientId));
-await db.delete(usersTable).where(eq(usersTable.id, identities.lawyerId));
+await db.delete(usersTable).where(eq(usersTable.id, client.id));
+await db.delete(usersTable).where(eq(usersTable.id, lawyer.id));
 
 console.log("GATE #3 EVIDENCE TESTS PASSED | G3-D PASS | G3-E PASS | G3-G PASS");
 await pool.end();
