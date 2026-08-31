@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
-import { escrowAccountsTable, escrowTransactionsTable, representationQuotesTable } from "@workspace/db/schema";
+import { escrowAccountsTable, escrowTransactionsTable, representationMilestonesTable, representationQuotesTable } from "@workspace/db/schema";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 import { assertMilestoneSettlementCapacity, lockEscrowForMilestone } from "../lib/financialGuards";
 import type { Request } from "express";
@@ -40,9 +40,8 @@ export async function refundMilestone(req: Request, milestoneId: string, clientI
     )).returning();
     if (!updatedEscrow) throw new Error("ESCROW_REFUND_BALANCE_FAILED");
 
-    const [updatedMilestone] = await tx.update((await import("@workspace/db/schema")).representationMilestonesTable).set({ status: "cancelled", updatedAt: now }).where(and(
-      eq((await import("@workspace/db/schema")).representationMilestonesTable.id, locked.milestone.id),
-      sql`${(await import("@workspace/db/schema")).representationMilestonesTable.status} NOT IN ('released','cancelled','disputed')`,
+    const [updatedMilestone] = await tx.update(representationMilestonesTable).set({ status: "cancelled", updatedAt: now }).where(and(
+      eq(representationMilestonesTable.id, locked.milestone.id), sql`${representationMilestonesTable.status} NOT IN ('released','cancelled','disputed')`,
     )).returning();
     if (!updatedMilestone) throw new Error("MILESTONE_REFUND_TRANSITION_FAILED");
 
