@@ -22,9 +22,9 @@ assert.equal(
   "Gate #2 financial auth provenance requires demo auth to be explicitly disabled",
 );
 
-async function request(path: string, body: unknown, token?: string) {
+async function request(path: string, body: unknown, token?: string, method = "POST") {
   const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
+    method,
     headers: {
       "content-type": "application/json",
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -142,10 +142,12 @@ assert.equal(adminLogin.status, 200, `canonical admin login failed: ${JSON.strin
 const adminToken = adminLogin.body.token;
 assert.equal(typeof adminToken, "string", "canonical admin login must return a token");
 
+// Route provenance is PATCH /api/admin/lawyer-verifications/:id/review in the API.
 const review = await request(
   `/api/admin/lawyer-verifications/${verificationId}/review`,
   { status: "approved" },
   adminToken as string,
+  "PATCH",
 );
 assert.equal(review.status, 200, `canonical admin approval failed: ${JSON.stringify(review.body)}`);
 assert.equal(
