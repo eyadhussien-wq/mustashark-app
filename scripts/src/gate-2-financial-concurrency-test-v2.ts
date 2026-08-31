@@ -35,7 +35,7 @@ function asJsonBody(value: unknown): JsonBody {
 async function post(path: string, body: unknown, token: string, key: string): Promise<HttpResult> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json`, "Idempotency-Key": key },
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "Idempotency-Key": key },
     body: JSON.stringify(body),
   });
   const text = await response.text();
@@ -74,14 +74,15 @@ async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ cre
 
   if (existingVerification?.status === "approved") return { created: false };
 
+  const [admin] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.role, "admin"))
+    .limit(1);
+  assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
+
   if (existingVerification) {
     assert.equal(existingVerification.status, "pending", `unexpected lawyer verification state: ${existingVerification.status}`);
-    const [admin] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.role, "admin"))
-      .limit(1);
-    assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
     const reviewedAt = new Date();
     await db.update(lawyerVerificationsTable).set({
       status: "approved",
@@ -89,16 +90,9 @@ async function ensureApprovedLawyerVerification(lawyerId: string): Promise<{ cre
       reviewedAt,
       rejectionReason: null,
       updatedAt: reviewedAt,
-    }).where(eq(lawyerVerificationsTable.id, existingVerification.id));
+    }).where(and(eq(lawyerVerificationsTable.id, existingVerification.id), eq(lawyerVerificationsTable.status, "pending")));
     return { created: false };
   }
-
-  const [admin] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.role, "admin"))
-    .limit(1);
-  assert(admin, "CI fixture requires an admin reviewer to complete professional approval");
 
   const verificationId = crypto.randomUUID();
   const now = new Date();
