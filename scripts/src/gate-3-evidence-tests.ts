@@ -19,6 +19,14 @@ import {
 
 type JsonBody = Record<string, unknown>;
 type HttpResult = { status: number; body: JsonBody };
+type LocalLoginResponse = JsonBody & {
+  user?: { authProvider?: unknown };
+  jwt?: unknown;
+};
+type AdminLoginResponse = JsonBody & {
+  user?: { email?: unknown; role?: unknown };
+  token?: unknown;
+};
 
 const baseUrl = process.env.GATE_3_BASE_URL ?? "http://127.0.0.1:8081";
 const adminEmail = "admin@mustashark.com";
@@ -46,7 +54,7 @@ async function localLogin(email: string, role: "client" | "lawyer") {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password, role }),
   });
-  const result = body(await response.json());
+  const result = body(await response.json()) as LocalLoginResponse;
   assert.equal(response.status, 200, `local login failed for ${email}: ${JSON.stringify(result)}`);
   assert.equal(result.user?.authProvider, "local", `local auth provenance missing for ${email}`);
   assert.equal(typeof result.jwt, "string", `JWT missing for ${email}`);
@@ -59,7 +67,7 @@ async function adminLogin() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: adminEmail, password }),
   });
-  const result = body(await response.json());
+  const result = body(await response.json()) as AdminLoginResponse;
   assert.equal(response.status, 200, `canonical admin login failed: ${JSON.stringify(result)}`);
   assert.equal(result.user?.email, adminEmail);
   assert.equal(result.user?.role, "admin");
