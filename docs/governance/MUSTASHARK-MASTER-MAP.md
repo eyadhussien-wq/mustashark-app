@@ -177,6 +177,9 @@ The canonical control set currently includes:
 - `docs/design/D02-SURFACE-MASTER-MAP.md` when present
 - `docs/design/D02-ROADMAP-CROSSWALK.md`
 - `docs/roadmap/N1-LAWYER-DIGITAL-OFFICE.md`
+- `docs/governance/legaltech-discovery-baseline-2026-09.md`
+- `docs/governance/decision-log-2026-09.md`
+- `docs/governance/neutral-core-construction-round6-2026-09.md`
 
 The list is a governance registry, not a runtime dependency list.
 
@@ -208,5 +211,22 @@ The project formally adopts the following operating model:
 - Valid Evidence may be reused when still applicable; stale or insufficient Evidence is refreshed only where needed.
 - Governance remains separate from runtime.
 
-**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY`
-**Runtime impact:** `NONE — DOCUMENTATION / GOVERNANCE ONLY`
+## 15 — Current LegalTech construction gate
+
+The project now formally records the following current state:
+
+- `SECURITY HOLD = ACTIVE` for sensitive functions.
+- `LEGAL / REGULATORY RESEARCH = ACTIVE`.
+- `ZERO MUTATION = ACTIVE` for production, financial, regulatory and sensitive operational systems.
+- `REVERSIBLE CONSTRUCTION = ALLOWED` only for the Neutral Core.
+- `REGULATED / COMMERCIAL CORE = BLOCKED` until the applicable legal, tax, payment and professional-regulatory evidence is closed.
+- `LEGAL OPERATING MODEL = PENDING`.
+- `PRODUCTION COMMERCIAL ACTIVATION = BLOCKED`.
+
+The Neutral Core may include identity, roles, client/lawyer workspaces, scheduling, documents, communications, notifications, matter/workflow foundations, audit/governance capabilities and neutral configurable abstractions. The presence of an abstraction is not authorization for a regulated transaction.
+
+The blocked boundary includes professional-fee collection on behalf of lawyers, third-party fund custody/routing where authorization is required, escrow, split payments, automatic payouts, commission/revenue sharing, assumption-based tax/e-invoicing behavior, unvalidated regulated payment integrations, professional legal advice/representation by Mustasharek itself, and law-firm-specific hard-coding before the operating model is validated.
+
+The governing Round 6 artifact is `docs/governance/neutral-core-construction-round6-2026-09.md` and the detailed discovery history is preserved in `docs/governance/legaltech-discovery-baseline-2026-09.md` and `docs/governance/decision-log-2026-09.md`.
+
+**Runtime impact:** `NONE — GOVERNANCE/DOCUMENTATION ONLY`.
