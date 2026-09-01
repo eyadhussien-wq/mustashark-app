@@ -15,7 +15,7 @@ This matrix is the execution index. It does not replace `MUSTASHARK-MASTER-MAP` 
 | P1 — Repository Audit | Inventory runtime/tests, classify Neutral / Commercial / Regulated, identify legacy coupling | `COMPLETED FOR CURRENT SNAPSHOT` | No production mutation | Audit evidence on construction branch |
 | P1.5 — CI Boundary Triage | Decide ownership of legacy CI gates; quarantine regulated-dependent tests; restore scope-aligned CI | `COMPLETED — GREEN` | Current construction CI is green | P1.5 decision record + clean CI gate |
 | P2 — Neutral Core Architecture | Lawyer OS boundaries, RBAC, data minimization, auditability, exportability, module boundaries | `CONDITIONAL PASS / BASELINED` | Neutral domain boundary before feature expansion | P2 boundary decision + P3.1 boundary record |
-| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter boundary, Document scope, Audit/Export contracts, Neutral dependency discipline** | **`IN PROGRESS`** | **No blocked-domain dependency** | **Neutral boundary contracts + implementation evidence** |
+| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
 | P3 — Lawyer OS v1 Build | Lawyer Workspace, Clients, Matters/Cases, Documents, Scheduling, Messaging, Notifications, Audit Logs | `AUTHORIZED AFTER P3.1` | P3.1 boundary completion | Working Lawyer OS v1 |
 | P4 — Commercial SaaS | Fixed lawyer subscription model (hypothesis: 50 JOD/month), subscription lifecycle, invoice integration | `DESIGN / PENDING SPECIALIST VALIDATION` | Tax/e-invoicing/payment validation | Isolated SaaS billing layer |
 | P5 — Client Portal | Secure lawyer-client communication, document sharing, appointments | `PLANNED` | Privacy/controller-processor review | Client Portal |
@@ -66,10 +66,23 @@ The first implementation contract is:
 - Lawyer ↔ Client relationship is a first-class Neutral Core concern; it must not depend solely on booking history.
 - Matter creation must not require an agreement, quote, payment, settlement, wallet, escrow, or client-fund event.
 - Neutral Documents must not require legal-representation or financial prerequisites merely to exist.
+- Legal Calendar, Secure Messaging, and Time Tracking are Neutral Core capabilities and must remain matter/ownership scoped.
 - Authorization is server-side and ownership/scope based.
 - Sensitive Neutral Core operations are auditable.
 - Export → Lawyer is independent of financial or marketplace state.
 - Existing legacy schemas remain preserved; P3.1 does not delete or rewrite historical data.
+
+### P3.1 capability baseline
+
+The architectural baseline is recorded in:
+
+`docs/architecture/P3.1-NEUTRAL-CORE-CAPABILITY-BASELINE-2026-09.md`
+
+The approved sequencing is:
+
+`P3.1-A Identity/Workspace → P3.1-B Relationship → P3.1-C Matter → P3.1-D Documents → P3.1-E Calendar/Deadlines/Tasks/Notifications → P3.1-F Matter-scoped Messaging → P3.1-G Neutral Time Tracking → P3.1-H Audit/Export → P3.1-I Permission/IDOR → P3.1-J CI/Evidence/Closure`
+
+These are architectural sequencing decisions only. They do not authorize implementation of later items before the active gate closes.
 
 ### P3.1 hard blocks
 
@@ -98,6 +111,7 @@ P1_REPOSITORY_AUDIT           = COMPLETE FOR CURRENT SNAPSHOT
 P1.5_CI_BOUNDARY_TRIAGE       = COMPLETE / GREEN
 P2_NEUTRAL_CORE_ARCHITECTURE  = CONDITIONAL PASS / BASELINED
 P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS
+P3.1_CURRENT_GATE             = D DOCUMENT CI EVIDENCE PENDING
 FINANCIAL_COLLECTION          = BLOCKED
 PAYOUT_SETTLEMENT             = BLOCKED
 COMMISSION_ENGINE             = BLOCKED
