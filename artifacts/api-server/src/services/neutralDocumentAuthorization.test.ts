@@ -3,17 +3,18 @@ import test from "node:test";
 import {
   assertNeutralDocumentClientAccess,
   NeutralDocumentAuthorizationError,
+  type NeutralDocumentClientAccessState,
 } from "./neutralDocumentAuthorization";
 
-const allowed = {
+const allowed: NeutralDocumentClientAccessState = {
   clientActive: true,
   relationshipActive: true,
   shareActive: true,
-  documentStatus: "active" as const,
+  documentStatus: "active",
   matterMatchesClientAndLawyer: true,
 };
 
-function denied(state: Partial<typeof allowed>, code: string) {
+function denied(state: Partial<NeutralDocumentClientAccessState>, code: string) {
   assert.throws(
     () => assertNeutralDocumentClientAccess({ ...allowed, ...state }),
     (error: unknown) => error instanceof NeutralDocumentAuthorizationError && error.code === code,
