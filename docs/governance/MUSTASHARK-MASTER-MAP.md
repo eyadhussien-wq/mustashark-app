@@ -1,7 +1,7 @@
 # MUSTASHARK — MASTER MAP
 
-**Status:** CANONICAL GOVERNANCE AUTHORITY — ADOPTED
-**Adoption date:** 2026-08-25
+**Status:** CANONICAL GOVERNANCE AUTHORITY — ADOPTED  
+**Adoption date:** 2026-08-25  
 **Scope:** governance, roadmap control, cross-map traceability, implementation closure, evidence requirements.
 
 ## 01 — Canonical operating hierarchy
@@ -180,6 +180,7 @@ The canonical control set currently includes:
 - `docs/governance/legaltech-discovery-baseline-2026-09.md`
 - `docs/governance/decision-log-2026-09.md`
 - `docs/governance/neutral-core-construction-round6-2026-09.md`
+- `docs/governance/MUSTASHAREK-ENGINEERING-GOVERNANCE-MASTER-MATRIX-2026-09.md`
 
 The list is a governance registry, not a runtime dependency list.
 
@@ -213,7 +214,7 @@ The project formally adopts the following operating model:
 
 ## 15 — Current LegalTech construction gate
 
-The project now formally records the following current state:
+The project formally records the following current state:
 
 - `SECURITY HOLD = ACTIVE` for sensitive functions.
 - `LEGAL / REGULATORY RESEARCH = ACTIVE`.
@@ -227,6 +228,40 @@ The Neutral Core may include identity, roles, client/lawyer workspaces, scheduli
 
 The blocked boundary includes professional-fee collection on behalf of lawyers, third-party fund custody/routing where authorization is required, escrow, split payments, automatic payouts, commission/revenue sharing, assumption-based tax/e-invoicing behavior, unvalidated regulated payment integrations, professional legal advice/representation by Mustasharek itself, and law-firm-specific hard-coding before the operating model is validated.
 
-The governing Round 6 artifact is `docs/governance/neutral-core-construction-round6-2026-09.md` and the detailed discovery history is preserved in `docs/governance/legaltech-discovery-baseline-2026-09.md` and `docs/governance/decision-log-2026-09.md`.
+The governing Round 6 artifact is `docs/governance/neutral-core-construction-round6-2026-09.md`. The detailed discovery history is preserved in `docs/governance/legaltech-discovery-baseline-2026-09.md` and `docs/governance/decision-log-2026-09.md`.
 
-**Runtime impact:** `NONE — GOVERNANCE/DOCUMENTATION ONLY`.
+## 16 — Current construction direction: Lawyer OS v1
+
+The project now records a concrete near-term construction target without changing the authority hierarchy:
+
+> **Mustasharek Lawyer OS v1** — a lawyer-facing practice-management SaaS with secure client communication capabilities, built as a neutral/reversible technology core.
+
+The initial commercial hypothesis is a fixed software subscription (for example, 50 JOD/month). This is a business hypothesis, not a legal/tax conclusion. Tax, e-invoicing, payment-provider and final contract treatment remain subject to validation.
+
+The initial construction boundary excludes professional-fee collection, client-fund custody/routing where authorization is required, escrow, split settlement, automatic payouts, commission/revenue sharing, and Marketplace/referral activation.
+
+The operational execution matrix is:
+
+`docs/governance/MUSTASHAREK-ENGINEERING-GOVERNANCE-MASTER-MATRIX-2026-09.md`
+
+It is subordinate to this Master Map and is the current bridge from governance/discovery into controlled implementation.
+
+## 17 — Never-return-to-zero rule
+
+Future LegalTech work must begin by reading the canonical governance chain and identifying the current phase/gate. Historical discovery must not be recreated as new work.
+
+If the business or legal model changes, the project must create a new decision record and impact analysis, update the applicable maps, and only then alter implementation scope. Historical decisions remain preserved as lineage.
+
+## 18 — Current next gate
+
+The immediate engineering gate is:
+
+`P1 — Neutral Core Repository Audit`
+
+Expected output:
+
+`Repository Inventory → Capability Map → Neutral/Commercial/Regulated Classification → Security/RBAC Gap List → Reuse/Harden/Isolate/Quarantine/Defer Backlog → P2 Plan`
+
+No broad rewrite is authorized before this audit.
+
+**Runtime impact of this governance update:** `NONE — DOCUMENTATION ONLY`.
