@@ -8,117 +8,123 @@
 
 Record public-market examples so future work can distinguish real-world operating patterns from legal approval. An operator's own terms, marketing, or app-store description proves what the operator publicly represents; it does not independently prove licensing, Bar approval, tax treatment, payment authorization, or legality of the same model for Mustasharek.
 
-## 1. Huqouk / منصة حقوق
+## Round 3 / Regional Expansion Update
 
-**Classification:** MARKET OBSERVATION — public operator claims observed; independent legal/entity/payment/tax verification remains outstanding.
+### Huqouk / منصة حقوق — Jordan
 
-Public pages currently describe Huqouk as a digital legal platform in Jordan facilitating access to legal consultations and services. Its lawyers directory allows searching/filtering lawyers and states that its confidence score is an operational indicator rather than a guarantee of case outcome.
+The current public site describes Huqouk as a Jordanian digital legal platform for consultations and legal services. It publicly presents lawyer discovery, lawyer matching, in-platform payment, and documented communications. Its public legal-consultation material says the platform is not a law firm and that the legal relationship is between the client and the licensed/accredited lawyer.
 
 Sources:
 - https://www.huqouk.com/
 - https://www.huqouk.com/lawyers/
-
-Its public legal-consultation terms describe Huqouk as a **digital legal mediation platform** connecting clients with accredited lawyers and explicitly say it is not a law firm providing direct legal representation. The same terms state that where a client-lawyer relationship starts through Huqouk, communications, agreement, payment, and service-related document exchange are to remain inside the platform, and prohibit attempts to move the relationship outside Huqouk.
-
-Source:
 - https://www.huqouk.com/legal-consultation
 
-**What this establishes:** a current Jordan-market example publicly using a technology-platform/mediation description and a direct client-lawyer relationship concept.
+**Evidence:** MARKET OBSERVATION. The public material does not independently establish the underlying corporate registration, Bar approval, payment authorization, or tax treatment.
 
-**What it does NOT establish:** that Huqouk's exact corporate structure, Bar position, commission model, tax treatment, payment licensing/arrangement, or every contractual clause has been independently approved by a competent Jordanian regulator.
+### Qada.ai — Jordan
 
-## 2. Qada.ai
+Qada.ai publicly describes itself as a technology platform rather than a law firm. Its terms state that registered lawyers are independent service providers and that the legal relationship is directly between citizen and lawyer. Its lawyer-facing material describes verified lawyers, available cases, proposals, client acquisition, profiles/reviews, and legal-workflow tooling.
 
-**Classification:** MARKET OBSERVATION — broader LegalTech model; not a direct payment/marketplace precedent for Mustasharek.
-
-Qada.ai's published terms explicitly say it is a technology platform, not a law firm; registered lawyers are independent service providers; the legal relationship is directly between citizen and lawyer; and financial or contractual agreements are between those parties.
-
-Source:
+Sources:
 - https://qada.ai/terms
-
-Its lawyer-facing material publicly describes lawyer verification through Jordan Bar credentials, case proposals, client acquisition, profiles/reviews, and lawyer-side practice tools.
-
-Sources:
 - https://qada.ai/for-lawyers
-- https://qada.ai/how-it-works
-
-Qada also operates a much broader LegalTech/AI model covering legal research, document intelligence, case management, drafting, and lawyer-in-the-loop workflows. Its public materials state that it was founded in Amman and that Jordan is its native jurisdiction.
-
-Sources:
 - https://qada.ai/
 - https://qada.ai/about
 
-**What this establishes:** a second current Jordan-market example publicly separating the technology platform from the independent legal-service provider relationship.
+**Evidence:** MARKET OBSERVATION. This is a strong architecture benchmark but not proof of the legality or tax/payment treatment of any specific feature.
 
-**What it does NOT establish:** independent proof of the legality, tax treatment, payment structure, Bar approval, or regulatory authorization of any particular Qada feature or commercial arrangement.
+### Mufead / مُفيد — Saudi Arabia
 
-## 3. Additional marketplace-like benchmark lead: مُفيد / Mufead
+The public Mufead site states that customers submit legal requests and receive offers from licensed lawyers, then choose based on price, rating, and experience. It explicitly says that fees paid inside the app are fees to Mufead for connecting the customer with the lawyer, rather than the lawyer's professional fees. The site identifies Riyadh and displays a commercial-registration number.
 
-A current public website and Google Play listing describe Mufead as a platform through which clients submit legal requests and receive offers from licensed lawyers, with users choosing according to price, rating, and experience. The public material states that lawyers are licensed, but the material reviewed in this round does not by itself establish the underlying regulatory, tax, payment, or corporate structure for Jordan.
-
-Sources:
+Source:
 - https://www.mufead.com/
-- https://play.google.com/store/apps/details?id=com.elmam.mufead&hl=ar
 
-**Classification:** MARKET OBSERVATION. **Jordan entity / regulator / payment / tax verification:** PENDING.
+**Evidence:** MARKET OBSERVATION / FIRST-PARTY OPERATOR CLAIM. The displayed registration information was not independently verified against an authoritative Saudi registry during this round, so it must not be treated as registry evidence.
 
-## 4. Secondary app-store leads
+### Qanonline / منصة قانون — regional benchmark lead
 
-Search results also surfaced applications such as “منصة محامي” and “عدالة” describing lawyer-client matching, consultations, document exchange, appointments, and legal-service workflows. The public listings reviewed do not establish that each is a Jordanian operator or that its business/payment model is comparable to Mustasharek. They remain secondary benchmark leads, not Jordan regulatory evidence.
+The public Qanonline site describes legal consultations and services delivered through licensed lawyers, direct consultations, historical service records, multiple payment options, and a lawyer-facing workflow where lawyers can receive client requests and determine service fees.
 
-## 5. Official Jordan evidence relevant to Mustasharek
+Source:
+- https://www.qanonline.com/
 
-### Payment / settlement
+**Evidence:** REGIONAL MARKET LEAD. Exact jurisdiction, legal entity, payment structure, and regulatory status were not independently verified in this round.
 
-The Central Bank of Jordan's official licensing material states that electronic payment/transfer services and operation/management of electronic payment systems are subject to the applicable licensing framework. Its licensing guide also describes corporate, capital, governance, audit, risk, and organizational requirements for licensed payment companies.
+## Official regulatory anchors
+
+### Jordan — payment
+
+The Central Bank of Jordan's official licensing material states that electronic payment/transfer services and operation/management of electronic payment systems are subject to the applicable licensing framework. The licensing guide expressly says it is for guidance and cannot replace the applicable payment and electronic-money-transfer system and instructions.
 
 Sources:
 - https://www.cbj.gov.jo/ebv4.0/root_storage/ar/eb_list_page/دليل_الحصول_على_الترخيص_لمزاولة_أنشطة_خدمات_الدفع_والتحويل_الإلكتروني_للاموال.pdf
 - https://www.cbj.gov.jo/ebv4.0/root_storage/ar/eb_list_page/4e13f7f5-8bad-413a-8840-f576c24c2eb5.pdf
 
-**Implication:** a technology-company registration does not by itself establish authority to perform regulated payment/settlement activity. Mustasharek's exact money flow must be mapped against the applicable payment framework and confirmed with the relevant payment provider/authority where necessary.
+### Jordan — national e-invoicing
 
-### National e-invoicing
-
-Jordan's Income and Sales Tax Department currently publishes the National E-Invoicing System, the 2023 invoicing regulation, joining/integration guidance, invoice-organization guidance, and a technical integration guide. Current official pages were updated in August 2026.
+The Income and Sales Tax Department currently publishes the National E-Invoicing System, the 2023 invoicing regulation, joining/integration guidance, invoice-organization guidance, and a technical integration guide.
 
 Sources:
 - https://istd.gov.jo/AR/Pages/نظام_الفوترة_الوطني
 - https://istd.gov.jo/AR/List/الادلة_الارشادية_لنظام_الفوترة_الوطني
-- https://istd.gov.jo/AR/List/للانضمام_الى_نظام_الفوترة_الوطني
 
-**Implication:** invoice issuance, supplier identity, and treatment of platform fees versus professional fees must be determined from the final contractual/tax model. The existence of an e-invoicing system/API does not itself answer who must issue the invoice.
+### Jordan — personal data
 
-### Personal-data protection
-
-The Ministry of Digital Economy and Entrepreneurship's current legislation listing identifies **Personal Data Protection Law No. 24 of 2023** and related 2025 regulations/instructions, including disclosure, Data Protection Officer accreditation standards, and registers for controllers/processors/officers.
+The Ministry of Digital Economy and Entrepreneurship's legislation listing identifies Personal Data Protection Law No. 24 of 2023 and related implementing instruments. This is directly relevant because a legal platform handles identity, communications, matter files, and potentially sensitive personal data.
 
 Source:
 - https://modee.gov.jo/AR/List/القوانين_والأنظمة_و_التعليمات_الصادرة_بمقتضاه
 
-**Implication:** Mustasharek's legal/privacy model must account for controller/processor roles, confidentiality of legal matters, data handling, retention, disclosure, and cross-border processing/hosting questions.
+### Saudi Arabia — professional licensing benchmark
 
-## 6. Evidence classification after this round
+The Saudi Ministry of Justice provides an electronic service for lawyer licensing and a practitioner directory/verification service. Its current services page also distinguishes independent law offices and professional law firms.
 
-| Finding | Classification | Current confidence | What remains open |
-|---|---|---:|---|
-| Jordan has active LegalTech platforms publicly connecting users with lawyers | MARKET OBSERVATION | High | Independent regulatory/legal verification of each operator |
-| Huqouk publicly describes itself as a digital legal mediation platform, not a law firm | MARKET OBSERVATION | High | Corporate/Bar/payment/tax verification |
-| Qada.ai publicly describes independent lawyers and direct client-lawyer legal relationship | MARKET OBSERVATION | High | Independent verification of regulatory/tax/payment structure |
-| Mufead publicly describes lawyer matching/offers | MARKET OBSERVATION | Medium | Jordan entity, regulator, payment, tax verification |
-| Payment/transfer activities in Jordan are subject to a CBJ licensing framework | CONFIRMED OFFICIAL EVIDENCE | High | Apply exact facts of Mustasharek's intended flow |
-| Jordan has a National E-Invoicing System and published implementation guidance | CONFIRMED OFFICIAL EVIDENCE | High | Determine supplier/invoice treatment for the exact business model |
-| Jordan has Personal Data Protection Law No. 24 of 2023 and subsequent implementing instruments | CONFIRMED OFFICIAL EVIDENCE | High | Map Mustasharek controller/processor and confidentiality obligations |
-| “Technology company + licensed lawyers” is the preferred architecture | ENGINEERING HYPOTHESIS | High as architecture preference | Jordanian counsel/regulatory validation |
+Sources:
+- https://www.moj.gov.sa/ar/eServices/pages/842b98bd-020f-4f2b-ac7d-1f6dd75bfd8e.aspx
+- https://www.moj.gov.sa/ar/Ministry/Departments/Mohammah/Pages/Services.aspx
 
-## 7. Benchmark conclusion
+**Benchmark value:** professional eligibility can be represented as a separately verifiable provider credential; platform registration should not be treated as a substitute for professional licensing.
 
-The market research materially strengthens the **plausibility** of the proposed Mustasharek architecture: there are current Jordan-market operators that publicly distinguish the technology platform from the independent legal professional relationship. Huqouk and Qada.ai are particularly relevant because their published materials use this separation explicitly.
+## Final comparison matrix — Round 3
 
-However, this research does **not** convert the Mustasharek hypothesis into legal approval. The decisive next evidence remains the exact Jordanian legal, professional-regulatory, payment, tax/e-invoicing, privacy, consumer, and contractual analysis of Mustasharek's own model.
+| Platform | Jurisdiction | Operating pattern | Professional relationship publicly described | Payment/fee signal | Independent official entity/regulatory verification in this round | Evidence |
+|---|---|---|---|---|---|---|
+| Huqouk | Jordan | Digital legal platform / mediation | Client connects with licensed/accredited lawyer; platform says it is not a law firm | In-platform payment and release language | Not obtained | MARKET OBSERVATION |
+| Qada.ai | Jordan | LegalTech / AI + lawyer marketplace/workflow | Platform + independent lawyer relationship | Public terms place legal/financial relationship between citizen and lawyer | Not obtained | MARKET OBSERVATION |
+| Mufead | Saudi Arabia | Lawyer-request marketplace | Licensed lawyers make offers; customer selects | Public site says in-app fee is platform fee for connection | Operator displays CR data; independent registry record not obtained | MARKET OBSERVATION / FIRST-PARTY |
+| Qanonline | Regional / jurisdiction to verify | Legal consultation/services marketplace | Licensed lawyers | Multiple payment options | Not obtained | REGIONAL MARKET LEAD |
+| منصة محامي | Jurisdiction to verify | Lawyer-client matching/workflow | Public app listing describes legal matching/services | Not sufficiently verified | Not obtained | SECONDARY MARKET LEAD |
 
-## Evidence rule
+## Mustasharek-specific conclusions
 
-Do not record claims such as “licensed”, “approved”, “legal”, “PSP”, “escrow”, or “tax-compliant” unless an authoritative source establishes the specific fact. Public website wording is evidence of what the operator claims, not independent regulatory approval.
+1. The proposed architecture — **independent technology company + separately licensed legal professionals** — is commercially plausible and has current market analogues, especially Huqouk and Qada.ai in Jordan and Mufead in Saudi Arabia.
+2. The strongest common pattern is separation of the platform's technology role from the professional lawyer's role. This remains a **market pattern**, not a Jordanian legal approval.
+3. Mufead is particularly useful for benchmarking the fee-label question because its own site explicitly distinguishes platform fees from lawyer professional fees. This does not establish the same tax or payment treatment for Mustasharek in Jordan.
+4. Lawyer licensing/verification should be modeled as an independent provider credential rather than inferred from the platform company's registration.
+5. No benchmark found in this round proves that a Jordanian technology company may lawfully market, facilitate, contract for, collect, settle, or charge commissions around legal services under Mustasharek's exact model.
+6. No benchmark found in this round proves PSP licensing, escrow authorization, tax treatment, or Bar approval merely from public claims such as “safe payment”, “licensed lawyers”, “mediation”, or “platform”.
 
-**Research state:** BENCHMARK ROUND 1 COMPLETE — deeper entity/registry and regulator-specific verification remains an open evidence task.
+## Round 3 decision state
+
+**Architecture hypothesis:** INTACT — independent Jordanian technology company remains the preferred engineering hypothesis.
+
+**Legal status:** UNRESOLVED — market benchmarks are not legal opinions.
+
+**Payment status:** UNRESOLVED — exact settlement structure requires Jordanian payment-framework validation and provider confirmation.
+
+**Tax/e-invoicing status:** UNRESOLVED — principal/agent, supplier, fee, invoice, and tax treatment must follow the final contractual model.
+
+**Professional-regulation status:** UNRESOLVED — lawyer eligibility and platform/profession boundaries require Jordanian counsel/regulatory confirmation.
+
+**Data/privacy status:** PENDING COUNSEL / COMPLIANCE MAPPING.
+
+**Execution Gate:** CLOSED.
+
+**Security Hold:** ACTIVE.
+
+**Read-Only Research:** ACTIVE.
+
+**Zero Mutation:** ACTIVE for operational code, databases, production, and main.
+
+**Research state:** ROUND 3 / REGIONAL EXPANSION COMPLETE FOR THIS SEARCH PASS — final legal/entity/payment/tax verification remains open.
