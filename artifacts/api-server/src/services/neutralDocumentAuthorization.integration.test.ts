@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
+import {
+  getNeutralDocumentForClient,
+  getNeutralDocumentForLawyer,
+} from "./neutralDocumentAuthorization";
 
 const baseUrl = process.env.NEUTRAL_IDOR_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
@@ -30,51 +34,35 @@ function psql(query: string) {
   }).trim();
 }
 
-async function request(path: string, token: string, options: RequestInit = {}) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${token}`,
-      ...(options.headers ?? {}),
-    },
-  });
-  const text = await response.text();
-  let body: unknown = null;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    body = { raw: text };
-  }
-  return { status: response.status, body };
-}
-
 async function login(email: string, role: "lawyer" | "client") {
-  const result = await request("/api/auth/local-auth", "", {
+  const response = await fetch(`${baseUrl}/api/auth/local-auth`, {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password, role }),
   });
-  assert.equal(result.status, 200, `${email} login failed: ${result.status} ${JSON.stringify(result.body)}`);
-  const jwt = (result.body as { jwt?: unknown }).jwt;
-  assert.equal(typeof jwt, "string", `${email} login did not return a JWT`);
-  return jwt;
+  const body = await response.json();
+  assert.equal(response.status, 200, `${email} login failed: ${response.status} ${JSON.stringify(body)}`);
+  assert.equal(typeof body.jwt, "string", `${email} login did not return a JWT`);
+  assert.equal(typeof body.user?.id, "string", `${email} login did not return a user id`);
+  return { token: body.jwt as string, userId: body.user.id as string };
 }
 
 function seedFixtures() {
   psql(`
     INSERT INTO users (id, name, email, password_hash, phone, phone_country, role, auth_provider, account_status, specialization, deleted_at, deletion_scheduled_at, status_reason, created_at, updated_at)
-    VALUES
-      (${sqlLiteral(IDS.lawyerA)}, 'CI IDOR Lawyer A', 'ci-idor-lawyer-a@mustashark.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC7LqT0fQw6u0xQz2a5W', '+962790001101', 'jordan', 'lawyer', 'local', 'active', 'general', NULL, NULL, NULL, NOW(), NOW()),
-      (${sqlLiteral(IDS.lawyerB)}, 'CI IDOR Lawyer B', 'ci-idor-lawyer-b@mustashark.com', '$2a$10$92IXUNpkj3g0w0j5r5r5rOe9mQY4h7W3q5r0o1y9c7m5x2w8z1u6', '+962790001102', 'jordan', 'lawyer', 'local', 'active', 'general', NULL, NULL, NULL, NOW(), NOW()),
-      (${sqlLiteral(IDS.client)}, 'CI IDOR Client', 'ci-idor-client@mustashark.com', '$2a$10$92IXUNpkO0rOQ5byMi.Ye4oKoEa3Ro9llC7LqT0fQw6u0xQz2a5W', '+962790001103', 'jordan', 'client', 'local', 'active', NULL, NULL, NULL, NULL, NOW(), NOW())
-    ON CONFLICT (email) DO UPDATE SET
-      id = EXCLUDED.id,
-      password_hash = EXCLUDED.password_hash,
-      role = EXCLUDED.role,
-      auth_provider = EXCLUDED.auth_provider,
-      account_status = 'active',
-      deleted_at = NULL,
-      updated_at = NOW();
+    SELECT ${sqlLiteral(IDS.lawyerA)}, 'CI IDOR Lawyer A', 'ci-idor-lawyer-a@mustashark.com', password_hash, '+962790001101', 'jordan', 'lawyer', 'local', 'active', 'general', NULL, NULL, NULL, NOW(), NOW()
+    FROM users WHERE email = 'lawyer@mustashark.com'
+    ON CONFLICT (email) DO UPDATE SET id = EXCLUDED.id, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, auth_provider = EXCLUDED.auth_provider, account_status = 'active', deleted_at = NULL, updated_at = NOW();
+
+    INSERT INTO users (id, name, email, password_hash, phone, phone_country, role, auth_provider, account_status, specialization, deleted_at, deletion_scheduled_at, status_reason, created_at, updated_at)
+    SELECT ${sqlLiteral(IDS.lawyerB)}, 'CI IDOR Lawyer B', 'ci-idor-lawyer-b@mustashark.com', password_hash, '+962790001102', 'jordan', 'lawyer', 'local', 'active', 'general', NULL, NULL, NULL, NOW(), NOW()
+    FROM users WHERE email = 'lawyer@mustashark.com'
+    ON CONFLICT (email) DO UPDATE SET id = EXCLUDED.id, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, auth_provider = EXCLUDED.auth_provider, account_status = 'active', deleted_at = NULL, updated_at = NOW();
+
+    INSERT INTO users (id, name, email, password_hash, phone, phone_country, role, auth_provider, account_status, specialization, deleted_at, deletion_scheduled_at, status_reason, created_at, updated_at)
+    SELECT ${sqlLiteral(IDS.client)}, 'CI IDOR Client', 'ci-idor-client@mustashark.com', password_hash, '+962790001103', 'jordan', 'client', 'local', 'active', NULL, NULL, NULL, NULL, NOW(), NOW()
+    FROM users WHERE email = 'client@mustashark.com'
+    ON CONFLICT (email) DO UPDATE SET id = EXCLUDED.id, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, auth_provider = EXCLUDED.auth_provider, account_status = 'active', deleted_at = NULL, updated_at = NOW();
 
     INSERT INTO lawyer_clients (id, lawyer_id, client_id, status, created_at, updated_at, archived_at)
     VALUES
@@ -114,47 +102,59 @@ function cleanupFixtures() {
 
 seedFixtures();
 
-try {
-  const lawyerAToken = await login("ci-idor-lawyer-a@mustashark.com", "lawyer");
-  const lawyerBToken = await login("ci-idor-lawyer-b@mustashark.com", "lawyer");
-  const clientToken = await login("ci-idor-client@mustashark.com", "client");
+test.after(() => cleanupFixtures());
 
-  test("lawyer A can access only lawyer A document", async () => {
-    const own = await request(`/__internal/neutral-documents/${IDS.documentA}`, lawyerAToken);
-    assert.equal(own.status, 200, `lawyer A own document denied: ${JSON.stringify(own.body)}`);
+test("authenticated lawyer A cannot read lawyer B document by ID tampering", async () => {
+  const lawyerA = await login("ci-idor-lawyer-a@mustashark.com", "lawyer");
+  const own = await getNeutralDocumentForLawyer(lawyerA.userId, IDS.documentA);
+  assert.equal(own.id, IDS.documentA);
 
-    const foreign = await request(`/__internal/neutral-documents/${IDS.documentB}`, lawyerAToken);
-    assert.ok([403, 404].includes(foreign.status), `lawyer A accessed lawyer B document: ${foreign.status}`);
-  });
+  await assert.rejects(
+    () => getNeutralDocumentForLawyer(lawyerA.userId, IDS.documentB),
+    (error: unknown) => error instanceof Error && ["DOCUMENT_NOT_FOUND", "MATTER_NOT_OWNED"].includes(error.message),
+  );
+});
 
-  test("lawyer B cannot access lawyer A document by ID tampering", async () => {
-    const result = await request(`/__internal/neutral-documents/${IDS.documentA}`, lawyerBToken);
-    assert.ok([403, 404].includes(result.status), `cross-lawyer document IDOR succeeded: ${result.status}`);
-  });
+test("authenticated lawyer B cannot read lawyer A document by ID tampering", async () => {
+  const lawyerB = await login("ci-idor-lawyer-b@mustashark.com", "lawyer");
 
-  test("client can access only explicitly shared documents inside active relationship scope", async () => {
-    const ownShared = await request(`/__internal/neutral-documents/${IDS.documentA}`, clientToken);
-    assert.equal(ownShared.status, 200, `client could not read explicitly shared document: ${JSON.stringify(ownShared.body)}`);
+  await assert.rejects(
+    () => getNeutralDocumentForLawyer(lawyerB.userId, IDS.documentA),
+    (error: unknown) => error instanceof Error && ["DOCUMENT_NOT_FOUND", "MATTER_NOT_OWNED"].includes(error.message),
+  );
+});
 
-    const otherLawyerShared = await request(`/__internal/neutral-documents/${IDS.documentB}`, clientToken);
-    assert.equal(otherLawyerShared.status, 200, `client should be able to access second explicitly shared document: ${JSON.stringify(otherLawyerShared.body)}`);
-  });
+test("authenticated client is authorized only through explicit share plus active relationship", async () => {
+  const client = await login("ci-idor-client@mustashark.com", "client");
 
-  test("revoked share denies client access while retaining the document", async () => {
-    psql(`UPDATE neutral_document_shares SET status = 'revoked', revoked_at = NOW(), updated_at = NOW() WHERE id = ${sqlLiteral(IDS.shareA)};`);
-    const result = await request(`/__internal/neutral-documents/${IDS.documentA}`, clientToken);
-    assert.ok([403, 404].includes(result.status), `revoked share still granted access: ${result.status}`);
-    assert.equal(psql(`SELECT count(*) FROM neutral_documents WHERE id = ${sqlLiteral(IDS.documentA)};`), "1", "revoked share must not delete the document");
-  });
+  const documentA = await getNeutralDocumentForClient(client.userId, IDS.documentA);
+  assert.equal(documentA.id, IDS.documentA);
 
-  test("archived relationship denies client access without deleting records", async () => {
-    psql(`UPDATE lawyer_clients SET status = 'archived', archived_at = NOW(), updated_at = NOW() WHERE lawyer_id = ${sqlLiteral(IDS.lawyerA)} AND client_id = ${sqlLiteral(IDS.client)};`);
-    const result = await request(`/__internal/neutral-documents/${IDS.documentA}`, clientToken);
-    assert.ok([403, 404].includes(result.status), `archived relationship still granted access: ${result.status}`);
-    assert.equal(psql(`SELECT count(*) FROM neutral_documents WHERE id = ${sqlLiteral(IDS.documentA)};`), "1", "archiving relationship must retain document");
-  });
+  const documentB = await getNeutralDocumentForClient(client.userId, IDS.documentB);
+  assert.equal(documentB.id, IDS.documentB);
+});
 
-  console.log("NEUTRAL DOCUMENT DB-BACKED IDOR TESTS PASSED");
-} finally {
-  cleanupFixtures();
-}
+test("revoked share blocks authenticated client while retaining the document", async () => {
+  const client = await login("ci-idor-client@mustashark.com", "client");
+  psql(`UPDATE neutral_document_shares SET status = 'revoked', revoked_at = NOW(), updated_at = NOW() WHERE id = ${sqlLiteral(IDS.shareA)};`);
+
+  await assert.rejects(
+    () => getNeutralDocumentForClient(client.userId, IDS.documentA),
+    (error: unknown) => error instanceof Error && error.message === "SHARE_NOT_ACTIVE",
+  );
+  assert.equal(psql(`SELECT count(*) FROM neutral_documents WHERE id = ${sqlLiteral(IDS.documentA)};`), "1");
+});
+
+test("archived lawyer-client relationship blocks authenticated client while retaining records", async () => {
+  const client = await login("ci-idor-client@mustashark.com", "client");
+  psql(`UPDATE lawyer_clients SET status = 'archived', archived_at = NOW(), updated_at = NOW() WHERE lawyer_id = ${sqlLiteral(IDS.lawyerA)} AND client_id = ${sqlLiteral(IDS.client)};`);
+
+  await assert.rejects(
+    () => getNeutralDocumentForClient(client.userId, IDS.documentA),
+    (error: unknown) => error instanceof Error && error.message === "RELATIONSHIP_NOT_ACTIVE",
+  );
+  assert.equal(psql(`SELECT count(*) FROM neutral_documents WHERE id = ${sqlLiteral(IDS.documentA)};`), "1");
+  assert.equal(psql(`SELECT count(*) FROM lawyer_clients WHERE lawyer_id = ${sqlLiteral(IDS.lawyerA)} AND client_id = ${sqlLiteral(IDS.client)};`), "1");
+});
+
+console.log("NEUTRAL DOCUMENT DB-BACKED AUTHENTICATED IDOR TESTS PASSED");
