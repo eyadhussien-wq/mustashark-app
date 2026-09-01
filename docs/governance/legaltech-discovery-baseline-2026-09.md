@@ -152,23 +152,92 @@ Round 6 is the current engineering execution direction. It keeps development mov
 
 The Neutral Core must support more than one future operating model without destructive rewrite. Neutral abstractions may exist in code, but their presence is not permission to activate regulated behavior.
 
-### Immediate engineering sequence
+## New strategic decision — Lawyer OS v1
 
-1. Inventory the current repository/application surfaces.
-2. Identify existing identity, client, lawyer, scheduling, documents, messaging, matter and admin capabilities.
-3. Identify all existing financial/payment/tax/commission code and map it to the blocked boundary.
-4. Reuse verified components rather than rebuilding unnecessarily.
-5. Identify security/authorization gaps in the Neutral Core.
-6. Produce a small reversible implementation backlog.
-7. Implement only Neutral Core items.
-8. Run typecheck/tests/security checks and preserve evidence.
-9. Record material decisions in governance before they become runtime assumptions.
+Following the latest founder/engineering decision, the **near-term construction target is now Model A / Lawyer SaaS as a product hypothesis**, not the immediate implementation of the broader Model C marketplace.
+
+The working product identity is:
+
+> **Mustasharek Lawyer OS v1 — a lawyer-facing practice-management SaaS with secure client communication capabilities, designed as a neutral technology product and initially separated from professional-fee collection, fee sharing, escrow, split settlement and platform commission.**
+
+A fixed subscription such as **50 JOD/month** is retained as a commercial hypothesis only. The amount, tax treatment, invoicing requirements, payment-provider structure and final contractual wording remain subject to validation.
+
+### Non-negotiable product boundary
+
+The product must not rely on the following propositions as legal protection:
+
+- "SaaS means automatically legal";
+- "a fixed fee means no regulation applies";
+- "a disclaimer eliminates liability";
+- "a checkbox transfers all responsibility";
+- "a competitor does it, therefore Mustasharek may do it".
+
+Instead, the actual product, contracts, marketing, money flow, data architecture and operational conduct must remain consistent with the validated operating model.
+
+### Initial money-flow hypothesis
+
+For the first SaaS model, the conceptual commercial relationship is:
+
+`Lawyer → Mustasharek`
+
+for software access.
+
+The professional legal relationship is kept conceptually separate:
+
+`Client ↔ Licensed Lawyer`
+
+No professional-fee collection, client-fund custody, split settlement, escrow, commission or revenue sharing is part of the initial Neutral Core build.
+
+## Three-layer construction boundary
+
+```text
+A. NEUTRAL CORE                         OPEN FOR CONSTRUCTION
+   Identity / Auth / RBAC
+   Lawyer OS / Clients / Matters
+   Documents / Scheduling
+   Messaging / Notifications
+   Audit / Security
+
+B. COMMERCIAL SaaS                     ISOLATED / VALIDATION PENDING
+   Subscription plan
+   Subscription lifecycle
+   Billing abstraction
+   Invoice integration boundary
+
+C. REGULATED / MODEL-DEPENDENT         BLOCKED
+   Marketplace / referral
+   Professional-fee collection
+   Split settlement / payouts
+   Commission / revenue sharing
+   Escrow / wallet
+   Other regulated money flows
+```
+
+## Repository execution rule — never return to zero
+
+The project now adopts a formal execution matrix:
+
+`docs/governance/MUSTASHAREK-ENGINEERING-GOVERNANCE-MASTER-MATRIX-2026-09.md`
+
+The matrix is subordinate to `MUSTASHARK-MASTER-MAP` and MAP-X and is the operational bridge between the historical discovery baseline and construction.
+
+Every future implementation item must first identify its phase and gate. Historical discovery must not be reopened as if it were new work. A change in business model must create a new decision record and impact analysis rather than rewriting history.
+
+## Immediate engineering sequence
+
+1. **P1 — Neutral Core Repository Audit:** inventory the current repository and classify existing components as `REUSE / HARDEN / ISOLATE / QUARANTINE / REPLACE / DEFER`.
+2. Map existing functionality to Neutral Core / Commercial SaaS / Regulated boundaries.
+3. Identify and quarantine legacy financial assumptions such as commission, split payment, escrow, client funds, professional-fee collection and automatic payouts.
+4. Identify security and authorization gaps in the Neutral Core.
+5. Produce a small reversible implementation backlog for Lawyer OS v1.
+6. Implement only approved Neutral Core items.
+7. Keep SaaS billing isolated until tax/payment validation is complete.
+8. Run typecheck, tests, security checks and CI for every governed implementation.
+9. Preserve evidence and update the governance records for every material decision.
 
 ## Decision preservation — never return to zero
 
-Every material discussion, research conclusion, rejected assumption, unresolved question and approved engineering direction must be preserved in Git with its evidence classification and date. Future sessions must start from this baseline and the detailed decision artifacts rather than recreating the reasoning from memory.
-
-The preserved minimum includes: Discovery Baseline; Market Benchmark; Entity/Regulatory Verification; Evidence Register; Regulatory Questions; Liability A/B/C/D and Liability Test; Legal Boundary Map; Legal Authority Matrix; Registration-vs-Permission distinction; Client/Data Ownership Test; Exit/Failure Test; Minimum-Risk A→B→C sequence; Model C preferred long-term hypothesis; payment/tax/escrow restrictions; Neutral Core/Regulated Core boundary; Security Hold; Execution Gate; and Round 6 construction direction.
+Every material discussion, research conclusion, rejected assumption, unresolved question and approved engineering direction must be preserved in Git with its evidence classification and date. Future sessions must start from this baseline, the Master Map, MAP-X, the Decision Log, the Round 6 artifact and the Engineering & Governance Master Matrix rather than recreating the reasoning from memory.
 
 ## Current governance state
 
@@ -176,12 +245,15 @@ The preserved minimum includes: Discovery Baseline; Market Benchmark; Entity/Reg
 `READ-ONLY LEGAL/REGULATORY RESEARCH: ACTIVE`  
 `ZERO MUTATION: ACTIVE FOR SENSITIVE/RUNTIME SYSTEMS`  
 `REVERSIBLE CONSTRUCTION: ALLOWED FOR NEUTRAL CORE`  
+`LAWYER OS V1: ACTIVE CONSTRUCTION TARGET`  
 `LEGAL OPERATING MODEL: PENDING`  
-`FINANCIAL / PAYMENT IMPLEMENTATION: BLOCKED`  
+`FINANCIAL / PROFESSIONAL-FEE IMPLEMENTATION: BLOCKED`  
+`MARKETPLACE / REFERRAL ACTIVATION: BLOCKED`  
 `TAX / E-INVOICING IMPLEMENTATION: BLOCKED PENDING VALIDATION`  
 `PRODUCTION COMMERCIAL ACTIVATION: BLOCKED`  
-`EXECUTION GATE: CLOSED FOR REGULATED/COMMERCIAL FUNCTIONS`
+`EXECUTION GATE: CLOSED FOR REGULATED/UNVALIDATED COMMERCIAL FUNCTIONS`
 
-**Round 6 artifact:** `docs/governance/neutral-core-construction-round6-2026-09.md`
+**Round 6 artifact:** `docs/governance/neutral-core-construction-round6-2026-09.md`  
+**Master execution matrix:** `docs/governance/MUSTASHAREK-ENGINEERING-GOVERNANCE-MASTER-MATRIX-2026-09.md`
 
-**Baseline rule:** Build the Neutral Core; keep regulated/commercial behavior blocked; continue legal/regulatory evidence in parallel; make material decisions reversible until validated.
+**Baseline rule:** Build `Mustasharek Lawyer OS v1`; keep model-dependent, professional-regulatory, financial and tax-sensitive behavior isolated or blocked; continue legal/regulatory evidence in parallel; make material decisions reversible until validated; never return to zero.
