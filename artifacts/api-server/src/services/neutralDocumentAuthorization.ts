@@ -28,6 +28,29 @@ export class NeutralDocumentAuthorizationError extends Error {
   }
 }
 
+export type NeutralDocumentClientAccessState = {
+  clientActive: boolean;
+  relationshipActive: boolean;
+  shareActive: boolean;
+  documentStatus: "draft" | "active" | "archived";
+  matterMatchesClientAndLawyer: boolean;
+};
+
+/**
+ * Pure policy gate used by the DB-backed service and contract tests.
+ * Every boundary is explicit so a caller cannot replace one authorization
+ * signal with another (for example, a share without an active relationship).
+ */
+export function assertNeutralDocumentClientAccess(state: NeutralDocumentClientAccessState): void {
+  if (!state.clientActive) throw new NeutralDocumentAuthorizationError("CLIENT_NOT_ACTIVE");
+  if (!state.relationshipActive) throw new NeutralDocumentAuthorizationError("RELATIONSHIP_NOT_ACTIVE");
+  if (!state.shareActive) throw new NeutralDocumentAuthorizationError("SHARE_NOT_ACTIVE");
+  if (state.documentStatus === "archived") throw new NeutralDocumentAuthorizationError("DOCUMENT_NOT_ACCESSIBLE");
+  if (!state.matterMatchesClientAndLawyer) {
+    throw new NeutralDocumentAuthorizationError("DOCUMENT_NOT_ACCESSIBLE");
+  }
+}
+
 async function requireActiveUser(userId: string, role: "lawyer" | "client") {
   const [user] = await db
     .select({ id: usersTable.id, role: usersTable.role, accountStatus: usersTable.accountStatus, deletedAt: usersTable.deletedAt })
@@ -57,7 +80,7 @@ async function requireLawyerOwnedDocument(lawyerId: string, documentId: string) 
 
   if (document.matterId) {
     const [matter] = await db
-      .select({ id: neutralMattersTable.id, lawyerId: neutralMattersTable.lawyerId, status: neutralMattersTable.status })
+      .select({ id: neutralMattersTable.id, lawyerId: neutralMattersTable.lawyerId })
       .from(neutralMattersTable)
       .where(eq(neutralMattersTable.id, document.matterId))
       .limit(1);
@@ -69,22 +92,18 @@ async function requireLawyerOwnedDocument(lawyerId: string, documentId: string) 
   return document;
 }
 
-/**
- * Lawyer-side authorization. The caller supplies only the authenticated
- * actor and resource ID; ownership is always resolved server-side.
- */
+/** Lawyer-side authorization is ownership based and resolved server-side. */
 export async function getNeutralDocumentForLawyer(lawyerId: string, documentId: string) {
   return requireLawyerOwnedDocument(lawyerId, documentId);
 }
 
 /**
- * Client-side authorization requires all three boundaries:
- * active client, active Lawyer ↔ Client relationship, and an explicit active
- * document share. No documentId/clientId supplied by the client is treated as
- * proof of access.
+ * Client-side authorization requires active identity, active relationship,
+ * explicit active share, and matching matter scope when the document is
+ * matter-bound. Archived documents are retained but are not client-readable.
  */
 export async function getNeutralDocumentForClient(clientId: string, documentId: string) {
-  await requireActiveUser(clientId, "client");
+  const client = await requireActiveUser(clientId, "client");
 
   const [document] = await db
     .select()
@@ -93,10 +112,11 @@ export async function getNeutralDocumentForClient(clientId: string, documentId: 
     .limit(1);
   if (!document) throw new NeutralDocumentAuthorizationError("DOCUMENT_NOT_FOUND");
 
+  let relationshipActive = true;
   try {
-    await ensureLawyerClientOwnership(document.lawyerId, clientId);
+    await ensureLawyerClientOwnership(document.lawyerId, client.id);
   } catch {
-    throw new NeutralDocumentAuthorizationError("RELATIONSHIP_NOT_ACTIVE");
+    relationshipActive = false;
   }
 
   const [share] = await db
@@ -111,18 +131,25 @@ export async function getNeutralDocumentForClient(clientId: string, documentId: 
     )
     .limit(1);
 
-  if (!share) throw new NeutralDocumentAuthorizationError("SHARE_NOT_ACTIVE");
-
+  let matterMatchesClientAndLawyer = true;
   if (document.matterId) {
     const [matter] = await db
-      .select({ id: neutralMattersTable.id, clientId: neutralMattersTable.clientId, lawyerId: neutralMattersTable.lawyerId })
+      .select({ clientId: neutralMattersTable.clientId, lawyerId: neutralMattersTable.lawyerId })
       .from(neutralMattersTable)
       .where(eq(neutralMattersTable.id, document.matterId))
       .limit(1);
-    if (!matter || matter.clientId !== clientId || matter.lawyerId !== document.lawyerId) {
-      throw new NeutralDocumentAuthorizationError("DOCUMENT_NOT_ACCESSIBLE");
-    }
+    matterMatchesClientAndLawyer = Boolean(
+      matter && matter.clientId === clientId && matter.lawyerId === document.lawyerId,
+    );
   }
+
+  assertNeutralDocumentClientAccess({
+    clientActive: client.accountStatus === "active" && client.deletedAt === null,
+    relationshipActive,
+    shareActive: Boolean(share),
+    documentStatus: document.status,
+    matterMatchesClientAndLawyer,
+  });
 
   return document;
 }
