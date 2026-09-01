@@ -141,3 +141,122 @@ The project must not use terms such as **Escrow**, **PSP**, **tax treatment**, o
 ## Research state
 
 **BENCHMARK ROUND 1 COMPLETE.** The first market/regulatory evidence pass is now recorded. The next read-only research task is deeper entity/registry verification and regulator-specific evidence for the shortlisted Jordanian market examples, followed by formal preparation of the Legal & Regulatory Questions for Jordanian counsel and tax advisers.
+
+## Round 4 — Legal Boundary & Operating Model Analysis (2026-09-01)
+
+Round 4 converts the SaaS/Marketplace discussion into a **Legal Boundary Map**. The purpose is to distinguish platform technology functions from professional legal services, payment/settlement functions, tax/invoicing functions, and data/confidentiality obligations. This is an engineering/governance hypothesis record, not a legal approval.
+
+### Operating-model hypotheses
+
+**Model A — Marketplace / Technology Intermediary**  
+Client ↔ Licensed Lawyer, with Mustasharek providing technology, discovery, scheduling, communications and related platform services.
+
+**Model B — Lawyer SaaS**  
+Mustasharek provides practice-management SaaS to licensed lawyers/law firms; the lawyer independently contracts with and serves clients.
+
+**Model C — SaaS + Marketplace**  
+Mustasharek provides lawyer-facing practice-management SaaS plus a client-facing discovery/booking layer connecting clients to licensed lawyers.
+
+All three remain hypotheses requiring Jordanian legal, tax and regulatory validation.
+
+### Legal Boundary Map — working classification
+
+Potential platform functions, subject to counsel validation:
+
+- software infrastructure and hosting;
+- identity/account workflows;
+- appointment scheduling;
+- secure document transport/storage;
+- lawyer practice-management workspaces;
+- communications infrastructure;
+- notifications and workflow automation;
+- operational reporting;
+- SaaS subscriptions to professional users;
+- technical support and platform administration.
+
+Activities that must **not** be assumed permissible merely from a technology/SaaS label:
+
+- providing legal advice in the platform's own professional capacity;
+- legal representation or advocacy;
+- professional judgment on behalf of the lawyer;
+- unauthorized practice of the legal profession;
+- custody/routing of client or third-party funds where licensing or authorization is required;
+- asserting a particular tax treatment solely by contract wording;
+- guaranteeing correctness of professional legal work;
+- assuming regulatory permission merely because a technology company is incorporated.
+
+### Substance-over-label rule
+
+The words **SaaS**, **Marketplace**, **Technology Provider**, **Intermediary**, or **Escrow** do not themselves establish legal status. The actual contracts, money flow, operational conduct, professional activity and representations must be assessed.
+
+### Client relationship test
+
+The final operating model must explicitly resolve:
+
+1. Who contracts with the client for legal services?
+2. Who is the professional service provider?
+3. Who determines professional scope?
+4. Who determines professional fees?
+5. Who issues the professional invoice/receipt?
+6. Who bears professional responsibility for advice and professional errors?
+7. What exactly is Mustasharek's role in acquiring and facilitating the relationship?
+8. Can platform administration be performed without exercising professional judgment?
+9. What, if any, recommendation or matching function can legally be performed by the platform?
+
+### Liability allocation — A/B/C/D
+
+- **A — Professional Liability:** professional advice/execution is intended to remain with the licensed lawyer/service provider, subject to mandatory law and professional rules. Additional direct platform liability remains unresolved.
+- **B — Platform Liability:** Mustasharek remains responsible for obligations arising from its own technology, representations, security commitments and contractual duties. A disclaimer cannot erase non-excludable legal liability.
+- **C — Data Liability:** Mustasharek must establish its roles and obligations under Jordanian personal-data law and professional confidentiality requirements, including lawful bases, retention, disclosure, incidents and cross-border processing where applicable.
+- **D — Payment Liability:** the payment and settlement model must be mapped to the actual licensed payment provider and contractual flow; the regulatory status of collection, routing, split settlement, refunds and third-party payouts remains unresolved.
+
+### Payment boundary
+
+The working architectural term remains **Payment / Settlement Flow**. The term **Escrow** is not adopted as a legal or technical conclusion. The eventual model must identify the payer, supplier/merchant role where applicable, payment provider, settlement structure, professional entitlement, platform fee, refunds, reconciliation, disputes/chargebacks and regulatory basis.
+
+### Tax and invoicing boundary
+
+No assumption is made that Mustasharek is taxable only on a platform commission. The final model must determine principal/agent characterization, supplier identity, consideration, third-party collections, invoice issuer, platform-fee treatment, professional-fee treatment, applicable taxes and national e-invoicing obligations from the actual arrangement.
+
+### Partner sequencing
+
+A law-firm partnership is not automatically the correct source of independent regulatory validation. Preferred sequence:
+
+1. Jordanian counsel with relevant corporate/technology/legal-profession knowledge validates the operating model.
+2. Jordanian tax/accounting adviser validates tax and invoicing treatment.
+3. Payment/financial-regulatory specialist or licensed provider validates the money flow where necessary.
+4. Only then should a law-firm/provider-network partnership be finalized.
+
+### Liability disclaimer rule
+
+A Terms-of-Use checkbox or disclaimer is a documentation mechanism for an allocation that the law permits; it is not a mechanism for creating immunity that Jordanian law does not recognize. The final wording must be counsel-reviewed and must accurately describe both professional-provider responsibility and platform responsibility.
+
+### Round 4 decision register
+
+| Decision | Status |
+|---|---|
+| Independent Jordanian technology company | **ENGINEERING / BUSINESS HYPOTHESIS** |
+| Marketplace model | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
+| Lawyer SaaS model | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
+| SaaS + Marketplace | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
+| Mustasharek intended as non-law-firm technology platform | **INTENDED OPERATING PRINCIPLE — COUNSEL VALIDATION REQUIRED** |
+| Licensed lawyer as professional service provider | **INTENDED MODEL — COUNSEL VALIDATION REQUIRED** |
+| Tax only on platform commission | **UNRESOLVED — DO NOT ASSUME** |
+| Split settlement permitted | **UNRESOLVED — DO NOT ASSUME** |
+| Escrow structure permitted | **UNRESOLVED — DO NOT ASSUME** |
+| Liability disclaimer fully excludes platform liability | **UNRESOLVED — DO NOT ASSUME** |
+
+### Round 4 execution-gate impact
+
+Round 4 does **not** open the Execution Gate. No production financial implementation, payment-provider integration, tax/e-invoicing implementation based on assumptions, law-firm-specific hard-coding, production database mutation, `main` changes, production-infrastructure changes, or implementation of unvalidated contractual/legal claims is authorized.
+
+**Round 4 artifact:** `docs/governance/legal-boundary-operating-model-round4-2026-09.md`
+
+**Round 4 status:** `RECORDED — READ-ONLY GOVERNANCE / ARCHITECTURE HYPOTHESIS`.
+
+## Current governance state
+
+`SECURITY HOLD: ACTIVE`  
+`READ-ONLY RESEARCH: ACTIVE`  
+`ZERO MUTATION: ACTIVE`  
+`EXECUTION GATE: CLOSED`
