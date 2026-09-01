@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types --test src/services/documentParser.test.ts src/services/clientFileUploadHub.test.ts src/services/quickActions.test.ts src/services/export/exportService.test.ts src/controllers/consultationDocumentation.contract.test.ts",
+    "test": "node --experimental-strip-types --test src/services/documentParser.test.ts src/services/clientFileUploadHub.test.ts src/services/quickActions.test.ts src/services/export/exportService.test.ts src/controllers/consultationDocumentation.contract.test.ts src/services/neutralDocumentAuthorization.test.ts",
     "test:security-gate": "tsx --test src/security/security-gate.integration.test.ts"
   },
   "dependencies": {
@@ -30,7 +30,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.19",
+    "@types/cors": "^2.2.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "catalog:",
