@@ -1,262 +1,187 @@
 # Mustasharek LegalTech Discovery Baseline
 
 **Date:** 2026-09-01  
-**Status:** SECURITY HOLD ACTIVE | READ-ONLY | ZERO MUTATION  
+**Status:** SECURITY HOLD ACTIVE | READ-ONLY RESEARCH ACTIVE | ZERO MUTATION FOR SENSITIVE/RUNTIME SYSTEMS  
 **Branch:** `docs/legaltech-discovery-baseline-2026-09`
 
 ## Purpose
 
-This document preserves the discovery and governance conclusions reached before the next execution gate. It is a historical engineering baseline, not a legal opinion, regulatory approval, tax ruling, or certification of production readiness.
+This document preserves the discovery, market, regulatory, architectural and governance conclusions reached before the next execution gate. It is a historical engineering baseline and decision record, not a legal opinion, regulatory approval, tax ruling, payment authorization, or certification of production readiness.
 
 ## Evidence classification
 
-- **CONFIRMED OFFICIAL EVIDENCE** — supported by an identified competent authority/source and preserved with its citation/link.
+- **CONFIRMED OFFICIAL EVIDENCE** — supported by an identified competent authority/source.
 - **MARKET OBSERVATION** — observed from public market examples; not proof of legality or regulatory approval.
-- **ENGINEERING HYPOTHESIS** — architectural preference awaiting legal/business validation.
+- **ENGINEERING HYPOTHESIS** — architectural/business preference awaiting legal and commercial validation.
 - **LEGAL QUESTION — UNRESOLVED** — requires competent Jordanian legal advice or an official determination.
 - **REQUIRES JORDANIAN COUNSEL OPINION** — cannot safely be decided by engineering alone.
 
-## Discovery baseline
+## Historical discovery and decisions preserved
 
-The nine readiness evidence contracts were reviewed conservatively. The recurring distinction was maintained between internal engineering foundations and external operational/legal evidence.
+The project has completed read-only discovery rounds covering: Jordanian LegalTech market benchmarking; first-party/entity verification attempts; regional comparison including Saudi examples; Legal Boundary and Operating Model analysis; Regulatory Evidence and Legal Model Validation; Evidence Hierarchy; Legal Authority Matrix; Registration-vs-Permission distinction; Liability Test A/B/C/D; Client & Data Ownership Test; Exit/Failure Scenario Test; Minimum-Risk Launch Model A→B→C; and Model C (SaaS + Marketplace) as the preferred long-term business hypothesis.
 
-1. **Architecture / engineering foundation:** substantially established, subject to normal release-bound verification.
-2. **External integrations:** incomplete where provider, contractual, or regulatory dependencies remain open.
-3. **Health / liveness:** health/CI evidence is not equivalent to production observability, metrics, alerting, or SLO evidence.
-4. **Resilience / recovery:** idempotency, retry safety, transaction/concurrency foundations may exist without proving DR restore drills, RTO, or RPO.
-5. **Performance QA:** concurrency correctness is not a load/performance benchmark; P95/P99, throughput, and resource limits require separate evidence.
-6. **Security / privacy:** security controls in code do not by themselves constitute a production security assessment, privacy compliance certification, or penetration test.
-7. **Compliance:** technical privacy/security controls do not by themselves prove corporate, tax, professional-regulatory, or other external compliance.
-8. **Final production QA:** final approval is release-bound and cannot be granted from a different revision or while material release conditions remain unresolved.
-9. **Overall readiness:** the matrix remains conservatively **PENDING** until external evidence and dependencies are closed.
+These rounds are recorded in the detailed governance artifacts under `docs/governance/`. Market examples remain `MARKET OBSERVATION` and never constitute legal approval.
 
-## Governance decision
+## Core governance rules
 
 `SECURITY HOLD: ACTIVE`  
-`READ-ONLY: ACTIVE`  
-`ZERO MUTATION: ACTIVE`
+`READ-ONLY LEGAL/REGULATORY RESEARCH: ACTIVE`  
+`ZERO MUTATION: ACTIVE` for production, financial, regulatory and sensitive operational systems.
 
-No operational code, production database, financial implementation, tax implementation, or external payment integration is authorized by this baseline.
+Governance documentation commits on this dedicated branch are permitted because they preserve decision history and do not alter runtime behavior.
 
-## Current strategic hypothesis
+No production database mutation, financial implementation, live payment integration, tax implementation based on assumption, or commercial activation is authorized by this baseline.
 
-A **Jordanian independent technology company** owning the Mustasharek platform/IP, with licensed legal professionals providing the professional legal service, remains the preferred architecture hypothesis. It is **not** yet an approved legal structure.
+## Strategic hypothesis — entity and operating model
 
-The platform should remain **generic/configurable** and should not be hard-coded to a specific law firm, tax identity, payment provider, or commercial partner before those matters are legally and commercially resolved.
+A **Jordanian independent technology company** owning the Mustasharek platform/IP, with licensed legal professionals providing professional services, remains the preferred architecture hypothesis. It is not an approved legal structure or corporate-registration instruction.
 
-## Market Benchmark — Round 1 update (2026-09-01)
+The platform should remain generic/configurable and should not be hard-coded to a specific law firm, tax identity, payment provider, or commercial partner before those matters are legally and commercially resolved.
 
-Read-only public research identified current Jordan-market LegalTech examples that materially resemble parts of the proposed architecture.
+## Market benchmark — key preserved findings
 
-### Huqouk / منصة حقوق
+**Huqouk / منصة حقوق:** public material presents a digital legal platform and describes a relationship between clients and accredited lawyers; treated strictly as `MARKET OBSERVATION`.
 
-Huqouk publicly presents itself as a digital legal platform in Jordan. Its public legal-consultation terms describe it as a **digital legal mediation platform**, not a law firm, and describe the legal relationship as being between clients and accredited lawyers. The terms also state that communications, agreement, payment, and service-related document exchange for relationships initiated through the platform remain within the platform.
+**Qada.ai:** public material describes a technology platform, independent lawyer service providers and lawyer/client workflows; treated strictly as `MARKET OBSERVATION`.
 
-Sources:
-- https://www.huqouk.com/
-- https://www.huqouk.com/lawyers/
-- https://www.huqouk.com/legal-consultation
+**Mufead / مُفيد:** public material describes legal-request and lawyer-offer functionality; operator/legal-entity/payment/tax structure was not independently established in the reviewed evidence and remains verification-bound. Regional classification is retained as comparative market evidence.
 
-**Classification:** `MARKET OBSERVATION`.
+Benchmark conclusion: these examples support market plausibility of technology-platform/legal-provider models but do not prove that Mustasharek may copy their operating, payment, commission, tax or professional arrangements.
 
-### Qada.ai
-
-Qada.ai publicly describes itself as a technology platform rather than a law firm. Its published terms state that registered lawyers are independent service providers and that the legal relationship is directly between citizen and lawyer. Its lawyer-facing material describes verification using Jordan Bar credentials and lawyer/client matching workflows.
-
-Sources:
-- https://qada.ai/terms
-- https://qada.ai/for-lawyers
-- https://qada.ai/how-it-works
-
-**Classification:** `MARKET OBSERVATION`.
-
-### Mufead / مُفيد
-
-Public website and app-store material describes a platform through which users submit legal requests and receive offers from licensed lawyers. The reviewed public material does not independently establish the operator's Jordan corporate, tax, payment, or regulatory structure.
-
-Sources:
-- https://www.mufead.com/
-- https://play.google.com/store/apps/details?id=com.elmam.mufead&hl=ar
-
-**Classification:** `MARKET OBSERVATION` / verification pending.
-
-### Benchmark conclusion
-
-These examples strengthen the **market plausibility** of a technology-platform/independent-lawyer model. They do **not** establish that Mustasharek is legally approved, nor do they establish the legality of any particular payment, tax, commission, advertising, or professional-regulatory arrangement.
-
-## Official regulatory evidence captured in Round 1
+## Regulatory evidence — key preserved findings
 
 ### Payment / settlement
 
-Central Bank of Jordan official licensing material states that electronic payment/transfer services and operation/management of electronic payment systems are subject to the applicable licensing framework and describes substantial requirements for licensed payment companies.
+Official Central Bank of Jordan material establishes that relevant electronic payment/transfer and payment-system activities operate under a licensing/regulatory framework. Therefore technology-company registration must not be treated as equivalent to payment-service authorization.
 
-Sources:
-- https://www.cbj.gov.jo/ebv4.0/root_storage/ar/eb_list_page/دليل_الحصول_على_الترخيص_لمزاولة_أنشطة_خدمات_الدفع_والتحويل_الإلكتروني_للاموال.pdf
-- https://www.cbj.gov.jo/ebv4.0/root_storage/ar/eb_list_page/4e13f7f5-8bad-413a-8840-f576c24c2eb5.pdf
-
-**Confirmed:** a technology-company registration must not be treated as equivalent to a payment-service authorization.
-
-**Unresolved:** whether Mustasharek's intended payment/settlement flow falls inside or outside a regulated activity and what provider structure is appropriate.
+**Unresolved:** the exact legal characterization and permitted provider structure for Mustasharek's future collection, routing, settlement, refund, payout or split-payment flow.
 
 ### National e-invoicing
 
-The Income and Sales Tax Department currently publishes the National E-Invoicing System, the 2023 invoicing regulation, joining/integration guidance, invoice-organization guidance, and a technical integration guide.
+Official Income and Sales Tax Department material establishes the National E-Invoicing System and related guidance.
 
-Sources:
-- https://istd.gov.jo/AR/Pages/نظام_الفوترة_الوطني
-- https://istd.gov.jo/AR/List/الادلة_الارشادية_لنظام_الفوترة_الوطني
-- https://istd.gov.jo/AR/List/للانضمام_الى_نظام_الفوترة_الوطني
-
-**Confirmed:** the national e-invoicing framework and implementation guidance exist.
-
-**Unresolved:** who should be the supplier/invoice issuer in Mustasharek's final business model and how platform fees and professional fees are treated.
+**Unresolved:** supplier/invoice issuer and treatment of professional/platform fees under the final operating model.
 
 ### Personal-data protection
 
-The Ministry of Digital Economy and Entrepreneurship's current legislation listing identifies Personal Data Protection Law No. 24 of 2023 and related 2025 implementing instruments.
+Official Ministry of Digital Economy and Entrepreneurship material identifies Jordan's Personal Data Protection Law No. 24 of 2023 and related implementing instruments.
 
-Source:
-- https://modee.gov.jo/AR/List/القوانين_والأنظمة_و_التعليمات_الصادرة_بمقتضاه
+**Unresolved:** Mustasharek's exact controller/processor roles, lawful bases, confidentiality, retention, disclosure, incidents and cross-border processing/hosting requirements.
 
-**Confirmed:** a current Jordanian personal-data protection framework exists.
+## Round 4 — Legal Boundary & Operating Model
 
-**Unresolved:** Mustasharek's precise controller/processor roles, legal bases, confidentiality obligations, retention, disclosure, and any cross-border processing/hosting requirements.
+Three operating hypotheses remain distinct:
 
-## Critical unresolved questions
-
-- Is the proposed technology-platform/marketplace activity permissible under the Jordanian legal-profession framework and applicable Bar rules?
-- Who is legally contracted with the client for the professional service?
-- What are the permitted limits of platform marketing, lead generation, commissions, and fee arrangements?
-- Who is the service provider and invoice issuer?
-- What is the legally and tax-accounting appropriate treatment of platform fees and professional fees?
-- May the platform collect or route funds for third parties, and under what licensed/payment-provider structure?
-- What privacy, confidentiality, data-processing, retention, and cross-border hosting requirements apply?
-- What consumer, refund, dispute, and liability rules apply?
-- What exact wording and contractual allocation of responsibility is enforceable, and what cannot be achieved merely through a checkbox or disclaimer?
-
-## Golden rule
-
-The project must not use terms such as **Escrow**, **PSP**, **tax treatment**, or **legal intermediary** as established legal facts unless the relevant competent authority or qualified Jordanian counsel has confirmed the exact model.
-
-## Research state
-
-**BENCHMARK ROUND 1 COMPLETE.** The first market/regulatory evidence pass is now recorded. The next read-only research task is deeper entity/registry verification and regulator-specific evidence for the shortlisted Jordanian market examples, followed by formal preparation of the Legal & Regulatory Questions for Jordanian counsel and tax advisers.
-
-## Round 4 — Legal Boundary & Operating Model Analysis (2026-09-01)
-
-Round 4 converts the SaaS/Marketplace discussion into a **Legal Boundary Map**. The purpose is to distinguish platform technology functions from professional legal services, payment/settlement functions, tax/invoicing functions, and data/confidentiality obligations. This is an engineering/governance hypothesis record, not a legal approval.
-
-### Operating-model hypotheses
-
-**Model A — Marketplace / Technology Intermediary**  
-Client ↔ Licensed Lawyer, with Mustasharek providing technology, discovery, scheduling, communications and related platform services.
-
-**Model B — Lawyer SaaS**  
-Mustasharek provides practice-management SaaS to licensed lawyers/law firms; the lawyer independently contracts with and serves clients.
-
-**Model C — SaaS + Marketplace**  
-Mustasharek provides lawyer-facing practice-management SaaS plus a client-facing discovery/booking layer connecting clients to licensed lawyers.
-
-All three remain hypotheses requiring Jordanian legal, tax and regulatory validation.
-
-### Legal Boundary Map — working classification
-
-Potential platform functions, subject to counsel validation:
-
-- software infrastructure and hosting;
-- identity/account workflows;
-- appointment scheduling;
-- secure document transport/storage;
-- lawyer practice-management workspaces;
-- communications infrastructure;
-- notifications and workflow automation;
-- operational reporting;
-- SaaS subscriptions to professional users;
-- technical support and platform administration.
-
-Activities that must **not** be assumed permissible merely from a technology/SaaS label:
-
-- providing legal advice in the platform's own professional capacity;
-- legal representation or advocacy;
-- professional judgment on behalf of the lawyer;
-- unauthorized practice of the legal profession;
-- custody/routing of client or third-party funds where licensing or authorization is required;
-- asserting a particular tax treatment solely by contract wording;
-- guaranteeing correctness of professional legal work;
-- assuming regulatory permission merely because a technology company is incorporated.
+- **Model A — Lawyer SaaS:** practice-management technology for licensed lawyers/law firms; lawyer independently provides professional services.
+- **Model B — Discovery / connection layer:** client discovery/connection and related platform capabilities, subject to professional/advertising/referral validation.
+- **Model C — SaaS + Marketplace:** lawyer-facing SaaS plus client-facing discovery/booking layer. This is the preferred long-term business hypothesis, not legal approval.
 
 ### Substance-over-label rule
 
-The words **SaaS**, **Marketplace**, **Technology Provider**, **Intermediary**, or **Escrow** do not themselves establish legal status. The actual contracts, money flow, operational conduct, professional activity and representations must be assessed.
+`SaaS`, `Marketplace`, `Technology Provider`, `Intermediary` and `Escrow` are not legal safe harbors by themselves. Actual contracts, money flow, professional activity, operational conduct and representations control the analysis.
 
-### Client relationship test
+### Liability A/B/C/D
 
-The final operating model must explicitly resolve:
+- **A — Professional Liability:** intended to remain with the licensed lawyer/service provider for professional legal work, subject to mandatory law and professional rules.
+- **B — Platform Liability:** Mustasharek remains responsible for its own technology, representations, security commitments and contractual duties; disclaimers cannot erase non-excludable liability.
+- **C — Data Liability:** roles and duties must be established under the applicable data-protection and professional-confidentiality framework.
+- **D — Payment Liability:** collection, routing, settlement, refunds, payouts and reconciliation remain subject to the actual licensed payment structure and are not assumed permissible.
 
-1. Who contracts with the client for legal services?
-2. Who is the professional service provider?
-3. Who determines professional scope?
-4. Who determines professional fees?
-5. Who issues the professional invoice/receipt?
-6. Who bears professional responsibility for advice and professional errors?
-7. What exactly is Mustasharek's role in acquiring and facilitating the relationship?
-8. Can platform administration be performed without exercising professional judgment?
-9. What, if any, recommendation or matching function can legally be performed by the platform?
+### Liability Test
 
-### Liability allocation — A/B/C/D
+The legal review must explicitly determine whether and under what circumstances a client harmed by professional legal advice can pursue Mustasharek, the lawyer, or both, and which responsibilities can lawfully be allocated by contract. A checkbox is not treated as an immunity mechanism.
 
-- **A — Professional Liability:** professional advice/execution is intended to remain with the licensed lawyer/service provider, subject to mandatory law and professional rules. Additional direct platform liability remains unresolved.
-- **B — Platform Liability:** Mustasharek remains responsible for obligations arising from its own technology, representations, security commitments and contractual duties. A disclaimer cannot erase non-excludable legal liability.
-- **C — Data Liability:** Mustasharek must establish its roles and obligations under Jordanian personal-data law and professional confidentiality requirements, including lawful bases, retention, disclosure, incidents and cross-border processing where applicable.
-- **D — Payment Liability:** the payment and settlement model must be mapped to the actual licensed payment provider and contractual flow; the regulatory status of collection, routing, split settlement, refunds and third-party payouts remains unresolved.
+### Contractual flexibility
 
-### Payment boundary
+Contract clauses may document a lawful allocation of responsibility, but cannot create immunity that mandatory law does not provide. Final wording requires qualified Jordanian counsel.
 
-The working architectural term remains **Payment / Settlement Flow**. The term **Escrow** is not adopted as a legal or technical conclusion. The eventual model must identify the payer, supplier/merchant role where applicable, payment provider, settlement structure, professional entitlement, platform fee, refunds, reconciliation, disputes/chargebacks and regulatory basis.
+## Round 5 — Jordan Regulatory Evidence & Legal Model Validation
 
-### Tax and invoicing boundary
+Round 5 established the following mandatory controls:
 
-No assumption is made that Mustasharek is taxable only on a platform commission. The final model must determine principal/agent characterization, supplier identity, consideration, third-party collections, invoice issuer, platform-fee treatment, professional-fee treatment, applicable taxes and national e-invoicing obligations from the actual arrangement.
+1. **Regulatory Decision Tree:** classify material activities as `ALLOWED`, `REQUIRES APPROVAL / SPECIFIC STRUCTURE`, or `PROHIBITED / NOT TO IMPLEMENT` based on evidence, not engineering assumption.
+2. **Legal Authority Matrix:** direct corporate, professional, payment, tax, data and consumer questions to the competent authority/framework.
+3. **No Single Advisor Can Authorize the Whole Model:** critical domains require the appropriate specialist opinion.
+4. **Registration vs Permission:** incorporation does not prove permission for professional, intermediary, payment or financial activity.
+5. **Client & Data Ownership Test:** resolve contracting party, matter-data control, access, portability, retention, deletion, provider exit, controller/processor roles and confidentiality.
+6. **Exit / Failure Scenario Test:** resolve provider exit/suspension, client withdrawal, disputes, payment-provider failure, refunds, chargebacks, document access, outages and data incidents.
+7. **Minimum-Risk Launch:** staged hypothesis `A — Lawyer SaaS → B — Discovery/Connection → C — SaaS + Marketplace`.
+8. **Evidence Hierarchy:** official evidence and specialist opinions outrank market observation and engineering hypotheses.
 
-### Partner sequencing
+## Round 6 — Neutral Core Construction
 
-A law-firm partnership is not automatically the correct source of independent regulatory validation. Preferred sequence:
+**Current status:** `ACTIVE — NEUTRAL CORE CONSTRUCTION ALLOWED / REGULATED CORE BLOCKED`
 
-1. Jordanian counsel with relevant corporate/technology/legal-profession knowledge validates the operating model.
-2. Jordanian tax/accounting adviser validates tax and invoicing treatment.
-3. Payment/financial-regulatory specialist or licensed provider validates the money flow where necessary.
-4. Only then should a law-firm/provider-network partnership be finalized.
+Round 6 is the current engineering execution direction. It keeps development moving while preserving reversibility and the legal/commercial gates.
 
-### Liability disclaimer rule
+### Neutral Core — permitted construction scope
 
-A Terms-of-Use checkbox or disclaimer is a documentation mechanism for an allocation that the law permits; it is not a mechanism for creating immunity that Jordanian law does not recognize. The final wording must be counsel-reviewed and must accurately describe both professional-provider responsibility and platform responsibility.
+- identity/authentication foundations;
+- client accounts and profiles;
+- lawyer accounts/profiles and professional-status fields;
+- role-based authorization and ownership boundaries;
+- lawyer digital-office workspace;
+- client workspace;
+- scheduling and availability;
+- secure document handling;
+- secure client-lawyer communications;
+- notifications/workflow events;
+- matter/case workspace foundations that do not make Mustasharek the professional provider;
+- CRM/workflow organization;
+- audit logs;
+- administrative governance;
+- generic provider/fee/settlement abstractions with no live regulated transaction;
+- typecheck, tests, security checks, CI and non-production verification.
 
-### Round 4 decision register
+### Regulated / commercial core — blocked
 
-| Decision | Status |
-|---|---|
-| Independent Jordanian technology company | **ENGINEERING / BUSINESS HYPOTHESIS** |
-| Marketplace model | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
-| Lawyer SaaS model | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
-| SaaS + Marketplace | **HYPOTHESIS — LEGAL VALIDATION REQUIRED** |
-| Mustasharek intended as non-law-firm technology platform | **INTENDED OPERATING PRINCIPLE — COUNSEL VALIDATION REQUIRED** |
-| Licensed lawyer as professional service provider | **INTENDED MODEL — COUNSEL VALIDATION REQUIRED** |
-| Tax only on platform commission | **UNRESOLVED — DO NOT ASSUME** |
-| Split settlement permitted | **UNRESOLVED — DO NOT ASSUME** |
-| Escrow structure permitted | **UNRESOLVED — DO NOT ASSUME** |
-| Liability disclaimer fully excludes platform liability | **UNRESOLVED — DO NOT ASSUME** |
+- professional-fee collection on behalf of lawyers;
+- custody/routing of client or third-party funds where authorization is required;
+- escrow;
+- split payments;
+- automatic payouts;
+- commission/revenue sharing;
+- production tax/e-invoicing behavior based on assumptions;
+- live regulated payment integration without validated structure;
+- professional legal advice or representation by Mustasharek itself;
+- law-firm-specific hard-coding before operating-model decision;
+- reliance on a disclaimer/checkbox as immunity;
+- commercial Production activation of unresolved flows.
 
-### Round 4 execution-gate impact
+### Reversible architecture rule
 
-Round 4 does **not** open the Execution Gate. No production financial implementation, payment-provider integration, tax/e-invoicing implementation based on assumptions, law-firm-specific hard-coding, production database mutation, `main` changes, production-infrastructure changes, or implementation of unvalidated contractual/legal claims is authorized.
+The Neutral Core must support more than one future operating model without destructive rewrite. Neutral abstractions may exist in code, but their presence is not permission to activate regulated behavior.
 
-**Round 4 artifact:** `docs/governance/legal-boundary-operating-model-round4-2026-09.md`
+### Immediate engineering sequence
 
-**Round 4 status:** `RECORDED — READ-ONLY GOVERNANCE / ARCHITECTURE HYPOTHESIS`.
+1. Inventory the current repository/application surfaces.
+2. Identify existing identity, client, lawyer, scheduling, documents, messaging, matter and admin capabilities.
+3. Identify all existing financial/payment/tax/commission code and map it to the blocked boundary.
+4. Reuse verified components rather than rebuilding unnecessarily.
+5. Identify security/authorization gaps in the Neutral Core.
+6. Produce a small reversible implementation backlog.
+7. Implement only Neutral Core items.
+8. Run typecheck/tests/security checks and preserve evidence.
+9. Record material decisions in governance before they become runtime assumptions.
+
+## Decision preservation — never return to zero
+
+Every material discussion, research conclusion, rejected assumption, unresolved question and approved engineering direction must be preserved in Git with its evidence classification and date. Future sessions must start from this baseline and the detailed decision artifacts rather than recreating the reasoning from memory.
+
+The preserved minimum includes: Discovery Baseline; Market Benchmark; Entity/Regulatory Verification; Evidence Register; Regulatory Questions; Liability A/B/C/D and Liability Test; Legal Boundary Map; Legal Authority Matrix; Registration-vs-Permission distinction; Client/Data Ownership Test; Exit/Failure Test; Minimum-Risk A→B→C sequence; Model C preferred long-term hypothesis; payment/tax/escrow restrictions; Neutral Core/Regulated Core boundary; Security Hold; Execution Gate; and Round 6 construction direction.
 
 ## Current governance state
 
 `SECURITY HOLD: ACTIVE`  
-`READ-ONLY RESEARCH: ACTIVE`  
-`ZERO MUTATION: ACTIVE`  
-`EXECUTION GATE: CLOSED`
+`READ-ONLY LEGAL/REGULATORY RESEARCH: ACTIVE`  
+`ZERO MUTATION: ACTIVE FOR SENSITIVE/RUNTIME SYSTEMS`  
+`REVERSIBLE CONSTRUCTION: ALLOWED FOR NEUTRAL CORE`  
+`LEGAL OPERATING MODEL: PENDING`  
+`FINANCIAL / PAYMENT IMPLEMENTATION: BLOCKED`  
+`TAX / E-INVOICING IMPLEMENTATION: BLOCKED PENDING VALIDATION`  
+`PRODUCTION COMMERCIAL ACTIVATION: BLOCKED`  
+`EXECUTION GATE: CLOSED FOR REGULATED/COMMERCIAL FUNCTIONS`
+
+**Round 6 artifact:** `docs/governance/neutral-core-construction-round6-2026-09.md`
+
+**Baseline rule:** Build the Neutral Core; keep regulated/commercial behavior blocked; continue legal/regulatory evidence in parallel; make material decisions reversible until validated.
