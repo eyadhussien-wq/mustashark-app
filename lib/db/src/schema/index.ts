@@ -28,6 +28,7 @@ export * from "./caseHearings";
 export * from "./lawyerVerifications";
 export * from "./lawyerClients";
 export * from "./neutralMatters";
+export * from "./neutralDocuments";
 
 // Keep these availability/booking tables explicitly exported as part of the
 // public DB schema surface. This avoids project-reference/declaration emit
