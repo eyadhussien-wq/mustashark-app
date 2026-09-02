@@ -15,7 +15,7 @@ This matrix is the execution index. It does not replace `MUSTASHARK-MASTER-MAP` 
 | P1 — Repository Audit | Inventory runtime/tests, classify Neutral / Commercial / Regulated, identify legacy coupling | `COMPLETED FOR CURRENT SNAPSHOT` | No production mutation | Audit evidence on construction branch |
 | P1.5 — CI Boundary Triage | Decide ownership of legacy CI gates; quarantine regulated-dependent tests; restore scope-aligned CI | `COMPLETED — GREEN` | Current construction CI is green | P1.5 decision record + clean CI gate |
 | P2 — Neutral Core Architecture | Lawyer OS boundaries, RBAC, data minimization, auditability, exportability, module boundaries | `CONDITIONAL PASS / BASELINED` | Neutral domain boundary before feature expansion | P2 boundary decision + P3.1 boundary record |
-| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
+| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS — D GATE CLOSED`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
 | P3 — Lawyer OS v1 Build | Lawyer Workspace, Clients, Matters/Cases, Documents, Scheduling, Messaging, Notifications, Audit Logs | `AUTHORIZED AFTER P3.1` | P3.1 boundary completion | Working Lawyer OS v1 |
 | P4 — Commercial SaaS | Fixed lawyer subscription model (hypothesis: 50 JOD/month), subscription lifecycle, invoice integration | `DESIGN / PENDING SPECIALIST VALIDATION` | Tax/e-invoicing/payment validation | Isolated SaaS billing layer |
 | P5 — Client Portal | Secure lawyer-client communication, document sharing, appointments | `PLANNED` | Privacy/controller-processor review | Client Portal |
@@ -84,7 +84,31 @@ The approved sequencing is:
 
 These are architectural sequencing decisions only. They do not authorize implementation of later items before the active gate closes.
 
-### P3.1 hard blocks
+### P3.1-D security gate closure
+
+**Status: `PASS / CLOSED`**
+
+The DB-backed authenticated Neutral Document IDOR gate was executed successfully on construction commit `301db5d7c5069f366c18bf56ce1c2519cbe2d0b6` in GitHub Actions run `33579958533`.
+
+Evidence:
+
+- Production DB guard: **PASS**
+- Isolated PostgreSQL service: **PASS** (`mustashark_neutral_idor_test` on localhost)
+- API build: **PASS**
+- API health: **PASS** (`/api/healthz`)
+- Lawyer A → Lawyer B document ID tampering: **DENY / PASS**
+- Lawyer B → Lawyer A document ID tampering: **DENY / PASS**
+- Authenticated client → explicitly shared documents: **ALLOW / PASS**
+- Revoked share → **DENY**, document retained: **PASS**
+- Archived relationship → **DENY**, document and relationship retained: **PASS**
+- Test result: **5/5 PASS, 0 FAIL**
+- Ephemeral PostgreSQL container/network teardown: **PASS**
+
+The Production DB Guard was not weakened or exempted. The integration test uses an explicit environment guard and contains no destructive cleanup SQL; the ephemeral CI database is disposed of by the workflow service-container lifecycle.
+
+Therefore **P3.1-D is formally closed**. No Production mutation occurred and no change to `main` is implied by this closure.
+
+## P3.1 hard blocks
 
 ```text
 MARKETPLACE          = BLOCKED
@@ -110,10 +134,10 @@ LEGAL_RESEARCH                = ACTIVE
 P1_REPOSITORY_AUDIT           = COMPLETE FOR CURRENT SNAPSHOT
 P1.5_CI_BOUNDARY_TRIAGE       = COMPLETE / GREEN
 P2_NEUTRAL_CORE_ARCHITECTURE  = CONDITIONAL PASS / BASELINED
-P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS
-P3.1_CURRENT_GATE             = D DOCUMENT CI EVIDENCE PENDING
+P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS — D CLOSED
+P3.1_CURRENT_GATE             = H AUDIT/EXPORT READY TO BEGIN
 FINANCIAL_COLLECTION          = BLOCKED
-PAYOUT_SETTLEMENT             = BLOCKED
+PAYOUT_SETTLEMENT              = BLOCKED
 COMMISSION_ENGINE             = BLOCKED
 ESCROW_WALLET                 = BLOCKED
 CLIENT_FUNDS                  = BLOCKED
