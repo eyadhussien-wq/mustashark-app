@@ -9,7 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-strip-types --test src/services/documentParser.test.ts src/services/clientFileUploadHub.test.ts src/services/quickActions.test.ts src/services/export/exportService.test.ts src/controllers/consultationDocumentation.contract.test.ts",
-    "test:security-gate": "tsx --test src/security/security-gate.integration.test.ts src/security/authorization-boundary.contract.test.ts"
+    "test:security-gate": "tsx --test src/security/security-gate.integration.test.ts src/security/authorization-boundary.contract.test.ts src/security/runtime-negative-authorization.integration.test.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
