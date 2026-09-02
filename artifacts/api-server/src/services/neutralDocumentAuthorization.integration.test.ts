@@ -11,8 +11,14 @@ type LocalAuthResponse = {
   user?: { id?: unknown };
 };
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required for neutral document IDOR integration tests`);
+  return value;
+}
+
 const baseUrl = process.env.NEUTRAL_IDOR_BASE_URL ?? "http://127.0.0.1:8081";
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = requireEnv("DATABASE_URL");
 const password = "test1234";
 
 const IDS = {
@@ -26,8 +32,6 @@ const IDS = {
   shareA: "ci-idor-share-a",
   shareB: "ci-idor-share-b",
 };
-
-if (!databaseUrl) throw new Error("DATABASE_URL is required for neutral document IDOR integration tests");
 
 const parsedDatabaseUrl = new URL(databaseUrl);
 if (parsedDatabaseUrl.hostname !== "localhost" && parsedDatabaseUrl.hostname !== "127.0.0.1") {
