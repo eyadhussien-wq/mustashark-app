@@ -20,7 +20,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
     "googleapis": "^173.0.0",
-    "jsonwebtoken": "^9.0.0",
+    "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.1.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
-    "@types/bcryptjs": "^3.0.3",
+    "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
