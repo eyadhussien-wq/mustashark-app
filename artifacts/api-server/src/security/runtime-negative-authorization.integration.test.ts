@@ -56,6 +56,7 @@ const createdUserIds = [
   ids.outsiderClient,
   ids.ownerLawyer,
   ids.outsiderLawyer,
+  ids.notificationOwner,
 ];
 
 function responseMock() {
@@ -88,6 +89,7 @@ async function seedFixture() {
     [ids.outsiderClient, "Runtime Outsider Client", "runtime-outsider-client@example.test", "client"],
     [ids.ownerLawyer, "Runtime Owner Lawyer", "runtime-owner-lawyer@example.test", "lawyer"],
     [ids.outsiderLawyer, "Runtime Outsider Lawyer", "runtime-outsider-lawyer@example.test", "lawyer"],
+    [ids.notificationOwner, "Runtime Notification Owner", "runtime-notification-owner@example.test", "client"],
   ] as const;
 
   await db.insert(usersTable).values(users.map(([id, name, email, role]) => ({
@@ -194,7 +196,6 @@ async function seedFixture() {
 
 await seedFixture();
 
-
 test("#R1 Lawyer client directory is runtime-scoped to the authenticated lawyer", async () => {
   const owner = responseMock();
   await listMyClients(requestWithAuth(ids.ownerLawyer, "lawyer"), owner as any);
@@ -253,7 +254,7 @@ test("#R5 Milestone allocation denies a different client at runtime before mutat
     .innerJoin(escrowAccountsTable, eq(escrowAccountsTable.quoteId, representationMilestonesTable.quoteId))
     .where(eq(representationMilestonesTable.id, ids.milestone));
   assert.equal(milestone?.status, "funded");
-  assert.equal(milestone?.allocated, "0.00");
+  assert.equal(milestone?.allocated, "0");
 });
 
 test("#R6 Lawyer-only route returns 403 to a client at runtime", () => {
