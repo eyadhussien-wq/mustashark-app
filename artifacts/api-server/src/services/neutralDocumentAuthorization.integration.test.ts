@@ -29,12 +29,20 @@ const IDS = {
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required for neutral document IDOR integration tests");
 
+const parsedDatabaseUrl = new URL(databaseUrl);
+if (parsedDatabaseUrl.hostname !== "localhost" && parsedDatabaseUrl.hostname !== "127.0.0.1") {
+  throw new Error("Neutral document IDOR tests require a localhost-only database target");
+}
+if (!/(^|[-_])(test|ephemeral)([-_]|$)/i.test(parsedDatabaseUrl.pathname.replace(/^\//, ""))) {
+  throw new Error("Neutral document IDOR tests require an explicitly test/ephemeral database name");
+}
+
 function sqlLiteral(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
 function psql(query: string) {
-  return execFileSync("psql", [databaseUrl!, "-v", "ON_ERROR_STOP=1", "-At", "-c", query], {
+  return execFileSync("psql", [databaseUrl, "-v", "ON_ERROR_STOP=1", "-At", "-c", query], {
     encoding: "utf8",
   }).trim();
 }
@@ -96,19 +104,7 @@ function seedFixtures() {
   `);
 }
 
-function cleanupFixtures() {
-  psql(`
-    DELETE FROM neutral_document_shares WHERE id IN (${sqlLiteral(IDS.shareA)}, ${sqlLiteral(IDS.shareB)});
-    DELETE FROM neutral_documents WHERE id IN (${sqlLiteral(IDS.documentA)}, ${sqlLiteral(IDS.documentB)});
-    DELETE FROM neutral_matters WHERE id IN (${sqlLiteral(IDS.matterA)}, ${sqlLiteral(IDS.matterB)});
-    DELETE FROM lawyer_clients WHERE lawyer_id IN (${sqlLiteral(IDS.lawyerA)}, ${sqlLiteral(IDS.lawyerB)}) AND client_id = ${sqlLiteral(IDS.client)};
-    DELETE FROM users WHERE id IN (${sqlLiteral(IDS.lawyerA)}, ${sqlLiteral(IDS.lawyerB)}, ${sqlLiteral(IDS.client)});
-  `);
-}
-
 seedFixtures();
-
-test.after(() => cleanupFixtures());
 
 test("authenticated lawyer A cannot read lawyer B document by ID tampering", async () => {
   const lawyerA = await login("ci-idor-lawyer-a@mustashark.com", "lawyer");
