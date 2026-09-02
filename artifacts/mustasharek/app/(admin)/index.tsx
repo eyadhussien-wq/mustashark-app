@@ -63,6 +63,50 @@ export default function AdminDashboard() {
     };
   }, [lawyers, consultations]);
 
+  const operations = useMemo(() => {
+    const pendingVerification = lawyers.filter((l) => !l.licenseVerified).length;
+    const cancelled = consultations.filter(
+      (c) =>
+        c.status === "rejected" ||
+        c.status === "cancelled_by_client" ||
+        c.status === "cancelled_by_lawyer"
+    ).length;
+
+    if (pendingVerification > 0) {
+      return {
+        count: pendingVerification,
+        tone: "warning" as const,
+        icon: "shield" as keyof typeof Feather.glyphMap,
+        title: "مراجعات مهنية تحتاج تدخلك",
+        detail: `${pendingVerification} حساب${pendingVerification === 1 ? "" : "ات"} محامٍ بانتظار المراجعة المهنية`,
+        action: "فتح إدارة المحامين",
+        onPress: () => router.push("/(admin)/lawyers"),
+      };
+    }
+
+    if (cancelled > 0) {
+      return {
+        count: cancelled,
+        tone: "neutral" as const,
+        icon: "alert-circle" as keyof typeof Feather.glyphMap,
+        title: "إشارات تشغيلية للمراقبة",
+        detail: `${cancelled} استشارة أُغلقت بالرفض أو الإلغاء — للمراجعة عند الحاجة`,
+        action: "فتح سجل الاستشارات",
+        onPress: () => router.push("/(admin)/consultations"),
+      };
+    }
+
+    return {
+      count: 0,
+      tone: "success" as const,
+      icon: "check-circle" as keyof typeof Feather.glyphMap,
+      title: "لا يوجد تدخل تشغيلي عاجل",
+      detail: "اللوحة لا تعرض إجراءات مصطنعة؛ عند ظهور حالة تستحق التدخل ستظهر هنا.",
+      action: "مراجعة لوحة الإدارة",
+      onPress: () => {},
+    };
+  }, [lawyers, consultations, router]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshData();
@@ -108,6 +152,39 @@ export default function AdminDashboard() {
       <View style={styles.adminBadge}>
         <Feather name="shield" size={14} color={C.gold} />
         <Text style={styles.adminBadgeText}>صلاحية مدير النظام (ADMIN)</Text>
+      </View>
+
+      {/* Operational next action */}
+      <View style={styles.operationCard}>
+        <View style={styles.operationHeader}>
+          <View style={[styles.operationIcon, styles[`operationIcon_${operations.tone}`]]}>
+            <Feather
+              name={operations.icon}
+              size={20}
+              color={operations.tone === "warning" ? C.warning : operations.tone === "success" ? C.success : C.primary}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.operationEyebrow}>الإجراء التشغيلي التالي</Text>
+            <Text style={styles.operationTitle}>{operations.title}</Text>
+            <Text style={styles.operationDetail}>{operations.detail}</Text>
+          </View>
+          <View style={styles.operationCount}>
+            <Text style={styles.operationCountValue}>{operations.count}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.operationButton, operations.count === 0 && styles.operationButtonDisabled]}
+          onPress={operations.onPress}
+          disabled={operations.count === 0}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.operationButtonText}>{operations.action}</Text>
+          <Feather name="arrow-left" size={16} color={operations.count === 0 ? C.mutedForeground : C.primaryForeground} />
+        </TouchableOpacity>
+        <Text style={styles.operationBoundary}>
+          الواجهة تلخّص إشارات التشغيل فقط؛ الاعتماد والصلاحيات والقرارات الحساسة تبقى خادمية.
+        </Text>
       </View>
 
       {/* KPI grid */}
@@ -306,6 +383,94 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#8A6D1B",
+  },
+  operationCard: {
+    backgroundColor: C.card,
+    borderRadius: colors.radius,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+    marginBottom: 8,
+  },
+  operationHeader: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+  },
+  operationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  operationIcon_warning: {
+    backgroundColor: "#FEF3C7",
+  },
+  operationIcon_neutral: {
+    backgroundColor: "#EEF2F8",
+  },
+  operationIcon_success: {
+    backgroundColor: "#ECFDF5",
+  },
+  operationEyebrow: {
+    fontSize: 11,
+    color: C.mutedForeground,
+    textAlign: "right",
+    marginBottom: 2,
+  },
+  operationTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: C.navy,
+    textAlign: "right",
+  },
+  operationDetail: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: C.mutedForeground,
+    textAlign: "right",
+    marginTop: 3,
+  },
+  operationCount: {
+    minWidth: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.background,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  operationCountValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: C.navy,
+  },
+  operationButton: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    borderRadius: 11,
+    paddingVertical: 11,
+    marginTop: 14,
+  },
+  operationButtonDisabled: {
+    backgroundColor: C.muted,
+  },
+  operationButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: C.primaryForeground,
+  },
+  operationBoundary: {
+    fontSize: 10,
+    lineHeight: 16,
+    color: C.mutedForeground,
+    textAlign: "right",
+    marginTop: 9,
   },
   grid: {
     flexDirection: "row",
