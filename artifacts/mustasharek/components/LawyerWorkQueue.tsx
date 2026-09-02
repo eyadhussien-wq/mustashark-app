@@ -6,12 +6,11 @@ import type { LawyerWorkQueueItem } from "@/lib/agenda/lawyerWorkQueue";
 import { LawyerAvailabilitySettingsCard } from "@/components/lawyer/LawyerAvailabilitySettingsCard";
 import { LawyerClientDirectory } from "@/components/lawyer/LawyerClientDirectory";
 import { LawyerConsultationDirectory } from "@/components/lawyer/LawyerConsultationDirectory";
+import { LawyerRepresentationRequests } from "@/components/lawyer/LawyerRepresentationRequests";
 
 const C = colors.light;
 
-type Props = {
-  items: readonly LawyerWorkQueueItem[];
-};
+type Props = { items: readonly LawyerWorkQueueItem[] };
 
 export function LawyerWorkQueue({ items }: Props) {
   const router = useRouter();
@@ -38,6 +37,7 @@ export function LawyerWorkQueue({ items }: Props) {
           </TouchableOpacity>
         </View>
       )}
+      <LawyerRepresentationRequests />
       <View style={styles.card} accessibilityLabel="طابور أعمال المحامي">
         <Text style={styles.title}>طابور العمل</Text>
         {items.length === 0 ? (
@@ -49,9 +49,7 @@ export function LawyerWorkQueue({ items }: Props) {
                 <Text style={styles.subject} numberOfLines={1}>{item.subject}</Text>
                 <Text style={styles.meta} numberOfLines={1}>{item.clientName} · {item.date} · {item.time}</Text>
               </View>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.status === "pending" ? "جديد" : "مقبول"}</Text>
-              </View>
+              <View style={styles.badge}><Text style={styles.badgeText}>{item.status === "pending" ? "جديد" : "مقبول"}</Text></View>
             </View>
           ))
         )}
