@@ -48,7 +48,8 @@ async function login(email: string, role: "lawyer" | "client") {
   const body = (await response.json()) as LocalAuthResponse;
   assert.equal(response.status, 200, `${email} login failed: ${response.status} ${JSON.stringify(body)}`);
   assert.equal(typeof body.jwt, "string", `${email} login did not return a JWT`);
-  assert.equal(typeof body.user?.id, "string", `${email} login did not return a user id`);
+  assert.ok(body.user, `${email} login did not return a user`);
+  assert.equal(typeof body.user.id, "string", `${email} login did not return a user id`);
   return { token: body.jwt as string, userId: body.user.id as string };
 }
 
