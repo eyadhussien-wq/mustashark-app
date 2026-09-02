@@ -6,9 +6,7 @@ import { db } from "@workspace/db";
 import {
   bookingsTable,
   consultationEventsTable,
-  platformDuesTable,
   usersTable,
-  PLATFORM_COMMISSION_RATE,
 } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
 import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
@@ -76,10 +74,6 @@ export const confirmBooking = async (req: Request, res: Response) => {
       const googleMeetLink = booking.type === "video" ? `https://meet.google.com/mst-${booking.serialNumber.toLowerCase()}` : null;
       const [updated] = await tx.update(bookingsTable).set({ status: "accepted", googleMeetLink, updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "pending"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held"))).returning();
       if (!updated) throw new Error("ALREADY_PROCESSED");
-      const grossAmount = booking.price;
-      const commissionRate = PLATFORM_COMMISSION_RATE;
-      const commissionAmount = String((Number(grossAmount) * Number(commissionRate)).toFixed(2));
-      await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId, grossAmount, commissionRate, commissionAmount, status: "pending" }).onConflictDoNothing();
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id, metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true } });
       return updated;
     });
@@ -136,7 +130,6 @@ export const checkLawyerAbsence = async (req: Request, res: Response) => {
       if (booking.paymentStatus !== "paid" || booking.escrowStatus !== "held") throw new Error("FINANCIAL_GATE_REQUIRED");
       const [updated] = await tx.update(bookingsTable).set({ status: "refunded_absent", paymentStatus: "refunded", escrowStatus: "refunded", updatedAt: new Date() }).where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.status, "accepted"), eq(bookingsTable.paymentStatus, "paid"), eq(bookingsTable.escrowStatus, "held"), isNull(bookingsTable.lawyerJoinedAt))).returning();
       if (!updated) throw new Error("ALREADY_PROCESSED");
-      await tx.update(platformDuesTable).set({ status: "waived", updatedAt: new Date() }).where(eq(platformDuesTable.bookingId, bookingId));
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_NO_SHOW_REFUND", actorId: authUser.id, metadata: { financialGate: true, refund: "full", reason: "Lawyer did not join within the permitted absence window." } });
       return updated;
     });
