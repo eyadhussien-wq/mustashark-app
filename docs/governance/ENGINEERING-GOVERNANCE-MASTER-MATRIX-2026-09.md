@@ -1,6 +1,6 @@
 # Mustasharek — Engineering & Governance Master Matrix
 
-**Effective:** 2026-09-01  
+**Effective:** 2026-09-02  
 **Current construction branch:** `construction/lawyer-os-v1-p1-audit-2026-09`  
 **Main branch:** untouched by this track  
 **Security Hold:** `ACTIVE`
@@ -15,7 +15,7 @@ This matrix is the execution index. It does not replace `MUSTASHARK-MASTER-MAP` 
 | P1 — Repository Audit | Inventory runtime/tests, classify Neutral / Commercial / Regulated, identify legacy coupling | `COMPLETED FOR CURRENT SNAPSHOT` | No production mutation | Audit evidence on construction branch |
 | P1.5 — CI Boundary Triage | Decide ownership of legacy CI gates; quarantine regulated-dependent tests; restore scope-aligned CI | `COMPLETED — GREEN` | Current construction CI is green | P1.5 decision record + clean CI gate |
 | P2 — Neutral Core Architecture | Lawyer OS boundaries, RBAC, data minimization, auditability, exportability, module boundaries | `CONDITIONAL PASS / BASELINED` | Neutral domain boundary before feature expansion | P2 boundary decision + P3.1 boundary record |
-| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS — D GATE CLOSED`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
+| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS — D + H GATES CLOSED`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
 | P3 — Lawyer OS v1 Build | Lawyer Workspace, Clients, Matters/Cases, Documents, Scheduling, Messaging, Notifications, Audit Logs | `AUTHORIZED AFTER P3.1` | P3.1 boundary completion | Working Lawyer OS v1 |
 | P4 — Commercial SaaS | Fixed lawyer subscription model (hypothesis: 50 JOD/month), subscription lifecycle, invoice integration | `DESIGN / PENDING SPECIALIST VALIDATION` | Tax/e-invoicing/payment validation | Isolated SaaS billing layer |
 | P5 — Client Portal | Secure lawyer-client communication, document sharing, appointments | `PLANNED` | Privacy/controller-processor review | Client Portal |
@@ -108,6 +108,43 @@ The Production DB Guard was not weakened or exempted. The integration test uses 
 
 Therefore **P3.1-D is formally closed**. No Production mutation occurred and no change to `main` is implied by this closure.
 
+## P3.1-H — Immutable Audit, Tamper Evidence & Integrity Alerting
+
+**Status: `PASS / CLOSED / SUCCESS`**
+
+The gate was executed successfully in GitHub Actions on the construction branch with the tested commit pinned and recorded as:
+
+`c259c8b598b2869f015fc3a7709048a7991fe3e5`
+
+Evidence:
+
+- Immutable audit event model: **PASS**
+- DB-level immutability trigger: **PASS**
+- Hash-chain verification: **PASS**
+- Genesis verification: **PASS**
+- Deterministic canonical hashing: **PASS**
+- Compensating Entries append without rewriting historical events: **PASS**
+- Cross-actor compensation target denied: **PASS**
+- `eventHash` tampering detected: **PASS**
+- `previousHash` tampering detected: **PASS**
+- Integrity Alerting Hook emits durable `SECURITY_INTEGRITY_VIOLATION`: **PASS**
+- Integrity Alerting Hook does not auto-isolate; returns `REVIEW_AND_CONTROLLED_ISOLATION`: **PASS**
+- Historical event remains unchanged after compensation: **PASS**
+- Test result: **8/8 PASS, 0 FAIL, 0 SKIPPED**
+- Production DB Guard before test: **PASS**
+- Production DB Guard after test: **PASS**
+- Isolated PostgreSQL test environment and teardown: **PASS**
+- No Production mutation: **CONFIRMED**
+- `main` changed by this track: **NO**
+
+The CI evidence also recorded the exact checked-out commit SHA, eliminating ambiguity between the tested source and the construction-branch head.
+
+The Node 20 Actions runtime warning is classified as **technical CI-environment noise only** for this gate and does not affect the security result or application integrity decision. It is intentionally ignored for this phase closure.
+
+The audit chain establishes tamper evidence and integrity verification. It does **not** by itself make a record legally admissible; identity, provenance, time, retention, custody, and applicable policy remain relevant to any future legal-evidence determination.
+
+Therefore **P3.1-H is formally closed: `CLOSED / SUCCESS`.**
+
 ## P3.1 hard blocks
 
 ```text
@@ -134,10 +171,10 @@ LEGAL_RESEARCH                = ACTIVE
 P1_REPOSITORY_AUDIT           = COMPLETE FOR CURRENT SNAPSHOT
 P1.5_CI_BOUNDARY_TRIAGE       = COMPLETE / GREEN
 P2_NEUTRAL_CORE_ARCHITECTURE  = CONDITIONAL PASS / BASELINED
-P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS — D CLOSED
-P3.1_CURRENT_GATE             = H AUDIT/EXPORT READY TO BEGIN
+P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS — D + H CLOSED
+P3.1_CURRENT_GATE             = NEXT: P3.1-I PERMISSION / IDOR
 FINANCIAL_COLLECTION          = BLOCKED
-PAYOUT_SETTLEMENT              = BLOCKED
+PAYOUT_SETTLEMENT             = BLOCKED
 COMMISSION_ENGINE             = BLOCKED
 ESCROW_WALLET                 = BLOCKED
 CLIENT_FUNDS                  = BLOCKED
