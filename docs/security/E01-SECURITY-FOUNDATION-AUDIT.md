@@ -48,13 +48,53 @@ The API route registry currently mounts these route modules:
 
 The central route registry is `artifacts/api-server/src/routes/index.ts`.
 
+### High-risk controller audit — current pass
+
+The following object-level boundaries were source-verified on `security/e01-foundation-2026-09-03`:
+
+- Booking confirmation checks the assigned lawyer against the authenticated actor; admin is an explicit exception.
+- Booking join checks the authenticated client or assigned lawyer before state transition.
+- Booking completion is restricted to the assigned lawyer or admin and uses optimistic versioning/idempotency.
+- Booking dispute is restricted to booking participants or admin and uses optimistic versioning/idempotency.
+- Lawyer no-show claim/refund/transfer checks the booking client; transfer also validates the replacement lawyer against the original lawyer's transfer rules.
+- Payment-proof confirmation/rejection binds `proofId` to the route `bookingId` and checks assigned-lawyer ownership for lawyer actors.
+- Agreement reads require agreement-party ownership; version creation/publishing is bound to the agreement lawyer and publishing additionally verifies `versionId` belongs to the same agreement.
+- Legal-representation document operations resolve the parent agreement and enforce agreement-party access. Upload permission is constrained by document type and actor role.
+- Document handovers check document ownership/requester/recipient; recipient operations also require active case membership. Operational status/tracking mutations are admin-only.
+- Notifications are scoped to the authenticated user's ID for both reads and mutations.
+- Lawyer verification submission/read uses the authenticated lawyer's own ID; review is admin-protected and audit logged.
+- Lawyer availability update/delete uses only `req.authUser.id`; target availability lookup is limited to active lawyers.
+
+### Important observations
+
+1. **No confirmed IDOR patch is authorized from this pass.** The inspected high-risk paths contain explicit ownership/membership checks. They still require negative tests to prove the checks cannot regress.
+2. **Availability lookup is actor-independent by design.** It is not classified as an IDOR solely because `lawyerId` is caller supplied; the security test must verify that only intended public availability fields are returned and no private lawyer data leaks.
+3. **No-show transfer/refund remains a Financial Authority concern.** The current path mutates escrow/platform-dues/wallet state. It is intentionally not being rewritten under E01-A without applying the canonical Financial Authority decision in its dedicated financial work.
+4. Existing `platform_dues` is preserved and is not treated as authoritative financial accounting merely because it exists.
+
+### Required negative tests
+
+| Boundary | Negative test | Required result |
+|---|---|---|
+| Booking confirm | unrelated lawyer confirms another lawyer's booking | 403; no state change |
+| Booking join | unrelated client/lawyer joins another booking | 403; no state change |
+| Booking complete | unrelated lawyer completes another lawyer's booking | 403; no state change |
+| Booking dispute | unrelated user disputes another booking | 403; no state change |
+| No-show | unrelated client claims/refunds/transfers another client's booking | 403; no financial/state mutation |
+| Payment proof | proof from booking A used through booking B | 404/403; no proof/booking mutation |
+| Agreement version | version from agreement A published through agreement B | 409/404; no mutation |
+| Representation document | document from agreement A accessed/mutated through another agreement context | 403/404; no mutation |
+| Handover | unrelated user reads/mutates/completes another handover | 404/403; no mutation |
+| Verification | lawyer accesses/submits another lawyer's verification | impossible via self routes; negative test required |
+| Availability | lawyer update/delete redirected to another lawyer | impossible via route design; regression test required |
+
 ### Initial middleware evidence
 
 - `profile.ts` uses `requireAuth` and role guards for client/lawyer profile operations.
 - `admin.ts` protects administrative operations with `requireAdmin`; admin login is intentionally separate.
 - `cases.ts` uses `requireAuth`, role guards, and `requireApprovedLawyer` on lawyer-sensitive operations.
-- `documentHandovers.ts` currently applies authentication to every route; object-level authorization remains a controller-level audit item.
-- `legalRepresentationDocuments.ts` applies authentication and role guards; object ownership/membership still requires controller-level verification.
+- `documentHandovers.ts` applies authentication to every route; object-level authorization is additionally enforced in the controller.
+- `legalRepresentationDocuments.ts` applies authentication and role guards; the service additionally enforces agreement participant access.
 
 ### Required authorization matrix
 
@@ -72,7 +112,7 @@ The central route registry is `artifacts/api-server/src/routes/index.ts`.
 | cases | required | client/lawyer/admin | lawyer actions as required | case membership/ownership | AUDIT |
 | hearings | required | client/lawyer/admin | lawyer actions as required | case membership | AUDIT |
 
-The matrix is deliberately marked AUDIT until each controller path is verified. Middleware presence alone is not treated as proof of authorization.
+The matrix remains AUDIT until every mounted route has controller/service evidence and corresponding negative coverage.
 
 ## E01-B — Professional Trust
 
