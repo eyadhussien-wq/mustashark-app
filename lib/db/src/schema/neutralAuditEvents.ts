@@ -28,6 +28,7 @@ export const neutralAuditEventsTable = pgTable("neutral_audit_events", {
   reasonCode: text("reason_code"),
   correlationId: text("correlation_id"),
   metadata: jsonb("metadata"),
+  targetEventId: text("target_event_id"),
   chainVersion: text("chain_version").notNull().default("1"),
   canonicalizationVersion: text("canonicalization_version").notNull().default("1"),
   genesisHash: text("genesis_hash").notNull(),
@@ -39,6 +40,7 @@ export const neutralAuditEventsTable = pgTable("neutral_audit_events", {
   index("neutral_audit_events_resource_occurred_idx").on(table.resourceType, table.resourceId, table.occurredAt),
   index("neutral_audit_events_correlation_idx").on(table.correlationId),
   index("neutral_audit_events_actor_chain_idx").on(table.actorUserId, table.occurredAt, table.id),
+  index("neutral_audit_events_target_event_idx").on(table.targetEventId),
 ]);
 
 export type NeutralAuditEventRow = typeof neutralAuditEventsTable.$inferSelect;
