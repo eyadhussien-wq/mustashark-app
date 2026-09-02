@@ -71,10 +71,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE '(escrow|wallet|settlement|payout|commission|client.?fund|payment.?collection|platform.?dues)' artifacts/api-server/src/services/neutralAuthorizationPolicy.ts artifacts/api-server/src/services/neutralAuthorizationAudit.ts; then
-            echo "ERROR: blocked financial/marketplace authority detected in P3.1-I policy surface"
-            exit 1
-          fi
+          forbidden='(escrow|wallet|settlement|payout|commission|client.?fund|payment.?collection|platform.?dues)'
+          for file in \
+            artifacts/api-server/src/services/neutralAuthorizationPolicy.ts \
+            artifacts/api-server/src/services/neutralAuthorizationAudit.ts; do
+            if perl -0ne '
+              my $source = $_;
+              $source =~ s{/\*.*?\*/}{}gs;
+              $source =~ s{//[^\n]*}{}g;
+              if ($source =~ /'"$forbidden"'/i) { exit 0; }
+              exit 1;
+            ' "$file"; then
+              echo "ERROR: blocked financial/marketplace authority detected in executable P3.1-I policy surface: $file"
+              exit 1
+            fi
+          done
           grep -q 'AUTHORIZATION_DENIED' artifacts/api-server/src/services/neutralAuthorizationAudit.ts
           grep -q 'recordNeutralAuthorizationDenied' artifacts/api-server/src/services/neutralDocumentAuthorization.ts
           echo "Neutral Core boundary guard: PASS"
