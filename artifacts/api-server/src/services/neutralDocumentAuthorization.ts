@@ -198,6 +198,17 @@ export async function getNeutralDocumentForClient(clientId: string, documentId: 
     );
   }
 
+  if (matterStatus === "archived") {
+    return denyDocumentAuthorization({
+      actorUserId: clientId,
+      actorRole: "client",
+      documentId,
+      reasonCode: "MATTER_ARCHIVED",
+      errorCode: "DOCUMENT_NOT_ACCESSIBLE",
+      metadata: { matterStatus },
+    });
+  }
+
   try {
     assertNeutralDocumentClientAccess({
       clientActive: client.accountStatus === "active" && client.deletedAt === null,
@@ -216,9 +227,7 @@ export async function getNeutralDocumentForClient(clientId: string, documentId: 
         ? "RELATIONSHIP_NOT_ACTIVE"
         : error.code === "SHARE_NOT_ACTIVE"
           ? "SHARE_NOT_ACTIVE"
-          : error.code === "DOCUMENT_NOT_ACCESSIBLE" && matterStatus === "archived"
-            ? "MATTER_ARCHIVED"
-            : error.code,
+          : error.code,
       errorCode: error.code,
       metadata: matterStatus ? { matterStatus } : null,
     });
