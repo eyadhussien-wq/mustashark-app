@@ -34,6 +34,7 @@ jobs:
       NEUTRAL_IDOR_BASE_URL: http://127.0.0.1:8081
       SESSION_SECRET: ci-neutral-idor-test-secret-2026
       NODE_ENV: test
+      PORT: 8081
 
     steps:
       - name: Checkout
