@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   neutralAuditEventsTable,
@@ -57,12 +57,41 @@ export async function recordNeutralAuditEvent(input: NeutralAuditInput) {
   return event;
 }
 
-/** Lawyer-scoped audit stream. No admin bypass and no cross-lawyer access. */
+/**
+ * Lawyer activity stream is scoped to resources owned by that lawyer.
+ * Actor-owned events are included as well; unrelated tenants are excluded.
+ */
 export async function listNeutralAuditEventsForLawyer(lawyerId: string) {
+  const [clientRows, matterRows, documentRows] = await Promise.all([
+    db
+      .select({ id: lawyerClientsTable.clientId })
+      .from(lawyerClientsTable)
+      .where(eq(lawyerClientsTable.lawyerId, lawyerId)),
+    db
+      .select({ id: neutralMattersTable.id })
+      .from(neutralMattersTable)
+      .where(eq(neutralMattersTable.lawyerId, lawyerId)),
+    db
+      .select({ id: neutralDocumentsTable.id })
+      .from(neutralDocumentsTable)
+      .where(eq(neutralDocumentsTable.lawyerId, lawyerId)),
+  ]);
+
+  const clientIds = clientRows.map((row) => row.id);
+  const matterIds = matterRows.map((row) => row.id);
+  const documentIds = documentRows.map((row) => row.id);
+
+  const ownershipPredicates = [
+    eq(neutralAuditEventsTable.actorUserId, lawyerId),
+    clientIds.length ? and(eq(neutralAuditEventsTable.resourceType, "client"), inArray(neutralAuditEventsTable.resourceId, clientIds)) : undefined,
+    matterIds.length ? and(eq(neutralAuditEventsTable.resourceType, "matter"), inArray(neutralAuditEventsTable.resourceId, matterIds)) : undefined,
+    documentIds.length ? and(eq(neutralAuditEventsTable.resourceType, "document"), inArray(neutralAuditEventsTable.resourceId, documentIds)) : undefined,
+  ].filter((predicate): predicate is Exclude<typeof predicate, undefined> => Boolean(predicate));
+
   return db
     .select()
     .from(neutralAuditEventsTable)
-    .where(and(eq(neutralAuditEventsTable.actorUserId, lawyerId), eq(neutralAuditEventsTable.actorRole, "lawyer")))
+    .where(or(...ownershipPredicates))
     .orderBy(asc(neutralAuditEventsTable.occurredAt), asc(neutralAuditEventsTable.id));
 }
 
@@ -116,8 +145,7 @@ export async function exportNeutralLawyerData(lawyerId: string): Promise<Neutral
     .from(neutralDocumentsTable)
     .where(eq(neutralDocumentsTable.lawyerId, lawyerId));
 
-  const documentIds = documents.map((document) => document.id);
-  const documentShares = documentIds.length === 0
+  const documentShares = documents.length === 0
     ? []
     : await db
         .select({
@@ -132,11 +160,7 @@ export async function exportNeutralLawyerData(lawyerId: string): Promise<Neutral
         .innerJoin(neutralDocumentsTable, eq(neutralDocumentsTable.id, neutralDocumentSharesTable.documentId))
         .where(eq(neutralDocumentsTable.lawyerId, lawyerId));
 
-  const audit = await db
-    .select()
-    .from(neutralAuditEventsTable)
-    .where(eq(neutralAuditEventsTable.actorUserId, lawyerId))
-    .orderBy(asc(neutralAuditEventsTable.occurredAt), asc(neutralAuditEventsTable.id));
+  const audit = await listNeutralAuditEventsForLawyer(lawyerId);
 
   return {
     schemaVersion: 1,
