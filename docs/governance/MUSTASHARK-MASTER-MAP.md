@@ -2,7 +2,166 @@
 
 **Status:** CANONICAL GOVERNANCE AUTHORITY — ADOPTED
 **Adoption date:** 2026-08-25
-**Scope:** governance, roadmap control, cross-map traceability, implementation closure, evidence requirements.
+**Product Master Map adoption:** 2026-09-03
+**Scope:** governance, product vision, roadmap control, cross-map traceability, implementation closure, evidence requirements.
+
+## 00 — Mustasharek product north star
+
+Mustasharek is a two-sided legal-services platform with two primary experiences:
+
+### Client experience
+
+The client opens Mustasharek to find the right lawyer, communicate with that lawyer, purchase legal services, and manage the resulting legal relationship from inside the application.
+
+The client journey is:
+
+`Discover Lawyer → Review Profile → Communicate → Request Service → Pay In-App → Book / Start Service → Receive Service → Documents / Case Workspace → Follow-up → Evaluate`
+
+The platform must support both:
+
+- an existing lawyer whom the client already knows; and
+- a new lawyer discovered through Mustasharek.
+
+### Lawyer experience
+
+The lawyer opens Mustasharek as a **digital law office**: a professional workspace through which the lawyer can operate substantially like a real-world practice while serving clients through the platform.
+
+The lawyer experience includes, as applicable:
+
+- professional profile and discovery;
+- client intake and relationships;
+- consultations and appointments;
+- secure communication;
+- cases / matters;
+- documents and evidence;
+- tasks and workflow;
+- legal-service offers and fees;
+- service milestones where applicable;
+- payments and verified entitlements;
+- settlement / payout visibility;
+- notifications and reminders;
+- office administration;
+- reporting and operational controls.
+
+### Lawyer subscription model
+
+The product-commercial model adopted for planning is:
+
+`Lawyer → 30-day free trial → 50 JOD/month subscription`
+
+The first month is a trial. After the trial, the target subscription price is **50 Jordanian dinars per month**.
+
+Subscription entitlement is a platform-service concern and MUST remain separate from client funds and lawyer earned service entitlements.
+
+No subscription payment implementation is considered complete merely because the price is documented. It must pass the applicable product, authorization, payment, entitlement, security, and CI gates before closure.
+
+### Client-to-lawyer service payment model
+
+The product model is:
+
+`Client → Mustasharek payment flow → verified service payment → lawyer entitlement / settlement`
+
+Clients pay for legal services through Mustasharek. The financial architecture must preserve the distinction between:
+
+1. client money / service payment;
+2. lawyer earned entitlement;
+3. Mustasharek platform subscription revenue;
+4. any separately approved platform entitlement or fee;
+5. external payment-provider settlement status.
+
+These are not interchangeable balances and MUST NOT be represented by one legacy business-policy field or one ambiguous financial authority.
+
+## 00.1 — Product capability strategy
+
+The target product is not a simple consultation marketplace. It combines:
+
+`Legal Marketplace + Digital Law Office + Secure Client Relationship + Payments + Case/Document Workflow + Settlement/Reconciliation + Lawyer SaaS`
+
+The product roadmap may incorporate validated capabilities found in leading global legal-service products and the capabilities already present in Mustasharek. Such capabilities must be mapped into the canonical product/domain/security architecture before implementation; copying feature lists without architectural classification is prohibited.
+
+## 00.2 — Main product capability map
+
+| Capability domain | Target outcome | Classification rule |
+|---|---|---|
+| Identity & Trust | Safe, verified users and professional lawyers | Security-first; server authoritative |
+| Lawyer Marketplace | Find and select the right lawyer | Discovery, profile, availability, trust |
+| Consultation | Buy and deliver legal consultations | Payment + booking + service lifecycle |
+| Digital Law Office | Lawyer operates an online practice | Workspace, clients, cases, tasks, documents |
+| Client Relationship | Continuous lawyer-client relationship | Membership, communication, history |
+| Legal Services | Multiple services beyond consultation | Service catalog / offers / milestones |
+| Documents | Secure legal document lifecycle | Access control, auditability, privacy |
+| Payments | Client pays through platform | Provider verification + Financial Authority |
+| Financial Authority | One authoritative financial truth | Ledger + atomicity + idempotency + reconciliation |
+| Settlement | Correct lawyer/platform settlement | Verified internal and external states |
+| Lawyer SaaS | Trial and recurring subscription | Entitlement separate from client funds |
+| Ratings & Reputation | Trustworthy marketplace signals | Abuse-resistant and auditable |
+| Notifications | Timely operational communication | Delivery ledger / dedupe |
+| Administration | Secure platform operations | Least privilege + audit |
+| Security / Privacy | Protect legal and financial data | Mandatory gate across all domains |
+
+## 00.3 — Implementation truth table
+
+Every capability and every existing implementation is classified using the following mandatory table:
+
+| Status | Meaning | Action |
+|---|---|---|
+| **EXISTS** | Required capability exists and evidence is sufficient for its current scope | Preserve; verify where needed |
+| **BROKEN** | Required capability exists but has a functional/security/build/runtime defect | Repair; test; verify |
+| **DUPLICATED** | Multiple implementations represent the same responsibility | Consolidate only after behavior and data lineage are reconciled |
+| **MISSING** | Required product/security capability is not implemented | Design → implement → test → verify |
+| **NEEDS REFACTOR** | Capability exists but violates the target architecture/boundary | Refactor without destroying valid data/history |
+| **SAFE TO DELETE** | Artifact is proven obsolete, unreachable, redundant, and has no required historical/data/migration role | Delete only after evidence and dependency audit |
+
+**No item may be marked `SAFE TO DELETE` merely because it is old, inconvenient, experimental, or inconsistent with a newer design document.**
+
+## 00.4 — Work classification rule
+
+All future work must first answer:
+
+`EXISTS → BROKEN → DUPLICATED → MISSING → NEEDS REFACTOR → SAFE TO DELETE`
+
+The classification is an audit decision, not a development shortcut.
+
+For each item we record:
+
+`Product Capability → Roadmap ID → MAP-X ID → Architecture → Domain/Data/State → Auth/Privacy → Repository → Tests → CI Evidence → Main Verification`
+
+Only then can implementation begin.
+
+## 00.5 — Product completion definition
+
+Mustasharek is considered product-complete only when the core journeys are operational end-to-end, not merely when individual APIs or screens exist.
+
+### Client core journey
+
+`Register / Verify → Find Lawyer → Select → Communicate → Request Service → Pay → Book / Start → Receive Service → Documents / Case → Complete → Evaluate`
+
+### Lawyer core journey
+
+`Register → Professional Verification → Trial → Lawyer Workspace → Configure Profile / Availability → Receive Client → Accept Service → Deliver Service → Manage Case / Documents → Earn → Settlement → Subscription`
+
+### Financial core journey
+
+`Service → Payment Obligation → Provider → Verified Provider Event → Financial Authority → Ledger / Escrow Compatibility → Lawyer Entitlement → Settlement → Reconciliation`
+
+### Security core journey
+
+`Identity → Authentication → Authorization → Data Access Boundary → Audit → Monitoring → Verification`
+
+## 00.6 — Non-negotiable product principles
+
+1. **Main is the canonical implementation reference.**
+2. **Client money and lawyer SaaS subscription money are separate domains.**
+3. **Financial truth is server-authoritative.**
+4. **The browser/client never proves payment.**
+5. **A verified provider event is required before treating external payment as financial fact.**
+6. **The Financial Authority owns financial truth; controllers, wallets, webhooks, and UI do not independently mutate it.**
+7. **Authorization is independent of authentication.**
+8. **Legal data is private by default and access-controlled.**
+9. **Historical migrations and financial records are preserved until reconciliation proves they can be retired safely.**
+10. **Experimental branches are not product authority.**
+11. **No feature is complete until its applicable tests, security checks, CI evidence, and target-Main verification pass.**
+12. **No destructive production database action is part of ordinary development.**
 
 ## 01 — Canonical operating hierarchy
 
@@ -10,6 +169,8 @@ The project adopts this hierarchy as the canonical operating model:
 
 ```text
                  MUSTASHARK-MASTER-MAP
+                          │
+                    PRODUCT NORTH STAR
                           │
                          MAP-X
                           │
@@ -84,7 +245,7 @@ No stage may be skipped because a change appears small.
 
 ## 06 — Mandatory closure rule
 
-> **No stage may be marked CLOSED / VERIFIED until it has been implemented, linked to the applicable maps, tested as applicable, evidenced, verified, and its closure has been recorded.**
+> **No stage may be marked CLOSED / VERIFIED until it has been implemented, linked to the applicable maps, tested, evidenced, verified, and its closure has been recorded.**
 
 A roadmap entry, documentation statement, passing local command, or code presence alone MUST NOT be treated as closure evidence.
 
@@ -171,6 +332,7 @@ The canonical control set currently includes:
 
 - `docs/governance/MUSTASHARK-MASTER-MAP.md`
 - `docs/architecture/MAP-X-CROSS-MAP-INTEGRATION.md`
+- `docs/architecture/FINANCIAL-AUTHORITY-MIGRATION-V1-CANONICAL-2026-08-28.md`
 - `docs/roadmap/ROADMAP-REGISTRY.md`
 - `docs/roadmap/MASTER-AUDIT-MAP.md`
 - `docs/roadmap/MASTER-ROADMAP.md` when present
@@ -199,6 +361,7 @@ No parallel "master" map may silently supersede this document.
 The project formally adopts the following operating model:
 
 - `MUSTASHARK-MASTER-MAP` = highest governance reference.
+- `PRODUCT NORTH STAR` = canonical product target for client, lawyer, financial, and subscription journeys.
 - `MAP-X` = integration/control layer.
 - Architecture / Product-Lifecycle / Security = primary structural branches.
 - Design / Domain-Data-State / Auth-Privacy = detail layers.
@@ -208,5 +371,5 @@ The project formally adopts the following operating model:
 - Valid Evidence may be reused when still applicable; stale or insufficient Evidence is refreshed only where needed.
 - Governance remains separate from runtime.
 
-**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY`
+**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY + PRODUCT NORTH STAR`
 **Runtime impact:** `NONE — DOCUMENTATION / GOVERNANCE ONLY`
