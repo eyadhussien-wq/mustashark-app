@@ -54,6 +54,10 @@ function RootLayoutNav() {
         name="profile/edit"
         options={{ headerShown: false, presentation: "card" }}
       />
+      <Stack.Screen
+        name="(client)/legal-hub"
+        options={{ headerShown: false, presentation: "card" }}
+      />
     </Stack>
   );
 }
