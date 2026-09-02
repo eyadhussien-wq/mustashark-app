@@ -6,6 +6,7 @@ import {
   neutralDocumentsTable,
   neutralMattersTable,
   neutralDocumentSharesTable,
+  neutralSecurityAlertsTable,
   lawyerClientsTable,
   usersTable,
 } from "@workspace/db/schema";
@@ -164,7 +165,7 @@ export async function recordNeutralAuditCompensatingEntry(input: {
   correlationId?: string | null;
   metadata?: Record<string, unknown> | null;
 }) {
-  const [target] = await db.select({ id: neutralAuditEventsTable.id, actorUserId: neutralAuditEventsTable.actorUserId })
+  const [target] = await db.select({ id: neutralAuditEventsTable.id })
     .from(neutralAuditEventsTable)
     .where(and(eq(neutralAuditEventsTable.id, input.targetEventId), eq(neutralAuditEventsTable.actorUserId, input.actorUserId)))
     .limit(1);
@@ -236,8 +237,17 @@ export async function verifyNeutralAuditChainWithAlert(lawyerId: string, correla
   if (result.status !== "CHAIN_BROKEN") return result;
 
   const alertId = crypto.randomUUID();
-  await db.insert(sql`neutral_security_alerts`).values({
+  await db.insert(neutralSecurityAlertsTable).values({
     id: alertId,
+    alertType: "SECURITY_INTEGRITY_VIOLATION",
+    severity: "critical",
+    status: "open",
+    actorUserId: lawyerId,
+    resourceType: "export",
+    resourceId: lawyerId,
+    correlationId: correlationId ?? null,
+    reasonCode: "NEUTRAL_AUDIT_CHAIN_BROKEN",
+    details: { brokenEventId: result.brokenEventId, checkedEvents: result.checkedEvents },
   });
   return {
     ...result,
