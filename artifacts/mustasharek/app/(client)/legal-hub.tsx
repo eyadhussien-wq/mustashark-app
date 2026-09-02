@@ -20,7 +20,7 @@ const items: HubItem[] = [
     title: "قضيتي الحالية",
     description: "تابع آخر حالة، الخطوة التالية، والمواعيد المرتبطة بملفك.",
     status: "قيد المتابعة",
-    route: "/active-case-preview",
+    route: "/(client)/active-case",
   },
   {
     icon: "file-text",
@@ -69,10 +69,17 @@ export default function ClientLegalHub() {
           <Text style={styles.nextLabel}>الخطوة التالية</Text>
           <Text style={styles.nextTitle}>ابدأ بطلب استشارة إذا لم يكن لديك ملف نشط</Text>
           <Text style={styles.nextText}>لا نعرض قرارًا ماليًا أو صلاحية تنفيذية من الواجهة؛ الواجهة تقدم الحالة والانتقال فقط.</Text>
+          <TouchableOpacity style={styles.discoveryButton} activeOpacity={0.84} onPress={() => router.push("/(client)/services")}>
+            <Text style={styles.discoveryButtonText}>ابدأ من الخدمات</Text>
+            <Feather name="arrow-left" size={15} color={C.navy} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>مساحتك القانونية</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>مساحتك القانونية</Text>
+        <Text style={styles.sectionSubtitle}>محور واحد بدل تشتيت الرحلة بين شاشات منفصلة</Text>
+      </View>
 
       {items.map((item) => {
         const disabled = !item.route;
@@ -126,7 +133,11 @@ const styles = StyleSheet.create({
   nextLabel: { color: C.gold, fontSize: 10, fontFamily: "Inter_700Bold", textAlign: "right" },
   nextTitle: { color: C.foreground, fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 3 },
   nextText: { color: C.mutedForeground, fontSize: 10, lineHeight: 16, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 3 },
-  sectionTitle: { color: C.foreground, fontSize: 16, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 7 },
+  discoveryButton: { marginTop: 10, backgroundColor: C.gold, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row-reverse", alignItems: "center", gap: 6 },
+  discoveryButtonText: { color: C.navy, fontSize: 10.5, fontFamily: "Inter_700Bold" },
+  sectionHeader: { alignItems: "flex-end", marginTop: 7 },
+  sectionTitle: { color: C.foreground, fontSize: 16, fontFamily: "Inter_700Bold", textAlign: "right" },
+  sectionSubtitle: { color: C.mutedForeground, fontSize: 10, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 2 },
   item: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center" },
   itemDisabled: { opacity: 0.72 },
   chevron: { width: 34, height: 34, borderRadius: 11, backgroundColor: "#F5F6F8", alignItems: "center", justifyContent: "center", marginRight: 11 },
