@@ -1,0 +1,94 @@
+name: Neutral Authorization Integrity Gate
+
+on:
+  push:
+    branches: ["construction/lawyer-os-v1-p1-audit-2026-09"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  neutral-authorization:
+    name: P3.1-I Authorization Integrity — Positive + Negative
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_neutral_authorization_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_neutral_authorization_test"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_neutral_authorization_test
+      NODE_ENV: test
+      NEUTRAL_CORE_COMMIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Record tested commit
+        run: git rev-parse HEAD
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production DB Guard — before tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_neutral_authorization_test"
+          case "$DATABASE_URL" in
+            *localhost:5432/mustashark_neutral_authorization_test) ;;
+            *) echo "ERROR: unexpected database target"; exit 1 ;;
+          esac
+          echo "Production database guard before authorization tests: PASS"
+
+      - name: Static Neutral Core boundary guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '(escrow|wallet|settlement|payout|commission|client.?fund|payment.?collection|platform.?dues)' artifacts/api-server/src/services/neutralAuthorizationPolicy.ts artifacts/api-server/src/services/neutralAuthorizationAudit.ts; then
+            echo "ERROR: blocked financial/marketplace authority detected in P3.1-I policy surface"
+            exit 1
+          fi
+          grep -q 'AUTHORIZATION_DENIED' artifacts/api-server/src/services/neutralAuthorizationAudit.ts
+          grep -q 'recordNeutralAuthorizationDenied' artifacts/api-server/src/services/neutralDocumentAuthorization.ts
+          echo "Neutral Core boundary guard: PASS"
+
+      - name: Positive + Negative Authorization Policy Matrix
+        run: pnpm --filter @workspace/api-server exec tsx --test src/services/neutralAuthorizationPolicy.test.ts
+
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: Production DB Guard — after tests
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_neutral_authorization_test"
+          echo "Production database guard after authorization tests: PASS"
