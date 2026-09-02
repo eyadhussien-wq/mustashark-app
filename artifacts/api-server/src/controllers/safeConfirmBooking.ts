@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookingsTable, consultationEventsTable, notificationsTable, platformDuesTable, PLATFORM_COMMISSION_RATE } from "@workspace/db/schema";
+import { bookingsTable, consultationEventsTable, notificationsTable } from "@workspace/db/schema";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
 import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
 import { claimIdempotency, persistIdempotencyResponse } from "../lib/transactionalIdempotency";
@@ -44,10 +44,6 @@ export const confirmBookingSafely = async (req: Request, res: Response) => {
           eq(bookingsTable.escrowStatus, "held"),
         ],
       );
-      const grossAmount = booking.price;
-      const commissionRate = PLATFORM_COMMISSION_RATE;
-      const commissionAmount = String((Number(grossAmount) * Number(commissionRate)).toFixed(2));
-      await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId, officeId: booking.officeId, lawyerId: booking.lawyerId, grossAmount, commissionRate, commissionAmount, status: "pending" }).onConflictDoNothing();
       await tx.insert(notificationsTable).values({ id: crypto.randomUUID(), userId: booking.clientId!, bookingId, title: "تم تأكيد موعد الاستشارة", body: `وافق المحامي على طلبك. الموعد المؤكد هو ${booking.scheduledDate} الساعة ${booking.scheduledTime}.`, kind: "success", urgent: true });
       await tx.insert(consultationEventsTable).values({ id: crypto.randomUUID(), bookingId, eventType: "LAWYER_ACCEPTED", actorId: authUser.id, metadata: { fromState: "PENDING_ACCEPTANCE", toState: "SCHEDULED", financialGate: true, expectedVersion } });
 
