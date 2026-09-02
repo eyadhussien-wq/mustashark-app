@@ -22,7 +22,8 @@ export type NeutralAuditInput = {
   outcome: NeutralAuditOutcome;
   reasonCode?: string | null;
   correlationId?: string | null;
-  metadata?: Record<string, string | number | boolean | null> | null;
+  metadata?: Record<string, unknown> | null;
+  targetEventId?: string | null;
 };
 
 export const NEUTRAL_AUDIT_CHAIN_VERSION = "1";
@@ -74,6 +75,7 @@ export function buildNeutralAuditEventHash(input: {
   reasonCode: string | null;
   correlationId: string | null;
   metadata: Record<string, unknown> | null;
+  targetEventId?: string | null;
   chainVersion: string;
   canonicalizationVersion: string;
   genesisHash: string;
@@ -106,14 +108,14 @@ async function ensureNeutralAuditGenesis(transaction: AuditTransaction, actorUse
   const metadata = { initializedAt, ...config };
   const eventHash = buildNeutralAuditEventHash({
     id, actorUserId, actorRole, action: "GENESIS", resourceType: "export", resourceId: `genesis:${actorUserId}`,
-    outcome: "allowed", reasonCode: null, correlationId: null, metadata,
+    outcome: "allowed", reasonCode: null, correlationId: null, metadata, targetEventId: null,
     chainVersion: NEUTRAL_AUDIT_CHAIN_VERSION, canonicalizationVersion: NEUTRAL_AUDIT_CANONICALIZATION_VERSION,
     genesisHash, previousHash: null, occurredAt: initializedAt,
   });
 
   const [genesis] = await transaction.insert(neutralAuditEventsTable).values({
     id, actorUserId, actorRole, action: "GENESIS", resourceType: "export", resourceId: `genesis:${actorUserId}`,
-    outcome: "allowed", reasonCode: null, correlationId: null, metadata,
+    outcome: "allowed", reasonCode: null, correlationId: null, metadata, targetEventId: null,
     chainVersion: NEUTRAL_AUDIT_CHAIN_VERSION, canonicalizationVersion: NEUTRAL_AUDIT_CANONICALIZATION_VERSION,
     genesisHash, previousHash: null, eventHash, occurredAt: new Date(initializedAt),
   }).returning();
@@ -136,6 +138,7 @@ export async function recordNeutralAuditEvent(input: NeutralAuditInput) {
       id, actorUserId: input.actorUserId, actorRole: input.actorRole, action: input.action,
       resourceType: input.resourceType, resourceId: input.resourceId, outcome: input.outcome,
       reasonCode: input.reasonCode ?? null, correlationId: input.correlationId ?? null, metadata,
+      targetEventId: input.targetEventId ?? null,
       chainVersion: NEUTRAL_AUDIT_CHAIN_VERSION, canonicalizationVersion: NEUTRAL_AUDIT_CANONICALIZATION_VERSION,
       genesisHash: genesis.genesisHash, previousHash, occurredAt: occurredAt.toISOString(),
     });
@@ -143,10 +146,41 @@ export async function recordNeutralAuditEvent(input: NeutralAuditInput) {
       id, actorUserId: input.actorUserId, actorRole: input.actorRole, action: input.action,
       resourceType: input.resourceType, resourceId: input.resourceId, outcome: input.outcome,
       reasonCode: input.reasonCode ?? null, correlationId: input.correlationId ?? null, metadata,
+      targetEventId: input.targetEventId ?? null,
       chainVersion: NEUTRAL_AUDIT_CHAIN_VERSION, canonicalizationVersion: NEUTRAL_AUDIT_CANONICALIZATION_VERSION,
       genesisHash: genesis.genesisHash, previousHash, eventHash, occurredAt,
     }).returning();
     return event;
+  });
+}
+
+export async function recordNeutralAuditCompensatingEntry(input: {
+  actorUserId: string;
+  actorRole: NeutralAuditRole;
+  targetEventId: string;
+  resourceType: NeutralAuditResourceType;
+  resourceId: string;
+  reasonCode: string;
+  correlationId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const [target] = await db.select({ id: neutralAuditEventsTable.id, actorUserId: neutralAuditEventsTable.actorUserId })
+    .from(neutralAuditEventsTable)
+    .where(and(eq(neutralAuditEventsTable.id, input.targetEventId), eq(neutralAuditEventsTable.actorUserId, input.actorUserId)))
+    .limit(1);
+  if (!target) throw new Error("AUDIT_COMPENSATION_TARGET_NOT_FOUND");
+
+  return recordNeutralAuditEvent({
+    actorUserId: input.actorUserId,
+    actorRole: input.actorRole,
+    action: "AUDIT_CORRECTION_NOTED",
+    resourceType: input.resourceType,
+    resourceId: input.resourceId,
+    outcome: "allowed",
+    reasonCode: input.reasonCode,
+    correlationId: input.correlationId ?? null,
+    metadata: { ...(input.metadata ?? {}), correctionSemantics: "historical_event_unchanged" },
+    targetEventId: target.id,
   });
 }
 
@@ -156,22 +190,61 @@ export async function verifyNeutralAuditChain(lawyerId: string) {
     .orderBy(asc(neutralAuditEventsTable.occurredAt), asc(neutralAuditEventsTable.id));
   if (events.length === 0) return { status: "CHAIN_VALID" as const, checkedEvents: 0 };
 
+  const first = events[0];
+  const firstMetadata = first.metadata as Record<string, unknown> | null;
+  const genesisInitializedAt = typeof firstMetadata?.initializedAt === "string" ? firstMetadata.initializedAt : null;
+  const neutralCoreCommitSha = typeof firstMetadata?.neutralCoreCommitSha === "string" ? firstMetadata.neutralCoreCommitSha : null;
+  const environmentClass = typeof firstMetadata?.environmentClass === "string" ? firstMetadata.environmentClass : null;
+  if (first.action !== "GENESIS" || first.previousHash !== null || !genesisInitializedAt || !neutralCoreCommitSha || !environmentClass) {
+    return { status: "CHAIN_BROKEN" as const, brokenEventId: first.id, checkedEvents: 1 };
+  }
+  const expectedGenesisHash = buildNeutralAuditGenesisHash({
+    actorUserId: lawyerId,
+    initializedAt: genesisInitializedAt,
+    neutralCoreCommitSha,
+    environmentClass,
+  });
+  if (first.genesisHash !== expectedGenesisHash) {
+    return { status: "CHAIN_BROKEN" as const, brokenEventId: first.id, checkedEvents: 1 };
+  }
+
   let previousHash: string | null = null;
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
+    if (event.genesisHash !== first.genesisHash || event.chainVersion !== first.chainVersion || event.canonicalizationVersion !== first.canonicalizationVersion) {
+      return { status: "CHAIN_BROKEN" as const, brokenEventId: event.id, checkedEvents: index + 1 };
+    }
     const expected = buildNeutralAuditEventHash({
       id: event.id, actorUserId: event.actorUserId, actorRole: event.actorRole, action: event.action,
       resourceType: event.resourceType, resourceId: event.resourceId, outcome: event.outcome,
       reasonCode: event.reasonCode, correlationId: event.correlationId, metadata: event.metadata as Record<string, unknown> | null,
+      targetEventId: event.targetEventId,
       chainVersion: event.chainVersion, canonicalizationVersion: event.canonicalizationVersion,
       genesisHash: event.genesisHash, previousHash: event.previousHash, occurredAt: event.occurredAt.toISOString(),
     });
-    if ((index === 0 && (event.action !== "GENESIS" || event.previousHash !== null)) || event.previousHash !== previousHash || event.eventHash !== expected) {
+    if (event.previousHash !== previousHash || event.eventHash !== expected) {
       return { status: "CHAIN_BROKEN" as const, brokenEventId: event.id, checkedEvents: index + 1 };
     }
     previousHash = event.eventHash;
   }
   return { status: "CHAIN_VALID" as const, checkedEvents: events.length };
+}
+
+/** Verifies integrity and persists a durable security alert when the chain is broken. */
+export async function verifyNeutralAuditChainWithAlert(lawyerId: string, correlationId?: string | null) {
+  const result = await verifyNeutralAuditChain(lawyerId);
+  if (result.status !== "CHAIN_BROKEN") return result;
+
+  const alertId = crypto.randomUUID();
+  await db.insert(sql`neutral_security_alerts`).values({
+    id: alertId,
+  });
+  return {
+    ...result,
+    alertId,
+    securitySignal: "SECURITY_INTEGRITY_VIOLATION" as const,
+    isolationPolicy: "REVIEW_AND_CONTROLLED_ISOLATION" as const,
+  };
 }
 
 /** Lawyer-scoped audit stream. No admin bypass and no cross-lawyer access. */
