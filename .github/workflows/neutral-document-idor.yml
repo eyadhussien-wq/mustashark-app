@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8081/api/health >/dev/null 2>&1; then
+            if curl -fsS http://127.0.0.1:8081/api/healthz >/dev/null 2>&1; then
               echo "API health: PASS"
               exit 0
             fi
