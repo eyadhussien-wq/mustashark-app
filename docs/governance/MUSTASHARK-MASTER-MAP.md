@@ -3,7 +3,8 @@
 **Status:** CANONICAL GOVERNANCE AUTHORITY — ADOPTED
 **Adoption date:** 2026-08-25
 **Product Master Map adoption:** 2026-09-03
-**Scope:** governance, product vision, roadmap control, cross-map traceability, implementation closure, evidence requirements.
+**Capability Inventory V1:** 2026-09-03 — `main` baseline `93378a1f72517ab3dedd0eef06499d4d8f4094ce`
+**Scope:** governance, product vision, capability inventory, roadmap control, cross-map traceability, implementation closure, evidence requirements.
 
 ## 00 — Mustasharek product north star
 
@@ -99,7 +100,100 @@ The product roadmap may incorporate validated capabilities found in leading glob
 | Administration | Secure platform operations | Least privilege + audit |
 | Security / Privacy | Protect legal and financial data | Mandatory gate across all domains |
 
-## 00.3 — Implementation truth table
+## 00.3 — Capability Inventory V1 — main baseline
+
+**Inventory basis:** canonical `main` at `93378a1f72517ab3dedd0eef06499d4d8f4094ce`. This inventory is an implementation assessment, not a declaration that all listed capabilities are production-complete.
+
+| # | Capability | Main evidence / foundation | Status | Immediate disposition |
+|---|---|---|---|---|
+| C01 | Identity & Authentication | `requireAuth` + users DB re-check | **EXISTS** | Preserve; complete route audit |
+| C02 | Authorization / Role Guards | `requireRole`, `requireApprovedLawyer` on sensitive routes | **EXISTS** | Complete route-by-route authz audit |
+| C03 | Lawyer Professional Verification | verification schema/routes/workflow | **EXISTS** | Verify end-to-end closure |
+| C04 | Lawyer Profile | profile API/mobile surface/profile-change moderation | **EXISTS** | Preserve; verify publication rules |
+| C05 | Lawyer Discovery | public lawyer profile exists; discovery foundation present | **BROKEN / INCOMPLETE** | Close search/filter/selection journey |
+| C06 | Lawyer Availability | availability API + slots/time-block foundation | **EXISTS** | Verify timezone/concurrency behavior |
+| C07 | Booking / Scheduling | bookings + time blocks + idempotency/versioning | **EXISTS** | Preserve; complete E2E gate |
+| C08 | Consultation Lifecycle | consultation events + booking lifecycle | **EXISTS** | Verify complete state transitions |
+| C09 | Client ↔ Lawyer Relationship | lawyer clients + case memberships foundations | **EXISTS** | Verify access boundaries |
+| C10 | Secure Messaging / Communication | roadmap/surface contract and support communication exist | **NEEDS REFACTOR / VERIFICATION** | Prove actual secure in-app runtime capability |
+| C11 | Notifications | `user_notifications` + authenticated notification API | **EXISTS** | Verify delivery/dedupe/read lifecycle |
+| C12 | Documents | document handovers + legal representation documents | **EXISTS** | Complete privacy/access audit |
+| C13 | Cases / Matters | cases + memberships + hearings | **EXISTS** | Verify client/lawyer isolation |
+| C14 | Legal Representation | quotes + proposals + agreements + representation documents | **EXISTS** | Complete end-to-end journey |
+| C15 | Payment Proofs | payment proof schema/API | **EXISTS** | Preserve as supported payment-proof path |
+| C16 | Online Provider Payment | payment/provider boundary not yet proven as one complete canonical flow | **MISSING / NEEDS REFACTOR** | Build/verify provider → verified event → Financial Authority |
+| C17 | Financial Authority | financial components exist but one authoritative platform-wide truth is not yet proven | **NEEDS REFACTOR** | Establish/verify authoritative boundary |
+| C18 | Escrow / Milestones | representation finance + fund/allocate/release foundations | **EXISTS** | Complete financial E2E/concurrency evidence |
+| C19 | Lawyer Wallet | lawyer wallet + transactions | **EXISTS** | Reconcile against Financial Authority |
+| C20 | Client Wallet | client wallet foundation | **EXISTS** | Reconcile against Financial Authority |
+| C21 | Settlement / Payout | bank accounts + release/settlement foundations | **NEEDS REFACTOR / VERIFICATION** | Close entitlement → settlement → payout path |
+| C22 | Reconciliation | no complete provider/payment/ledger/wallet/settlement reconciliation closure proven | **MISSING** | Design and implement reconciliation control |
+| C23 | Lawyer SaaS Subscription | product rule documented: 30-day trial → 50 JOD/month | **MISSING** | Implement entitlement/subscription lifecycle |
+| C24 | Digital Law Office Workspace | N1 foundation + lawyer mobile surfaces + clients/cases/docs | **NEEDS REFACTOR** | Consolidate into complete lawyer workspace |
+| C25 | Tasks / Workflow Engine | N1 target exists; complete operational engine not proven | **MISSING** | Design → implement → test |
+| C26 | General Legal Service Catalog | consultation/representation foundations exist; general service catalog not proven | **MISSING** | Define service types/offers/lifecycle |
+| C27 | Ratings / Reputation | lawyer reviews + API/admin review surface | **EXISTS** | Harden eligibility/anti-abuse/audit |
+| C28 | Administration | admin routes/dashboard/audit surfaces | **EXISTS** | Security/least-privilege review |
+| C29 | Audit Logging | admin audit logs and domain event foundations | **EXISTS** | Verify coverage of security/financial actions |
+| C30 | Terms / Legal Consent | agreements exist; canonical Terms Consent implementation requires verification | **NEEDS VERIFICATION** | Verify main + server enforcement |
+| C31 | Privacy / Data Access Boundary | auth/role foundations and private legal-data surfaces | **NEEDS REFACTOR / AUDIT** | Complete object-level access audit |
+| C32 | CI / Security Gates | multiple workflow/security gates exist | **EXISTS** | Prove complete product/financial matrix green |
+
+### Capability Inventory interpretation
+
+- **EXISTS does not mean CLOSED.** It means a material implementation foundation exists on the canonical baseline.
+- **BROKEN / INCOMPLETE** means the capability is present but does not yet satisfy the target journey or has a known defect/verification gap.
+- **NEEDS REFACTOR** means valid capability exists but its current boundary or composition does not yet satisfy the canonical architecture.
+- **MISSING** means the capability required by the Product North Star is not sufficiently implemented on `main`.
+- **SAFE TO DELETE:** no capability is currently authorized for deletion by this inventory alone.
+
+## 00.4 — Priority closure backlog
+
+The inventory establishes the following product-completion order:
+
+### P0 — Financial integrity
+
+`C16 Online Provider Payment → C17 Financial Authority → C18 Escrow → C19/C20 Wallets → C21 Settlement → C22 Reconciliation`
+
+Required target:
+
+`Service → Payment Obligation → Provider → Verified Provider Event → Financial Authority → Ledger / Escrow Compatibility → Lawyer Entitlement → Settlement → Reconciliation`
+
+### P0 — Security integrity
+
+`C01/C02/C03/C12/C13/C30/C31`
+
+Required target:
+
+`Identity → Authentication → Authorization → Object/Data Boundary → Audit → Monitoring → Verification`
+
+### P1 — Client marketplace completion
+
+`C04/C05/C06/C07/C08/C09/C10/C11/C14/C15/C26/C27`
+
+Required target:
+
+`Discover → Profile → Communicate → Request Service → Pay → Book / Start → Deliver → Documents / Case → Complete → Evaluate`
+
+### P1 — Lawyer Digital Law Office
+
+`C24/C25` plus integration of `C09/C12/C13/C14/C21/C27/C28`
+
+Required target:
+
+`Professional Verification → Trial → Workspace → Clients → Calendar → Consultations → Cases → Documents → Tasks → Fees → Service Delivery → Entitlement → Settlement`
+
+### P1 — Lawyer SaaS
+
+`C23`
+
+Required target:
+
+`Verified Lawyer → 30-Day Trial → Active Subscription → 50 JOD/month → Renewal / Expiry → Entitlement Enforcement`
+
+Subscription state MUST NOT grant access beyond authorization and MUST NOT become a financial authority for client service money.
+
+## 00.5 — Implementation truth table
 
 Every capability and every existing implementation is classified using the following mandatory table:
 
@@ -114,7 +208,7 @@ Every capability and every existing implementation is classified using the follo
 
 **No item may be marked `SAFE TO DELETE` merely because it is old, inconvenient, experimental, or inconsistent with a newer design document.**
 
-## 00.4 — Work classification rule
+## 00.6 — Work classification rule
 
 All future work must first answer:
 
@@ -128,7 +222,7 @@ For each item we record:
 
 Only then can implementation begin.
 
-## 00.5 — Product completion definition
+## 00.7 — Product completion definition
 
 Mustasharek is considered product-complete only when the core journeys are operational end-to-end, not merely when individual APIs or screens exist.
 
@@ -148,7 +242,7 @@ Mustasharek is considered product-complete only when the core journeys are opera
 
 `Identity → Authentication → Authorization → Data Access Boundary → Audit → Monitoring → Verification`
 
-## 00.6 — Non-negotiable product principles
+## 00.8 — Non-negotiable product principles
 
 1. **Main is the canonical implementation reference.**
 2. **Client money and lawyer SaaS subscription money are separate domains.**
@@ -172,6 +266,8 @@ The project adopts this hierarchy as the canonical operating model:
                           │
                     PRODUCT NORTH STAR
                           │
+                   CAPABILITY INVENTORY
+                          │
                          MAP-X
                           │
         ┌─────────────────┼─────────────────┐
@@ -189,11 +285,15 @@ The project adopts this hierarchy as the canonical operating model:
                   CLOSED / VERIFIED
 ```
 
-This hierarchy answers the project's primary control question: **where are we, where do we stand, what is proven, and what remains?**
+The Capability Inventory is the bridge between the Product North Star and implementation work. It does not replace MAP-X or detailed maps.
 
 ## 02 — Authority hierarchy
 
 `MUSTASHARK-MASTER-MAP` is the highest-level governance reference for the project.
+
+`PRODUCT NORTH STAR` defines the canonical product target.
+
+`CAPABILITY INVENTORY` defines the current implementation classification against that target.
 
 `MAP-X` is the integration and control layer.
 
@@ -207,7 +307,7 @@ CI and other declared Evidence prove the state of implementation. `CLOSED / VERI
 
 Governance is intentionally separated from runtime.
 
-- Governance documents, registries, crosswalks and evidence records live under `docs/`.
+- Governance documents, registries, crosswalks, capability inventory and evidence records live under `docs/`.
 - Runtime/application behavior remains under the application source trees.
 - Governance artifacts MUST NOT be imported by runtime code, bundled into the application, or made runtime dependencies merely for traceability.
 - A governance change is not a runtime change unless a separate implementation change explicitly modifies runtime code.
@@ -215,7 +315,13 @@ Governance is intentionally separated from runtime.
 ## 04 — Canonical roles
 
 ### MUSTASHARK-MASTER-MAP
-The supreme control reference. It defines authority order, closure rules, and the non-negotiable requirement for traceability and evidence.
+The supreme control reference. It defines authority order, closure rules, product target, capability classification, and the non-negotiable requirement for traceability and evidence.
+
+### PRODUCT NORTH STAR
+The canonical target for client, lawyer, financial, security and subscription journeys.
+
+### CAPABILITY INVENTORY
+The controlled implementation view of what exists, what is incomplete, what is missing, and what requires refactoring on the canonical baseline. It must be refreshed after material implementation changes.
 
 ### MAP-X
 The cross-map integration and control layer. It binds roadmap items to architecture, product/lifecycle, design, domain/data/state, security/auth/privacy, repository implementation, CI and verification.
@@ -362,6 +468,7 @@ The project formally adopts the following operating model:
 
 - `MUSTASHARK-MASTER-MAP` = highest governance reference.
 - `PRODUCT NORTH STAR` = canonical product target for client, lawyer, financial, and subscription journeys.
+- `CAPABILITY INVENTORY` = controlled implementation classification against the canonical target.
 - `MAP-X` = integration/control layer.
 - Architecture / Product-Lifecycle / Security = primary structural branches.
 - Design / Domain-Data-State / Auth-Privacy = detail layers.
@@ -371,5 +478,6 @@ The project formally adopts the following operating model:
 - Valid Evidence may be reused when still applicable; stale or insufficient Evidence is refreshed only where needed.
 - Governance remains separate from runtime.
 
-**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY + PRODUCT NORTH STAR`
+**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY + PRODUCT NORTH STAR + CAPABILITY INVENTORY V1`
+**Capability Inventory baseline:** `main @ 93378a1f72517ab3dedd0eef06499d4d8f4094ce`
 **Runtime impact:** `NONE — DOCUMENTATION / GOVERNANCE ONLY`
