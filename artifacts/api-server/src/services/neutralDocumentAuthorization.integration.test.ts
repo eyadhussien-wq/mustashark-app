@@ -6,6 +6,11 @@ import {
   getNeutralDocumentForLawyer,
 } from "./neutralDocumentAuthorization";
 
+type LocalAuthResponse = {
+  jwt?: unknown;
+  user?: { id?: unknown };
+};
+
 const baseUrl = process.env.NEUTRAL_IDOR_BASE_URL ?? "http://127.0.0.1:8081";
 const databaseUrl = process.env.DATABASE_URL;
 const password = "test1234";
@@ -40,7 +45,7 @@ async function login(email: string, role: "lawyer" | "client") {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password, role }),
   });
-  const body = await response.json();
+  const body = (await response.json()) as LocalAuthResponse;
   assert.equal(response.status, 200, `${email} login failed: ${response.status} ${JSON.stringify(body)}`);
   assert.equal(typeof body.jwt, "string", `${email} login did not return a JWT`);
   assert.equal(typeof body.user?.id, "string", `${email} login did not return a user id`);
