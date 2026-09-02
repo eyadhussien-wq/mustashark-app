@@ -78,10 +78,9 @@ jobs:
         run: |
           set -euo pipefail
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
-            INSERT INTO users (id, name, email, password_hash, phone, phone_country, role, auth_provider, account_status, specialization, deleted_at, deletion_scheduled_at, status_reason, created_at, updated_at)
-            SELECT 'ci-audit-lawyer', 'CI Audit Lawyer', 'ci-audit-lawyer@mustashark.com', password_hash, '+962790001104', 'jordan', 'lawyer', 'local', 'active', 'general', NULL, NULL, NULL, NOW(), NOW()
-            FROM users WHERE email = 'lawyer@mustashark.com'
-            ON CONFLICT (id) DO UPDATE SET account_status = 'active', deleted_at = NULL, updated_at = NOW();
+            INSERT INTO users (id, name, email, role, auth_provider, account_status, litigation_tier, created_at, updated_at)
+            VALUES ('ci-audit-lawyer', 'CI Audit Lawyer', 'ci-audit-lawyer@mustashark.com', 'lawyer', 'local', 'active', 'general', NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET role = 'lawyer', account_status = 'active', deleted_at = NULL, updated_at = NOW();
           "
 
       - name: Build API server
@@ -91,6 +90,7 @@ jobs:
         run: pnpm --filter @workspace/api-server exec tsx --test src/services/neutralAudit.chain.integration.test.ts
 
       - name: Final production DB guard
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
