@@ -1,13 +1,10 @@
 import { Request, Response } from "express";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@workspace/db";
 import { representationQuoteRequestsTable, usersTable } from "@workspace/db/schema";
 import { createRepresentationQuoteRequestSchema } from "@workspace/api-zod";
-import {
-  claimRepresentationQuoteRequestIdempotency,
-  requireAuthenticatedClientId,
-} from "../lib/representationQuoteRequestGuards";
+import { claimRepresentationQuoteRequestIdempotency, requireAuthenticatedClientId } from "../lib/representationQuoteRequestGuards";
 import { persistIdempotencyResponse } from "../lib/transactionalIdempotency";
 
 function mapRequestError(error: unknown): { status: number; code: string } | null {
@@ -27,17 +24,14 @@ function createSerialNumber(): string {
 
 export async function createRepresentationQuoteRequest(req: Request, res: Response) {
   let clientId: string;
-  try {
-    clientId = requireAuthenticatedClientId(req);
-  } catch (error) {
+  try { clientId = requireAuthenticatedClientId(req); }
+  catch (error) {
     if (error instanceof Error && error.message === "AUTHENTICATION_REQUIRED") return res.status(401).json({ ok: false, error: "authentication_required" });
     if (error instanceof Error && error.message === "CLIENT_ROLE_REQUIRED") return res.status(403).json({ ok: false, error: "client_role_required" });
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
-
   const parsed = createRepresentationQuoteRequestSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ ok: false, error: "invalid_representation_quote_request", issues: parsed.error.issues });
-
   try {
     const result = await db.transaction(async (tx) => {
       if (parsed.data.lawyerId) {
@@ -50,9 +44,8 @@ export async function createRepresentationQuoteRequest(req: Request, res: Respon
       if (idempotency.replay) return idempotency;
       const now = new Date();
       const [created] = await tx.insert(representationQuoteRequestsTable).values({
-        id: randomUUID(), serialNumber: createSerialNumber(), clientId,
-        lawyerId: parsed.data.lawyerId ?? null, title: parsed.data.title,
-        description: parsed.data.description ?? null, status: "submitted", createdAt: now, updatedAt: now, submittedAt: now,
+        id: randomUUID(), serialNumber: createSerialNumber(), clientId, lawyerId: parsed.data.lawyerId ?? null,
+        title: parsed.data.title, description: parsed.data.description ?? null, status: "submitted", createdAt: now, updatedAt: now, submittedAt: now,
       }).returning();
       if (!created) throw new Error("REPRESENTATION_QUOTE_REQUEST_CREATE_FAILED");
       const responseBody = { ok: true, request: created };
@@ -75,35 +68,16 @@ export async function listLawyerRepresentationRequests(req: Request, res: Respon
   if (req.authUser?.role !== "lawyer") return res.status(403).json({ ok: false, error: "lawyer_role_required" });
   try {
     const requests = await db.select({
-      id: representationQuoteRequestsTable.id,
-      serialNumber: representationQuoteRequestsTable.serialNumber,
-      clientId: representationQuoteRequestsTable.clientId,
-      lawyerId: representationQuoteRequestsTable.lawyerId,
-      title: representationQuoteRequestsTable.title,
-      description: representationQuoteRequestsTable.description,
-      status: representationQuoteRequestsTable.status,
-      createdAt: representationQuoteRequestsTable.createdAt,
+      id: representationQuoteRequestsTable.id, serialNumber: representationQuoteRequestsTable.serialNumber,
+      clientId: representationQuoteRequestsTable.clientId, lawyerId: representationQuoteRequestsTable.lawyerId,
+      title: representationQuoteRequestsTable.title, description: representationQuoteRequestsTable.description,
+      status: representationQuoteRequestsTable.status, createdAt: representationQuoteRequestsTable.createdAt,
       submittedAt: representationQuoteRequestsTable.submittedAt,
     }).from(representationQuoteRequestsTable).where(and(
       inArray(representationQuoteRequestsTable.status, ["submitted", "under_review"]),
-      or(eq(representationQuoteRequestsTable.lawyerId, lawyerId), eq(representationQuoteRequestsTable.lawyerId, ""), /* null handled by explicit OR below */),
+      or(eq(representationQuoteRequestsTable.lawyerId, lawyerId), isNull(representationQuoteRequestsTable.lawyerId)),
     ));
-    const unassigned = await db.select({
-      id: representationQuoteRequestsTable.id,
-      serialNumber: representationQuoteRequestsTable.serialNumber,
-      clientId: representationQuoteRequestsTable.clientId,
-      lawyerId: representationQuoteRequestsTable.lawyerId,
-      title: representationQuoteRequestsTable.title,
-      description: representationQuoteRequestsTable.description,
-      status: representationQuoteRequestsTable.status,
-      createdAt: representationQuoteRequestsTable.createdAt,
-      submittedAt: representationQuoteRequestsTable.submittedAt,
-    }).from(representationQuoteRequestsTable).where(and(
-      inArray(representationQuoteRequestsTable.status, ["submitted", "under_review"]),
-      eq(representationQuoteRequestsTable.lawyerId, null as unknown as string),
-    ));
-    const byId = new Map([...requests, ...unassigned].map((request) => [request.id, request]));
-    return res.status(200).json({ ok: true, requests: [...byId.values()] });
+    return res.status(200).json({ ok: true, requests });
   } catch (error) {
     console.error("Lawyer Representation Request List Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
