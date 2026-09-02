@@ -33,10 +33,17 @@ function sha256(value: string): string {
 }
 
 function canonicalize(value: Record<string, unknown>): string {
-  return JSON.stringify(Object.keys(value).sort().reduce<Record<string, unknown>>((result, key) => {
-    result[key] = value[key];
-    return result;
-  }, {}));
+  const canonicalValue = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(canonicalValue);
+    if (input && typeof input === "object") {
+      return Object.keys(input as Record<string, unknown>).sort().reduce<Record<string, unknown>>((result, key) => {
+        result[key] = canonicalValue((input as Record<string, unknown>)[key]);
+        return result;
+      }, {});
+    }
+    return input;
+  };
+  return JSON.stringify(canonicalValue(value));
 }
 
 export function buildNeutralAuditGenesisHash(input: {
