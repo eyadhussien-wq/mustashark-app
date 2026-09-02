@@ -6,11 +6,19 @@ ALTER TABLE neutral_audit_events
 CREATE INDEX IF NOT EXISTS neutral_audit_events_target_event_idx
   ON neutral_audit_events (target_event_id);
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'neutral_security_alert_status') THEN
+    CREATE TYPE neutral_security_alert_status AS ENUM ('open', 'acknowledged', 'resolved');
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS neutral_security_alerts (
   id text PRIMARY KEY,
   alert_type text NOT NULL,
   severity text NOT NULL,
-  status text NOT NULL DEFAULT 'open',
+  status neutral_security_alert_status NOT NULL DEFAULT 'open',
   actor_user_id text REFERENCES users(id) ON DELETE RESTRICT,
   resource_type text,
   resource_id text,
