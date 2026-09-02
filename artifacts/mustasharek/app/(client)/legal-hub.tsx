@@ -14,31 +14,37 @@ type HubItem = {
   route?: string;
 };
 
+const journey = [
+  { label: "الاكتشاف", route: "/(client)" },
+  { label: "طلب الخدمة", route: "/client/service-request" },
+  { label: "ملف القضية", route: "/(client)/active-case" },
+  { label: "مركزك", route: "/(client)/legal-hub" },
+];
+
 const items: HubItem[] = [
   {
     icon: "briefcase",
     title: "قضيتي الحالية",
-    description: "تابع آخر حالة، الخطوة التالية، والمواعيد المرتبطة بملفك.",
-    status: "قيد المتابعة",
+    description: "عند وجود ملف نشط، تنتقل منه مباشرة إلى مساحة القضية ومتابعة الحالة.",
+    status: "فتح مساحة القضية",
     route: "/(client)/active-case",
   },
   {
     icon: "file-text",
     title: "المستندات",
-    description: "مساحة منظمة للمستندات التي تمت مشاركتها ضمن رحلتك القانونية.",
-    status: "مستنداتك",
-    route: "/client/document-handover",
+    description: "مساحة المستندات تبقى مرتبطة بملف الخدمة الفعلي؛ لن نعرض Route غير مؤكد.",
+    status: "مرتبطة بالملف",
   },
   {
     icon: "clock",
     title: "الخط الزمني",
-    description: "اعرف ماذا حدث، وما الذي ينتظر منك، وما هي الخطوة القادمة.",
+    description: "سيظهر هنا تسلسل الأحداث والخطوة القادمة عندما يتوفر مصدر حالة فعلي.",
     status: "قريبًا",
   },
   {
     icon: "message-circle",
     title: "التواصل",
-    description: "الوصول إلى قنوات التواصل المرتبطة بخدمتك القانونية دون خلطها مع حالة الحساب.",
+    description: "قناة التواصل ستُربط بالخدمة أو القضية نفسها، وليس بحساب عام منفصل.",
     status: "قريبًا",
   },
 ];
@@ -54,10 +60,29 @@ export default function ClientLegalHub() {
         </View>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>مستشارك · مركزك القانوني</Text>
-          <Text style={styles.title}>كل ما يخص رحلتك القانونية في مكان واحد</Text>
+          <Text style={styles.title}>محور واحد لرحلتك القانونية</Text>
           <Text style={styles.subtitle}>
-            هذا هو المحور الذي سنبني حوله تجربة العميل: حالة واضحة، خطوة تالية واضحة، ومستندات ومواعيد وتواصل منظم.
+            من اكتشاف الخدمة إلى ملف القضية، يبقى العميل داخل رحلة واحدة واضحة بدل التنقل بين مسارات منفصلة.
           </Text>
+        </View>
+      </View>
+
+      <View style={styles.journeyCard}>
+        <Text style={styles.journeyTitle}>رحلتك داخل مستشارك</Text>
+        <View style={styles.journeyRow}>
+          {journey.map((step, index) => (
+            <React.Fragment key={step.label}>
+              <TouchableOpacity
+                disabled={step.label === "مركزك"}
+                activeOpacity={0.8}
+                onPress={() => router.push(step.route as never)}
+                style={[styles.step, step.label === "مركزك" && styles.stepActive]}
+              >
+                <Text style={[styles.stepText, step.label === "مركزك" && styles.stepTextActive]}>{step.label}</Text>
+              </TouchableOpacity>
+              {index < journey.length - 1 && <Feather name="chevron-left" size={13} color={C.mutedForeground} />}
+            </React.Fragment>
+          ))}
         </View>
       </View>
 
@@ -66,11 +91,13 @@ export default function ClientLegalHub() {
           <Feather name="arrow-left" size={19} color={C.primary} />
         </View>
         <View style={styles.nextCopy}>
-          <Text style={styles.nextLabel}>الخطوة التالية</Text>
-          <Text style={styles.nextTitle}>ابدأ بطلب استشارة إذا لم يكن لديك ملف نشط</Text>
-          <Text style={styles.nextText}>لا نعرض قرارًا ماليًا أو صلاحية تنفيذية من الواجهة؛ الواجهة تقدم الحالة والانتقال فقط.</Text>
-          <TouchableOpacity style={styles.discoveryButton} activeOpacity={0.84} onPress={() => router.push("/(client)/services")}>
-            <Text style={styles.discoveryButtonText}>ابدأ من الخدمات</Text>
+          <Text style={styles.nextLabel}>الحالة الحالية</Text>
+          <Text style={styles.nextTitle}>لا يوجد ملف نشط معروض في هذه المرحلة</Text>
+          <Text style={styles.nextText}>
+            الخطوة التالية للعميل هي اكتشاف الخدمة المناسبة وبدء طلب قانوني. أي حالة حساسة ستأتي لاحقًا من المصدر الخادمي المعتمد.
+          </Text>
+          <TouchableOpacity style={styles.discoveryButton} activeOpacity={0.84} onPress={() => router.push("/(client)")}>
+            <Text style={styles.discoveryButtonText}>استكشف الخدمات والمحامين</Text>
             <Feather name="arrow-left" size={15} color={C.navy} />
           </TouchableOpacity>
         </View>
@@ -78,7 +105,7 @@ export default function ClientLegalHub() {
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>مساحتك القانونية</Text>
-        <Text style={styles.sectionSubtitle}>محور واحد بدل تشتيت الرحلة بين شاشات منفصلة</Text>
+        <Text style={styles.sectionSubtitle}>اختصارات إلى الشاشات الموجودة فعلًا فقط</Text>
       </View>
 
       {items.map((item) => {
@@ -111,7 +138,7 @@ export default function ClientLegalHub() {
       <View style={styles.principle}>
         <Feather name="lock" size={16} color={C.gold} />
         <Text style={styles.principleText}>
-          مبدأ البناء: الواجهة لا تمنح صلاحيات مالية أو قانونية. كل حالة حساسة ستصل لاحقًا عبر عقد API واضح وسلطة خادمية مستقلة.
+          حدود الصلاحيات: العميل يرى رحلته وبياناته المسموح بها فقط. المحامي يعمل داخل مساحة عمله وملفات عملائه. الأدمن يدير التشغيل والرقابة دون أن يتحول إلى طرف في العلاقة القانونية. الواجهة لا تمنح أي صلاحية مالية أو قانونية.
         </Text>
       </View>
     </ScrollView>
@@ -127,6 +154,13 @@ const styles = StyleSheet.create({
   eyebrow: { color: C.gold, fontSize: 10, fontFamily: "Inter_600SemiBold", textAlign: "right" },
   title: { color: "#fff", fontSize: 22, lineHeight: 29, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 4 },
   subtitle: { color: "rgba(255,255,255,.74)", fontSize: 11, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: 7 },
+  journeyCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 17, padding: 14 },
+  journeyTitle: { color: C.foreground, fontSize: 12, fontFamily: "Inter_700Bold", textAlign: "right", marginBottom: 10 },
+  journeyRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  step: { paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, backgroundColor: "#F5F6F8" },
+  stepActive: { backgroundColor: "rgba(201,160,53,.14)", borderWidth: 1, borderColor: "rgba(201,160,53,.4)" },
+  stepText: { color: C.mutedForeground, fontSize: 9.5, fontFamily: "Inter_600SemiBold" },
+  stepTextActive: { color: C.navy },
   nextCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 17, padding: 15, flexDirection: "row", alignItems: "center" },
   nextIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: "#EEF2F8", alignItems: "center", justifyContent: "center", marginRight: 12 },
   nextCopy: { flex: 1, alignItems: "flex-end" },
