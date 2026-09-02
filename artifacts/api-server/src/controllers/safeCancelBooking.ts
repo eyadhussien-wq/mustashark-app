@@ -1,14 +1,13 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { db } from "@workspace/db";
 import {
   bookingsTable,
   clientWalletsTable,
   consultationEventsTable,
-  platformDuesTable,
 } from "@workspace/db/schema";
+import { db } from "@workspace/db";
 import { assertT01Transition, getT01State } from "../lib/t01ConsultationStateMachine";
 import { updateBookingWithOptimisticLock } from "../lib/updateBookingWithOptimisticLock";
 import {
@@ -95,7 +94,6 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
       let refundApplied = false;
       let newPaymentStatus = booking.paymentStatus;
       let newEscrowStatus = booking.escrowStatus;
-      let dueStatus: "waived" | "collected" | null = null;
 
       if (isLawyer) {
         if (paidAndHeld) {
@@ -103,7 +101,6 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
           refundApplied = true;
           newPaymentStatus = "refunded";
           newEscrowStatus = "refunded";
-          dueStatus = "waived";
         }
       } else if (state === "PAYMENT_PENDING") {
         // No successful payment exists, so there is nothing to refund or collect.
@@ -114,7 +111,6 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
           refundApplied = true;
           newPaymentStatus = "refunded";
           newEscrowStatus = "refunded";
-          dueStatus = "waived";
         }
       } else {
         const appointment = scheduledAt(booking.scheduledDate, booking.scheduledTime);
@@ -127,15 +123,12 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
             refundApplied = true;
             newPaymentStatus = "refunded";
             newEscrowStatus = "refunded";
-            dueStatus = "waived";
           }
         } else if (paidAndHeld) {
-          // Late client cancellation is forfeited. The pending platform due is
-          // collected as the platform's commission; lawyer payout remains a
-          // separate downstream settlement concern.
+          // Late client cancellation is forfeited. Funds are released according to
+          // the cancellation policy; no platform commission is created or collected.
           newPaymentStatus = "forfeited";
           newEscrowStatus = "released";
-          dueStatus = "collected";
         }
       }
 
@@ -171,18 +164,6 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
           });
       }
 
-      if (dueStatus) {
-        await tx
-          .update(platformDuesTable)
-          .set({
-            status: dueStatus,
-            collectedAt: dueStatus === "collected" ? now : null,
-            collectedBy: null,
-            updatedAt: now,
-          })
-          .where(and(eq(platformDuesTable.bookingId, bookingId), eq(platformDuesTable.status, "pending")));
-      }
-
       const responseBody = {
         ok: true,
         booking: updatedBooking,
@@ -216,7 +197,6 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
           refundApplied,
           paymentStatus: newPaymentStatus,
           escrowStatus: newEscrowStatus,
-          platformDueStatus: dueStatus,
         },
       });
 
@@ -238,21 +218,11 @@ export const cancelBookingSafely = async (req: Request, res: Response) => {
     if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
     if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
     if (error?.message === "VERSION_CONFLICT") {
-      return res.status(409).json({
-        ok: false,
-        error: "booking_version_conflict",
-        message: "Conflict: The booking state has been modified by another concurrent request.",
-      });
+      return res.status(409).json({ ok: false, error: "booking_version_conflict", message: "Conflict: The booking state has been modified by another concurrent request." });
     }
-    if (error?.message === "INVALID_CANCEL_STATE" || error?.message?.startsWith("INVALID_T01_TRANSITION")) {
-      return res.status(409).json({ ok: false, error: "cannot_cancel_in_current_state" });
-    }
-    if (error?.message === "INVALID_SCHEDULED_DATETIME") {
-      return res.status(400).json({ ok: false, error: "invalid_scheduled_datetime" });
-    }
-    if (error?.message === "IDEMPOTENCY_CLAIM_FAILED") {
-      return res.status(409).json({ ok: false, error: "idempotency_claim_failed" });
-    }
+    if (error?.message === "INVALID_CANCEL_STATE") return res.status(400).json({ ok: false, error: "cannot_cancel_in_current_state" });
+    if (error?.message === "INVALID_T01_TRANSITION") return res.status(400).json({ ok: false, error: "invalid_consultation_state_transition" });
+    if (error?.message === "INVALID_SCHEDULED_DATETIME") return res.status(400).json({ ok: false, error: "invalid_scheduled_datetime" });
     console.error("Safe Cancel Booking Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
