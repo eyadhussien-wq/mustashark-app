@@ -108,7 +108,7 @@ assert(firstBooking === "cancelled_by_client|refunded|refunded|2", `unexpected s
 const firstWallet = psql(`SELECT available_credits || '|' || total_refunded FROM client_wallets WHERE client_id = ${sqlLiteral(client.id)};`);
 assert(firstWallet === "300.00|300.00", `expected exactly one 300.00 wallet credit, got ${firstWallet}`);
 const firstDue = psql(`SELECT status FROM platform_dues WHERE booking_id = ${sqlLiteral(first.id)};`);
-assert(firstDue === "waived", `expected pending platform due to become waived, got ${firstDue}`);
+assert(firstDue === "pending", `R2 must not mutate legacy platform due on refund, got ${firstDue}`);
 
 // 2) Different keys, same expected version: optimistic locking allows exactly one winner.
 const second = await seedAcceptedBooking(client.id, lawyer.id, "200.00", 72 * 60 * 60 * 1000);
@@ -123,14 +123,14 @@ assert(secondBooking === "cancelled_by_client|refunded|refunded|2", `unexpected 
 const secondWallet = psql(`SELECT available_credits || '|' || total_refunded FROM client_wallets WHERE client_id = ${sqlLiteral(client.id)};`);
 assert(secondWallet === "500.00|500.00", `expected wallet to increase exactly once by 200.00, got ${secondWallet}`);
 
-// 3) Client cancellation under 24h: no refund, payment forfeited, due collected.
+// 3) Client cancellation under 24h: no refund, payment forfeited, no legacy revenue mutation.
 const late = await seedAcceptedBooking(client.id, lawyer.id, "150.00", 2 * 60 * 60 * 1000);
 const lateResult = await post("/api/bookings/cancel", { bookingId: late.id, expectedVersion: late.version, reason: "CI late cancellation" }, client.token, `x1-late-${crypto.randomUUID()}`);
 assert(lateResult.status === 200, `late cancellation failed: ${JSON.stringify(lateResult)}`);
 const lateBooking = psql(`SELECT status || '|' || payment_status || '|' || escrow_status || '|' || version FROM bookings WHERE id = ${sqlLiteral(late.id)};`);
 assert(lateBooking === "cancelled_by_client|forfeited|released|2", `unexpected late cancellation state: ${lateBooking}`);
 const lateDue = psql(`SELECT status FROM platform_dues WHERE booking_id = ${sqlLiteral(late.id)};`);
-assert(lateDue === "collected", `expected pending platform due to become collected, got ${lateDue}`);
+assert(lateDue === "pending", `R2 must not collect legacy platform due on late cancellation, got ${lateDue}`);
 const lateWallet = psql(`SELECT available_credits || '|' || total_refunded FROM client_wallets WHERE client_id = ${sqlLiteral(client.id)};`);
 assert(lateWallet === "500.00|500.00", `late cancellation must not credit the wallet, got ${lateWallet}`);
 
@@ -138,5 +138,5 @@ console.log("X1 BOOKING CANCEL SMOKE TEST PASSED");
 console.log("- same Idempotency-Key concurrent replay: PASS");
 console.log("- double-refund protection: PASS");
 console.log("- optimistic version race: PASS");
-console.log("- >=24h full refund + platform due waived: PASS");
-console.log("- <24h forfeiture + platform due collected: PASS");
+console.log("- >=24h full refund + legacy due unchanged: PASS");
+console.log("- <24h forfeiture + legacy due unchanged: PASS");
