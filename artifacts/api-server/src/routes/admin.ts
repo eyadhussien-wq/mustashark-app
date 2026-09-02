@@ -1,10 +1,4 @@
 import { Router } from "express";
-import {
-  getDuesReport,
-  recordManualCollection,
-  checkAndApplyKillSwitch,
-  runKillSwitchForAllOffices,
-} from "../controllers/admin";
 import { adminLogin, getAdminProfile } from "../controllers/adminAuth";
 import {
   getAdminOverview,
@@ -59,14 +53,6 @@ adminRouter.patch(
   requireAdmin,
   updateClientStatus,
 );
-adminRouter.get("/admin/dues-report", requireAdmin, getDuesReport);
-adminRouter.post("/admin/collect", requireAdmin, recordManualCollection);
-adminRouter.post("/admin/kill-switch", requireAdmin, checkAndApplyKillSwitch);
-adminRouter.post(
-  "/admin/kill-switch/run-all",
-  requireAdmin,
-  runKillSwitchForAllOffices,
-);
 
 adminRouter.get(
   "/admin/lawyer-verifications/pending",
@@ -79,7 +65,6 @@ adminRouter.patch(
   reviewLawyerVerification,
 );
 
-// ── Lawyer deletion requests ──────────────────────────────────────────────────
 adminRouter.get(
   "/admin/deletion-requests",
   requireAdmin,
@@ -101,7 +86,6 @@ adminRouter.post(
   rejectDeletion,
 );
 
-// ── Lawyer profile change requests ────────────────────────────────────────────
 adminRouter.get(
   "/admin/profile-change-requests",
   requireAdmin,
@@ -118,7 +102,6 @@ adminRouter.post(
   rejectProfileChange,
 );
 
-// ── Lawyer bank account verification ─────────────────────────────────────────
 adminRouter.get("/admin/bank-accounts", requireAdmin, listAdminBankAccounts);
 adminRouter.post(
   "/admin/bank-accounts/:id/:action",
@@ -126,7 +109,6 @@ adminRouter.post(
   reviewBankAccount,
 );
 
-// ── Text review moderation ────────────────────────────────────────────────────
 adminRouter.get("/admin/reviews", requireAdmin, listPendingReviews);
 adminRouter.post("/admin/reviews/:id/approve", requireAdmin, approveReview);
 adminRouter.post("/admin/reviews/:id/reject", requireAdmin, rejectReview);
