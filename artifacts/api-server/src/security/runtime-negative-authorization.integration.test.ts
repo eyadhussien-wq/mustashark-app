@@ -22,17 +22,22 @@ const {
   usersTable,
   bookingsTable,
   notificationsTable,
-  representationQuotesTable,
+  representationQuoteRequestsTable,
   representationMilestonesTable,
   escrowAccountsTable,
   agreementsTable,
   casesTable,
+  lawyerProposalsTable,
   idempotencyKeysTable,
 } = await import("@workspace/db");
 const { eq, inArray } = await import("drizzle-orm");
 const { listMyClients } = await import("../controllers/lawyerClients");
 const { listMyConsultations } = await import("../controllers/lawyerConsultations");
 const { getCaseController, transitionCaseController } = await import("../controllers/cases");
+const { listLawyerProposals, getLawyerProposal } = await import("../controllers/lawyerProposals");
+const { getConsultationPrintData } = await import("../controllers/consultationDocumentation");
+const { listCaseHearingsController, transitionCaseHearingController } = await import("../controllers/caseHearings");
+const { listPaymentProofs } = await import("../controllers/paymentProofs");
 const { allocateMilestone } = await import("../services/allocateMilestone");
 const { requireRole } = await import("../middlewares/requireRole");
 
@@ -48,6 +53,7 @@ const ids = {
   escrow: "runtime-authz-escrow",
   agreement: "runtime-authz-agreement",
   case: "runtime-authz-case",
+  proposal: "runtime-authz-proposal",
   notificationOwner: "runtime-authz-notification-owner",
 };
 
@@ -70,7 +76,7 @@ function responseMock() {
 
 function requestWithAuth(id: string, role: "client" | "lawyer" | "admin") {
   return {
-    authUser: { id, role },
+    authUser: { id, userId: id, role },
     params: {},
     body: {},
     query: {},
@@ -144,6 +150,19 @@ async function seedFixture() {
     kind: "security-test",
   });
 
+  await db.insert(representationQuoteRequestsTable).values({
+    id: "runtime-authz-request",
+    serialNumber: "RUNTIME-AUTHZ-REQUEST",
+    clientId: ids.ownerClient,
+    lawyerId: ids.ownerLawyer,
+    title: "Runtime authorization request",
+    description: "Runtime authorization fixture",
+    status: "submitted",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    submittedAt: new Date(),
+  });
+
   await db.insert(representationQuotesTable).values({
     id: ids.quote,
     clientId: ids.ownerClient,
@@ -155,6 +174,19 @@ async function seedFixture() {
     status: "accepted",
     fundingMode: "per_stage",
     acceptedAt: new Date(),
+  });
+
+  await db.insert(lawyerProposalsTable).values({
+    id: ids.proposal,
+    requestId: "runtime-authz-request",
+    lawyerId: ids.ownerLawyer,
+    amount: "100.00",
+    currency: "JOD",
+    status: "submitted",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    submittedAt: new Date(),
   });
 
   await db.insert(representationMilestonesTable).values({
@@ -266,13 +298,87 @@ test("#R6 Lawyer-only route returns 403 to a client at runtime", () => {
   assert.equal(res.result.body?.error, "forbidden_role");
 });
 
+test("#R7 Proposal list denies a different client at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderClient, "client");
+  req.params = { requestId: "runtime-authz-request" };
+  await listLawyerProposals(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "forbidden");
+});
+
+test("#R8 Proposal read denies a different lawyer at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderLawyer, "lawyer");
+  req.params = { requestId: "runtime-authz-request", proposalId: ids.proposal };
+  await getLawyerProposal(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "forbidden");
+});
+
+test("#R9 Consultation print data denies a cross-owner actor at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderClient, "client");
+  req.params = { id: ids.bookingOwner };
+  await getConsultationPrintData(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "forbidden");
+});
+
+test("#R10 Case hearings list denies a cross-owner actor at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderClient, "client");
+  req.params = { caseId: ids.case };
+  await listCaseHearingsController(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "unauthorized_action");
+});
+
+test("#R11 Case hearing transition denies a cross-owner lawyer at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderLawyer, "lawyer");
+  req.params = { caseId: ids.case, hearingId: "nonexistent-hearing" };
+  req.body = { status: "completed" };
+  await transitionCaseHearingController(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "unauthorized_action");
+});
+
+test("#R12 Payment proof list denies a cross-owner actor at runtime with 403", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.outsiderClient, "client");
+  req.params = { id: ids.bookingOwner };
+  await listPaymentProofs(req, res as any);
+  assert.equal(res.result.statusCode, 403);
+  assert.equal(res.result.body?.error, "unauthorized_access");
+});
+
+test("#R13 Protected proposal read rejects an unauthenticated actor with 401", async () => {
+  const res = responseMock();
+  const req = { authUser: undefined, params: { requestId: "runtime-authz-request", proposalId: ids.proposal } } as any;
+  await getLawyerProposal(req, res as any);
+  assert.equal(res.result.statusCode, 401);
+  assert.equal(res.result.body?.error, "authentication_required");
+});
+
+test("#R14 Nonexistent proposal returns 404 without leaking another resource", async () => {
+  const res = responseMock();
+  const req = requestWithAuth(ids.ownerClient, "client");
+  req.params = { requestId: "runtime-authz-request", proposalId: "runtime-authz-no-such-proposal" };
+  await getLawyerProposal(req, res as any);
+  assert.equal(res.result.statusCode, 404);
+  assert.equal(res.result.body?.error, "proposal_not_found");
+});
+
 after(async () => {
   await db.delete(idempotencyKeysTable).where(inArray(idempotencyKeysTable.userId, createdUserIds));
+  await db.delete(lawyerProposalsTable).where(eq(lawyerProposalsTable.id, ids.proposal));
   await db.delete(casesTable).where(eq(casesTable.id, ids.case));
   await db.delete(agreementsTable).where(eq(agreementsTable.id, ids.agreement));
   await db.delete(escrowAccountsTable).where(eq(escrowAccountsTable.id, ids.escrow));
   await db.delete(representationMilestonesTable).where(eq(representationMilestonesTable.id, ids.milestone));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quote));
+  await db.delete(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, "runtime-authz-request"));
   await db.delete(notificationsTable).where(eq(notificationsTable.id, "runtime-authz-notification"));
   await db.delete(bookingsTable).where(inArray(bookingsTable.id, [ids.bookingOwner, ids.bookingOther]));
   await db.delete(usersTable).where(inArray(usersTable.id, createdUserIds));
