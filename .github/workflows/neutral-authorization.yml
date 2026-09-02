@@ -93,6 +93,9 @@ jobs:
       - name: Positive + Negative Authorization Policy Matrix
         run: pnpm --filter @workspace/api-server exec tsx --test src/services/neutralAuthorizationPolicy.test.ts
 
+      - name: Build referenced workspace declarations
+        run: pnpm exec tsc -b lib/db lib/api-zod
+
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server typecheck
 
