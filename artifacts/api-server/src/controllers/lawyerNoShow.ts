@@ -6,6 +6,7 @@ import {
   bookingsTable,
   bookingTransferRequestsTable,
   clientWalletsTable,
+  consultationEventsTable,
   lawyerCommitmentScoresTable,
   notificationsTable,
   usersTable,
@@ -312,7 +313,6 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
 
       if (!newBooking) throw new Error("TRANSFER_FAILED");
 
-      await tx.update(bookingsTable).set({ status: "transferred", updatedAt: new Date() }).where(eq(bookingsTable.id, bookingId));
       await tx.insert(consultationEventsTable).values({
         id: crypto.randomUUID(),
         bookingId: booking.id,
