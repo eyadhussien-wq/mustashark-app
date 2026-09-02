@@ -1,6 +1,6 @@
-import { Request, Response } from "express";
 import { and, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
 import crypto from "crypto";
+import { Request, Response } from "express";
 import { db } from "@workspace/db";
 import {
   bookingsTable,
@@ -8,7 +8,6 @@ import {
   clientWalletsTable,
   lawyerCommitmentScoresTable,
   notificationsTable,
-  platformDuesTable,
   usersTable,
 } from "@workspace/db/schema";
 
@@ -206,8 +205,6 @@ export const refundLawyerNoShow = async (req: Request, res: Response) => {
         .returning();
       if (!updated) throw new Error("INVALID_STATE");
 
-      await tx.update(platformDuesTable).set({ status: "waived", updatedAt: new Date() }).where(eq(platformDuesTable.bookingId, bookingId));
-
       const amount = Number(booking.price);
       if (!Number.isFinite(amount) || amount <= 0) throw new Error("INVALID_AMOUNT");
 
@@ -308,34 +305,33 @@ export const transferLawyerNoShowBooking = async (req: Request, res: Response) =
         status: "accepted",
         type: booking.type,
         price: booking.price,
-        paymentStatus: "paid",
-        escrowStatus: "held",
-        transferredFromBookingId: booking.id,
-        attachments: booking.attachments ?? [],
-        emailResponseDeadlineAt: booking.type === "email" ? new Date(Date.now() + EMAIL_DEADLINE_HOURS * 60 * 60 * 1000) : null,
+        paymentStatus: booking.paymentStatus,
+        escrowStatus: booking.escrowStatus,
+        version: 1,
       }).returning();
 
-      await tx.update(bookingsTable).set({ escrowStatus: "refunded", updatedAt: new Date() }).where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "no_show_lawyer"), eq(bookingsTable.escrowStatus, "held")));
-      await tx.update(platformDuesTable).set({ status: "waived", updatedAt: new Date() }).where(eq(platformDuesTable.bookingId, booking.id));
-      await tx.insert(platformDuesTable).values({ id: crypto.randomUUID(), bookingId: newBooking.id, officeId: newBooking.officeId, lawyerId: newLawyer.id, grossAmount: booking.price, commissionRate: "0.15", commissionAmount: (Number(booking.price) * 0.15).toFixed(2), status: "pending" }).onConflictDoNothing();
+      if (!newBooking) throw new Error("TRANSFER_FAILED");
 
-      await tx.insert(bookingTransferRequestsTable).values({ id: crypto.randomUUID(), originalBookingId: booking.id, newBookingId: newBooking.id, clientId: booking.clientId!, originalLawyerId: booking.lawyerId, newLawyerId: newLawyer.id, status: "accepted", reason: "lawyer_no_show", selectedAt: new Date() });
-      await tx.insert(notificationsTable).values({ id: crypto.randomUUID(), userId: newLawyer.id, bookingId: newBooking.id, title: "لديك استشارة محولة عاجلة", body: "تم تحويل الاستشارة إليك مجاناً بسبب عدم حضور المحامي الأصلي. يمكنك مراجعة الموضوع والمرفقات والاستعداد للموعد.", kind: "urgent_transfer", urgent: true });
+      await tx.update(bookingsTable).set({ status: "transferred", updatedAt: new Date() }).where(eq(bookingsTable.id, bookingId));
+      await tx.insert(consultationEventsTable).values({
+        id: crypto.randomUUID(),
+        bookingId: booking.id,
+        eventType: "BOOKING_TRANSFERRED",
+        actorId: authUser.id,
+        metadata: { toBookingId: newBooking.id, reason: "lawyer_no_show" },
+      });
       return newBooking;
     });
-
-    return res.status(201).json({ ok: true, transferred: true, booking: result, extraCharge: 0 });
+    return res.json({ ok: true, booking: result });
   } catch (error: any) {
-    const map: Record<string, [number, string]> = {
-      NOT_FOUND: [404, "booking_not_found"],
-      FORBIDDEN: [403, "unauthorized_action"],
-      INVALID_STATE: [400, "smart_transfer_not_available"],
-      NO_ORIGINAL_LAWYER: [400, "original_lawyer_unavailable"],
-      LAWYER_NOT_FOUND: [404, "lawyer_not_found"],
-      LAWYER_NOT_MATCHING: [400, "lawyer_does_not_match_transfer_rules"],
-    };
-    if (map[error?.message]) return res.status(map[error.message][0]).json({ ok: false, error: map[error.message][1] });
-    console.error("Transfer Lawyer No-Show Error:", error);
+    if (error?.message === "NOT_FOUND") return res.status(404).json({ ok: false, error: "booking_not_found" });
+    if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "unauthorized_action" });
+    if (error?.message === "INVALID_STATE") return res.status(400).json({ ok: false, error: "smart_transfer_not_available" });
+    if (error?.message === "NO_ORIGINAL_LAWYER") return res.status(400).json({ ok: false, error: "original_lawyer_unavailable" });
+    if (error?.message === "LAWYER_NOT_FOUND") return res.status(404).json({ ok: false, error: "lawyer_not_found" });
+    if (error?.message === "LAWYER_NOT_MATCHING") return res.status(409).json({ ok: false, error: "lawyer_does_not_match_original_booking" });
+    if (error?.message === "TRANSFER_FAILED") return res.status(500).json({ ok: false, error: "transfer_failed" });
+    console.error("Transfer Lawyer No-Show Booking Error:", error);
     return res.status(500).json({ ok: false, error: "internal_server_error" });
   }
 };
