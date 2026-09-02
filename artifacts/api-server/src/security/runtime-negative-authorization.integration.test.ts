@@ -23,6 +23,7 @@ const {
   bookingsTable,
   notificationsTable,
   representationQuoteRequestsTable,
+  representationQuotesTable,
   representationMilestonesTable,
   escrowAccountsTable,
   agreementsTable,
