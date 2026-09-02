@@ -51,6 +51,11 @@ jobs:
           cache: pnpm
 
       - name: Install PostgreSQL client
+        uses: docker://postgres:16
+        with:
+          args: --version
+
+      - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Install dependencies
@@ -86,7 +91,7 @@ jobs:
       - name: Build API server
         run: pnpm --filter @workspace/api-server build
 
-      - name: Run Chain Verification Smoke Test
+      - name: Run Compensating Entries + Integrity Alert Smoke Test
         run: pnpm --filter @workspace/api-server exec tsx --test src/services/neutralAudit.chain.integration.test.ts
 
       - name: Final production DB guard
