@@ -4,7 +4,6 @@ import {
   usersTable,
   officesTable,
   bookingsTable,
-  platformDuesTable,
 } from "@workspace/db";
 import { eq, sql, desc, and } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -65,13 +64,6 @@ export async function getAdminOverview(req: Request, res: Response) {
       })
       .from(bookingsTable);
 
-    const [dueTotals] = await db
-      .select({
-        pendingCommission: sql<string>`COALESCE(SUM(CASE WHEN ${platformDuesTable.status} = 'pending' THEN ${platformDuesTable.commissionAmount} ELSE 0 END), 0)`,
-        collectedCommission: sql<string>`COALESCE(SUM(CASE WHEN ${platformDuesTable.status} = 'collected' THEN ${platformDuesTable.commissionAmount} ELSE 0 END), 0)`,
-      })
-      .from(platformDuesTable);
-
     const revenueByCountry = await db
       .select({
         country: lawyerUser.country,
@@ -124,8 +116,6 @@ export async function getAdminOverview(req: Request, res: Response) {
       totalConsultations: Number(bookingTotals?.totalConsultations ?? 0),
       suspendedOffices: Number(officeCounts?.suspendedOffices ?? 0),
       grossRevenue: Number(bookingTotals?.grossRevenue ?? 0),
-      pendingCommission: Number(dueTotals?.pendingCommission ?? 0),
-      collectedCommission: Number(dueTotals?.collectedCommission ?? 0),
       revenueQatar,
       revenueJordan,
       consultationsByStatus: statusRows.map((r) => ({
@@ -256,7 +246,6 @@ export async function listAdminOffices(req: Request, res: Response) {
         isSuspended: officesTable.isSuspended,
         suspensionReason: officesTable.suspensionReason,
         debtThreshold: officesTable.debtThreshold,
-        pendingCommission: sql<string>`(SELECT COALESCE(SUM(${platformDuesTable.commissionAmount}), 0) FROM ${platformDuesTable} WHERE ${platformDuesTable.officeId} = ${officesTable.id} AND ${platformDuesTable.status} = 'pending')`,
       })
       .from(officesTable)
       .leftJoin(usersTable, eq(officesTable.ownerId, usersTable.id))
@@ -271,7 +260,6 @@ export async function listAdminOffices(req: Request, res: Response) {
         isSuspended: r.isSuspended,
         suspensionReason: r.suspensionReason ?? null,
         debtThreshold: Number(r.debtThreshold),
-        pendingCommission: Number(r.pendingCommission ?? 0),
       })),
     );
   } catch (err) {
@@ -411,11 +399,8 @@ async function applyUserStatus(
 
 export async function updateLawyerStatus(req: Request, res: Response) {
   const parsed = lawyerStatusSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ error: "validation_error" });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "validation_error" });
+
   try {
     return await applyUserStatus(
       req,
@@ -432,11 +417,8 @@ export async function updateLawyerStatus(req: Request, res: Response) {
 
 export async function updateClientStatus(req: Request, res: Response) {
   const parsed = clientStatusSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res
-      .status(400)
-      .json({ error: "validation_error" });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "validation_error" });
+
   try {
     return await applyUserStatus(
       req,
