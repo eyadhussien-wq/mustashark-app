@@ -97,7 +97,7 @@ Every client-facing build item is now explicitly D02-bound. This includes the cl
 | Consultation Request | X/2/X/3 + T01-01 | D02-03/04/05/08/09 |
 | Proposal Review / Acceptance | X/2/X/3 + T01-02/03 | D02-04/05/06/08/09 |
 | Scheduling / Booking | S01 | D02-01/03/04/05/08/09 |
-| Payment / Payment Proof | T01-05 + C3 | D02-04/05/08/09 |
+| Payment / Payment Proof | T01-05 + C3 | D02-04/05/08/09 + C3 semantics |
 | Consultation Workspace | T01 | D02-01/03/05/06/08/09 |
 | Documents / Upload / Preview | T01-04/06 | D02-04/05/07/08/09 |
 | Messages / Communication | X/2/X/3 + T01 | D02-03/04/05/08/09 |
@@ -255,6 +255,49 @@ Architectural Classification
 → CLOSED / VERIFIED
 ```
 
+## 14 — E01 SECURITY FOUNDATION REGISTRY
+
+E01 is a cross-cutting security foundation package and must be traceable through the canonical X/Y/Z/W + N1 + lifecycle + D02 maps. E01 identifiers do not replace existing architecture identifiers.
+
+| E01 package | Official scope | Primary placement | Lifecycle / overlay | D02 | Current state |
+|---|---|---|---|---|---|
+| E01-A | Authentication & Authorization | X/7, Y/7, Z/5–Z/6, W/5–W/7 | cross-cutting | D02-09/10 where user-facing | CLOSED |
+| **E01-B** | **Professional Trust** | **Y/7 + Y/5; N1.01–N1.02** | **S05 safety/verification overlay** | **D02-01/02/03/05/06/08/09** | **SECURITY GATE READY** |
+| E01-C | Legal Data Isolation | X/5, Y/5, Z/5–Z/6, W/5 | C12/C13 + N1.07–N1.15/N1.28–N1.29 | D02-04/05/07/08/09 | OPEN |
+| E01-D | Terms / Privacy | X/5/X/7, Y/5/Y/7, Z/5–Z/6, W/5/W/7 | C30/C31 + N1.28–N1.29 | D02-04/05/06/08/09 | OPEN |
+| E01-E | Final Security Gate | X/Y/Z/W + MAP-X | final E01 closure | D02-09/10 | OPEN |
+
+### E01-B canonical traceability record
+
+`E01-B → Professional Trust → Y/7 + Y/5 → N1.01–N1.02 → S05 → D02-01/02/03/05/06/08/09 → ProfessionalVerificationProvider → verification lifecycle/state → repository implementation → tests → Security Gate → final verification`
+
+Evidence already recorded for E01-B:
+
+- practice card required;
+- server-derived SHA-256 over actual submitted bytes;
+- fail-closed provider boundary;
+- automated provider decision;
+- `pending → verifying → approved | rejected | exception` lifecycle;
+- `expired | suspended | revoked` states;
+- DB-backed entitlement rather than JWT-only entitlement;
+- atomic verification/account-status update;
+- exception-only administrative review with audit logging;
+- no fabricated or unauthorized JBA/MOJ automation.
+
+**Closure rule:** E01-B is not `CLOSED / VERIFIED` until the Security Gate passes on the same branch and the resulting evidence is recorded.
+
+## 15 — E01 Branch / Evidence Authority
+
+Canonical execution branch:
+
+`security/e01-foundation-2026-09-03`
+
+Execution discipline:
+
+`main → E01 branch → one final PR → main`
+
+No child branches, no separate package PRs, no production DB mutation, and no speculative security rewrite.
+
 ## Final Governance Rules
 
 > No implementation before architectural classification.
@@ -266,3 +309,5 @@ Architectural Classification
 > No completed financial effect without FINANCIAL AUDIT INTEGRITY.
 >
 > No `CLOSED / VERIFIED` roadmap item without repository evidence, tests, security review, CI, final diff audit, and verification.
+>
+> E01-B professional entitlement is never granted from client-controlled state or stale JWT state; the authoritative professional state is database-backed and provider-gated.
