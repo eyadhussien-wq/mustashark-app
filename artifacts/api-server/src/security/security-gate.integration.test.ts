@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 
-// Security tests must never inherit a production DATABASE_URL. CI must provision
-// an isolated SECURITY_TEST_DATABASE_URL and this suite deliberately refuses to run
-// against a generic DATABASE_URL.
 const testDatabaseUrl = process.env.SECURITY_TEST_DATABASE_URL;
 if (!testDatabaseUrl) {
   test("SECURITY GATE: isolated test database is required", () => {
@@ -19,14 +16,17 @@ if (testDatabaseUrl && /(prod|production|live)/i.test(testDatabaseUrl)) {
 process.env.DATABASE_URL = testDatabaseUrl ?? "";
 process.env.GOOGLE_CLIENT_ID = "security-gate-test-client";
 
-const { db, pool, usersTable } = await import("@workspace/db");
+const { db, pool, usersTable, termsVersionsTable } = await import("@workspace/db");
 const { eq, and, sql } = await import("drizzle-orm");
 const bcrypt = (await import("bcryptjs")).default;
 const { signToken } = await import("../lib/jwt");
 const { requireAdmin } = await import("../middlewares/requireAdmin");
 const { localAuth, socialAuth } = await import("../controllers/auth");
+const { sha256 } = await import("../lib/platformTerms");
 
 const createdUserIds: string[] = [];
+const securityTermsId = `security-gate-terms-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const securityTermsContent = "Security Gate Test Terms";
 
 function responseMock() {
   const result: { statusCode: number; body: any } = { statusCode: 200, body: null };
@@ -43,6 +43,22 @@ function requestMock(token: string) {
     log: { error() {}, warn() {}, info() {} },
   } as any;
 }
+
+async function ensureCurrentTerms() {
+  await db.insert(termsVersionsTable).values({
+    id: securityTermsId,
+    version: 990001,
+    status: "published",
+    content: securityTermsContent,
+    contentHash: sha256(securityTermsContent),
+    hashAlgorithm: "sha256",
+    mandatory: true,
+    effectiveAt: new Date(Date.now() - 60_000),
+    publishedAt: new Date(Date.now() - 60_000),
+  });
+}
+
+await ensureCurrentTerms();
 
 test("#1 Admin Fail-Closed: stale JWT is rejected after DB suspension", async () => {
   const id = `security-gate-admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -87,7 +103,7 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Concurrent OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
-    const body = { provider: "google", token: "synthetic-security-gate-token", role: "client" };
+    const body = { provider: "google", token: "synthetic-security-gate-token", role: "client", termsVersionId: securityTermsId, termsContentHash: sha256(securityTermsContent) };
     const makeReq = () => ({ body, log: { error() {}, warn() {}, info() {} } }) as any;
     const r1 = responseMock();
     const r2 = responseMock();
@@ -113,7 +129,7 @@ test("#3b Provider Identity: email collision never auto-links an unrelated local
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Conflicting OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
-    const req = { body: { provider: "google", token: "synthetic-security-gate-conflict-token", role: "client" }, log: { error() {}, warn() {}, info() {} } } as any;
+    const req = { body: { provider: "google", token: "synthetic-security-gate-conflict-token", role: "client", termsVersionId: securityTermsId, termsContentHash: sha256(securityTermsContent) }, log: { error() {}, warn() {}, info() {} } } as any;
     const res = responseMock();
     await socialAuth(req, res as any);
 
@@ -128,5 +144,6 @@ test("#3b Provider Identity: email collision never auto-links an unrelated local
 
 after(async () => {
   for (const id of createdUserIds) await db.delete(usersTable).where(eq(usersTable.id, id));
+  await db.delete(termsVersionsTable).where(eq(termsVersionsTable.id, securityTermsId)).catch(() => undefined);
   await pool.end();
 });
