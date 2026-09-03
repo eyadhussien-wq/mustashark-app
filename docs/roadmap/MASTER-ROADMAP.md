@@ -328,6 +328,62 @@ MASTER ROADMAP
 → CLOSED / VERIFIED
 ```
 
+## 10 — E01 SECURITY FOUNDATION
+
+E01 is now part of the canonical Master Roadmap as a cross-cutting security foundation. It overlays existing architecture; it does not create a competing namespace for X/Y/Z/W, N1, C-stage, T/S or D02.
+
+### E01 execution package
+
+`E01-A → E01-B → E01-C → E01-D → E01-E`
+
+One branch only:
+
+`main → security/e01-foundation-2026-09-03 → one final PR → main`
+
+### E01-B — Professional Trust
+
+**Purpose:** establish a secure, auditable professional-trust boundary for lawyer accreditation and entitlement without making the administrator the normal source of professional authority.
+
+**Canonical trace:**
+
+`E01-B → Professional Trust → Y/7 + Y/5 → N1.01–N1.02 → S05 → D02-01/02/03/05/06/08/09 → ProfessionalVerificationProvider → verification lifecycle/state → repository → tests → Security Gate`
+
+Approved direction:
+
+`lawyer registration → professional/bar number + practice card → automated evidence extraction/matching → permitted public/official source verification → automated decision → professional entitlement`
+
+Security constraints:
+
+- only technically and legally permitted public sources may be automated;
+- no private portal, credentialed service, bypass, rate-limit evasion or undocumented privileged endpoint;
+- provider boundary is explicit and fail-closed;
+- missing/unavailable source evidence cannot grant professional access;
+- professional entitlement is derived from authoritative DB state, not a stale JWT;
+- practice-card SHA-256 is derived server-side from actual submitted bytes;
+- verification and lawyer-account activation are atomic;
+- administrator intervention is restricted to unresolved exception cases and is audit logged.
+
+Lifecycle:
+
+`pending → verifying → approved | rejected | exception`
+
+Security states:
+
+`expired | suspended | revoked`
+
+**Current status:** `SECURITY GATE READY`; implementation closure evidence is recorded, but E01-B is not CLOSED / VERIFIED until the Security Gate passes on the same branch and the evidence is recorded.
+
+### E01-A / C / D / E
+
+- **E01-A:** Authentication & Authorization — CLOSED on the E01 branch.
+- **E01-C:** Legal Data Isolation — open; overlays C12/C13 and X/Y/Z/W security boundaries.
+- **E01-D:** Terms / Privacy — open; overlays C30/C31 and X/Y/Z/W privacy boundaries.
+- **E01-E:** Final Security Gate — closes E01 only after A–D evidence, final diff audit, Security Gate and target-branch verification are complete.
+
+### Governance boundary
+
+E01 does not authorize changes to S02, Financial, Production DB, or other unrelated work merely by being present in the Master Roadmap. Any such work must retain its own roadmap identity and security/financial gates.
+
 ## Canonical lineage
 
-This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, and the new N1 Lawyer Digital Office architecture. It is a governance specification, not proof that every listed item is implemented.
+This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, N1 Lawyer Digital Office architecture, and the E01 Security Foundation overlay. It is a governance specification, not proof that every listed item is implemented.
