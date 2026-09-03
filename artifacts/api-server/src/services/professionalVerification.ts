@@ -1,12 +1,22 @@
 import { createHash } from "node:crypto";
 
 export type ProfessionalVerificationStatus = "verified" | "rejected" | "exception";
+export type LawyerVerificationState =
+  | "pending"
+  | "verifying"
+  | "approved"
+  | "rejected"
+  | "exception"
+  | "expired"
+  | "suspended"
+  | "revoked";
 
 export type ProfessionalVerificationInput = {
   name: string;
   licenseNumber: string;
   barAssociation: string;
   documentStorageKey: string;
+  documentHash: string;
 };
 
 export type ProfessionalVerificationResult = {
@@ -32,10 +42,36 @@ function normalize(value: string): string {
   return value.trim().toLocaleLowerCase("ar").replace(/[\s\-_/().،,:]+/g, "");
 }
 
-export function calculateDocumentHash(storageKey: string): string {
-  // This is a reference hash, not a claim that the underlying object bytes were
-  // hashed. Byte-level hashing belongs in the trusted upload/storage pipeline.
-  return createHash("sha256").update(storageKey, "utf8").digest("hex");
+/** SHA-256 over the actual practice-card bytes supplied by the trusted upload path. */
+export function calculateDocumentHash(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+const allowedTransitions: Record<LawyerVerificationState, readonly LawyerVerificationState[]> = {
+  pending: ["verifying", "rejected", "exception"],
+  verifying: ["approved", "rejected", "exception"],
+  approved: ["expired", "suspended", "revoked"],
+  rejected: ["pending"],
+  exception: ["verifying", "approved", "rejected"],
+  expired: ["verifying", "revoked"],
+  suspended: ["verifying", "revoked"],
+  revoked: ["verifying"],
+};
+
+export function canTransitionLawyerVerification(
+  from: LawyerVerificationState,
+  to: LawyerVerificationState,
+): boolean {
+  return allowedTransitions[from].includes(to);
+}
+
+export function assertLawyerVerificationTransition(
+  from: LawyerVerificationState,
+  to: LawyerVerificationState,
+): void {
+  if (!canTransitionLawyerVerification(from, to)) {
+    throw new Error(`INVALID_VERIFICATION_TRANSITION:${from}->${to}`);
+  }
 }
 
 const providers = new Map<string, ProfessionalVerificationProvider>();
@@ -58,7 +94,7 @@ export async function verifyProfessionalStatus(input: ProfessionalVerificationIn
       matchedLicense: null,
       confidence: 0,
       reason: "No authorized public professional verification source is configured for this bar association.",
-      documentHash: calculateDocumentHash(input.documentStorageKey),
+      documentHash: input.documentHash,
     };
   }
   return provider.verify(input);
