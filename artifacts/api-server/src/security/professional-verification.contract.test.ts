@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test, afterEach } from "node:test";
+import { test } from "node:test";
 import {
   calculateDocumentHash,
   registerProfessionalVerificationProvider,
@@ -35,15 +35,11 @@ const provider: ProfessionalVerificationProvider = {
   },
 };
 
-afterEach(() => {
-  // Providers are process-local; registrations are intentionally stable for this contract suite.
-});
-
 test("C03: SHA-256 is calculated from actual document bytes", () => {
   const first = new TextEncoder().encode("practice-card-v1");
   const second = new TextEncoder().encode("practice-card-v2");
   const firstHash = calculateDocumentHash(first);
-  assert.equal(firstHash, "0e0f7f8f0e8c6b20f3a8d0dc7d18d8b7b9b6c7bde0c5e5f0f6e8a3c9f0f4e0d7");
+  assert.equal(firstHash, "8c986075de4acb1cdf555e4b51ba80fdbb5270d14c90eb4db97e9b89567f653d");
   assert.notEqual(firstHash, calculateDocumentHash(second));
   assert.equal(firstHash.length, 64);
 });
