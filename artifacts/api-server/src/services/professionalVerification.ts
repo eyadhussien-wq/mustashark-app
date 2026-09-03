@@ -24,6 +24,7 @@ export type ProfessionalVerificationResult = {
 
 export interface ProfessionalVerificationProvider {
   readonly source: string;
+  readonly barAssociations: readonly string[];
   verify(input: ProfessionalVerificationInput): Promise<ProfessionalVerificationResult>;
 }
 
@@ -32,16 +33,20 @@ function normalize(value: string): string {
 }
 
 export function calculateDocumentHash(storageKey: string): string {
+  // This is a reference hash, not a claim that the underlying object bytes were
+  // hashed. Byte-level hashing belongs in the trusted upload/storage pipeline.
   return createHash("sha256").update(storageKey, "utf8").digest("hex");
 }
 
-/**
- * Provider orchestration boundary. Only providers that are explicitly configured
- * for a public/authorized source may be invoked. A missing provider never grants
- * professional access; it produces an exception result instead.
- */
+const providers = new Map<string, ProfessionalVerificationProvider>();
+
+/** Register only an explicitly authorized public-source provider at application bootstrap. */
+export function registerProfessionalVerificationProvider(provider: ProfessionalVerificationProvider): void {
+  for (const association of provider.barAssociations) providers.set(normalize(association), provider);
+}
+
 export async function verifyProfessionalStatus(input: ProfessionalVerificationInput): Promise<ProfessionalVerificationResult> {
-  const provider = getConfiguredProvider(input.barAssociation);
+  const provider = providers.get(normalize(input.barAssociation));
   if (!provider) {
     return {
       status: "exception",
@@ -57,13 +62,4 @@ export async function verifyProfessionalStatus(input: ProfessionalVerificationIn
     };
   }
   return provider.verify(input);
-}
-
-function getConfiguredProvider(barAssociation: string): ProfessionalVerificationProvider | null {
-  // Providers are deliberately opt-in. Do not silently scrape or call a source
-  // merely because a public web page exists.
-  if (normalize(barAssociation).includes("نقابةالمحامينالأردنيين") || normalize(barAssociation).includes("jordanbarassociation")) {
-    return null;
-  }
-  return null;
 }
