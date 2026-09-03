@@ -107,6 +107,9 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
     const diagnosticsSeen: unknown[] = [];
     const makeReq = () => ({
       body,
+      get(name: string) {
+        return name.toLowerCase() === "user-agent" ? "security-gate-test" : undefined;
+      },
       log: {
         error(payload: unknown) {
           if (
