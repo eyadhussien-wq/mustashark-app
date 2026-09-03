@@ -1,6 +1,6 @@
 # E01 — Security Foundation Audit
 
-**Status:** E01-A CLOSED / E01-B IN PROGRESS  
+**Status:** E01-A CLOSED / E01-B SECURITY GATE READY  
 **Branch:** `security/e01-foundation-2026-09-03`  
 **Canonical starting point:** `main` / `93378a1f72517ab3dedd0eef06499d4d8f4094ce`  
 **Scope:** C01, C02, C03, C12, C13, C30, C31  
@@ -50,7 +50,7 @@ No production database mutation, destructive migration, branch proliferation, or
 
 ## E01-B — Professional Trust
 
-**Status: IN PROGRESS — implementation pass completed; live-source enablement remains gated.**
+**Status: SECURITY GATE READY — implementation closure evidence recorded; live-source enablement remains separately gated.**
 
 ### Approved product/security direction
 
@@ -74,9 +74,9 @@ The Jordan Bar Association publishes a public lawyer directory and electronic se
 
 The Ministry of Justice also provides public electronic services and lawyer-facing services, including workflows that use the lawyer's bar number. This is treated as potential secondary official evidence, not as assumed integration permission.
 
-### C03 implementation completed on this branch
+### C03 implementation closure evidence
 
-The verification record now supports an auditable professional lifecycle:
+The verification record supports an auditable professional lifecycle:
 
 `pending → verifying → approved | rejected | exception`
 
@@ -84,13 +84,18 @@ with additional administrative/security states:
 
 `expired | suspended | revoked`
 
-The record includes source, source reference/status, verification method, matched identity/license, confidence, verification timestamps, exception reason, and document reference hash metadata.
+A submission is required to pass through the `verifying` transition before a provider decision. Rejected records re-enter through `pending → verifying`; approved records may be re-verified; expired/suspended/revoked records cannot directly promote to approved. Illegal promotions are rejected by the lifecycle guard.
 
-The lawyer verification submission contract now requires:
+The record includes source, source reference/status, verification method, matched identity/license, confidence, verification timestamps, exception reason, and document evidence hash metadata.
+
+The lawyer verification submission contract requires:
 
 - professional/bar number;
 - bar association;
-- practice-card storage key.
+- practice-card storage key;
+- the actual practice-card bytes encoded for the upload request.
+
+The server derives SHA-256 from the actual document bytes. The authoritative hash is therefore server-derived and cannot be supplied as a client-selected hash value. The provider receives this hash as evidence metadata.
 
 The submission invokes the provider orchestration boundary and derives the server-side decision from the provider result:
 
@@ -98,15 +103,15 @@ The submission invokes the provider orchestration boundary and derives the serve
 - `rejected` → `rejected` + account remains denied;
 - `exception` / unavailable source → `exception` + account remains pending.
 
+Verification-row and lawyer-account-status writes now occur in the same database transaction. A failure of either write rolls back the complete submission, preventing a partially activated lawyer account.
+
 An administrator cannot approve a normal `pending` verification. Administrative review is restricted to unresolved `exception` cases and is audit logged. Professional privileged routes continue to require the canonical `approved` state from the database, so an existing JWT does not preserve professional entitlement after status loss.
 
-### Important evidence-integrity rule
-
-The current `documentHash` is explicitly a **storage-reference hash**, not a claim that the underlying practice-card bytes were cryptographically hashed. Byte-level hashing must be produced by the trusted upload/storage pipeline before it is used for document-reuse or fraud detection. No client-supplied hash is trusted as proof.
-
-### C03 automated-source boundary
+### C03 source and integrity boundary
 
 A provider may be registered only when its source is explicitly authorized for automated public querying. The repository intentionally contains no live JBA/MOJ scraper or undocumented endpoint. This prevents the security gate from silently turning a public page into an unauthorized data-collection mechanism.
+
+The practice-card hash is computed over actual submitted bytes on the server. It is not a hash of the storage key and is not client-authoritative. The storage key remains a reference to the stored object; storage/object-level integrity and retention controls remain part of the later trusted storage hardening work and are not falsely represented as completed by this gate.
 
 ### C03 tests added
 
@@ -114,17 +119,37 @@ A provider may be registered only when its source is explicitly authorized for a
 
 - fail-closed behavior when no authorized source provider exists;
 - automatic approval from an explicitly registered provider with an exact professional match;
-- automatic rejection from a registered provider when the provider reports a mismatch.
+- automatic rejection from a registered provider when the provider reports a mismatch;
+- deterministic SHA-256 calculation from actual document bytes.
 
-### Remaining E01-B closure gates
+`artifacts/api-server/src/security/professional-verification.lifecycle.test.ts` covers:
 
-1. Establish the exact permitted public-source access method for each live source before registration.
-2. Implement only those approved public-source adapters.
-3. Connect trusted upload/storage byte hashing for the practice card.
-4. Add/execute runtime lifecycle tests for pending/exception/rejected/suspended/expired/revoked states and stale JWT denial.
-5. Verify migration/typecheck/Security Gate on the resulting branch head.
+- normal pending/verifying/approved flow;
+- rejection and safe resubmission path;
+- exception resolution paths;
+- expiration, suspension, and revocation;
+- illegal direct promotions;
+- the DB-backed entitlement rule: only `approved` is professionally entitled, so stale JWTs do not preserve professional access when the DB status is no longer approved.
 
-E01-B is **not CLOSED yet** because no live external provider is being fabricated or enabled without a confirmed permitted automated access path.
+### E01-B closure evidence checklist
+
+| Gate | Result |
+|---|---|
+| Practice card required | PASS |
+| Server-derived byte-level SHA-256 | PASS |
+| Provider boundary fail-closed | PASS |
+| Lifecycle state guard | PASS |
+| Rejection/resubmission path | PASS |
+| Expired/suspended/revoked paths | PASS |
+| Illegal promotion denial | PASS |
+| DB-backed entitlement / stale-session boundary | PASS |
+| Atomic verification + account update | PASS |
+| Exception-only admin review | PASS |
+| Audit logging for exception review | PASS |
+| No unauthorized JBA/MOJ automation fabricated | PASS |
+| Security Gate test registration | PASS |
+
+E01-B now has its implementation closure evidence and is **READY FOR THE E01-B SECURITY GATE RUN**. It must not be declared fully closed until the resulting branch head passes the Security Gate and the final evidence is recorded.
 
 ## E01-C — Legal Data Isolation
 
