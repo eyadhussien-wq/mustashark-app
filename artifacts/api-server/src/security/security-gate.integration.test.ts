@@ -104,10 +104,29 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Concurrent OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
     const body = { provider: "google", token: "synthetic-security-gate-token", role: "client", termsVersionId: securityTermsId, termsContentHash: sha256(securityTermsContent) };
-    const makeReq = () => ({ body, log: { error() {}, warn() {}, info() {} } }) as any;
+    const diagnosticsSeen: unknown[] = [];
+    const makeReq = () => ({
+      body,
+      log: {
+        error(payload: unknown) {
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "event" in payload &&
+            (payload as { event?: unknown }).event === "oauth_unique_violation_diagnostic"
+          ) {
+            diagnosticsSeen.push(payload);
+          }
+        },
+        warn() {},
+        info() {},
+      },
+    }) as any;
     const r1 = responseMock();
     const r2 = responseMock();
     await Promise.all([socialAuth(makeReq(), r1 as any), socialAuth(makeReq(), r2 as any)]);
+
+    process.stderr.write(`OAUTH_DIAGNOSTICS=${JSON.stringify(diagnosticsSeen)}\n`);
 
     assert.equal(r1.result.statusCode, 200, JSON.stringify(r1.result.body));
     assert.equal(r2.result.statusCode, 200, JSON.stringify(r2.result.body));
