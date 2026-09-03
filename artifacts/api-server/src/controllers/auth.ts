@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import bcrypt from "bcryptjs";
 import { db, termsConsentsTable, termsVersionsTable, usersTable } from "@workspace/db";
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
@@ -83,6 +83,15 @@ export async function socialAuth(req: Request, res: Response) {
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const inserted = await db.transaction(async (tx) => {
+          // Serialize creation for the exact provider identity. This closes the
+          // check-then-insert race without weakening either uniqueness boundary.
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${provider}:${providerUser.id}`}, 0))`);
+
+          const existingProviderRows = await tx.select().from(usersTable)
+            .where(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerUser.id)))
+            .limit(1);
+          if (existingProviderRows[0]) return existingProviderRows[0];
+
           const current = await getRegistrationTerms(tx, termsVersionId, termsContentHash);
           const [created] = await tx.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() }).onConflictDoNothing({ target: [usersTable.authProvider, usersTable.providerId] }).returning();
           if (!created) return null;
