@@ -2,8 +2,8 @@ import { type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, termsConsentsTable, termsVersionsTable, usersTable } from "@workspace/db";
+import { and, desc, eq, lte } from "drizzle-orm";
 import { z } from "zod/v4";
 import { signToken } from "../lib/jwt";
 import { ROLE_UI } from "../lib/roleUi";
@@ -31,7 +31,7 @@ async function verifyAppleToken(identityToken: string): Promise<{ id: string; em
   try { const decoded = jwt.decode(identityToken, { complete: true }); if (!decoded || typeof decoded === "string" || !decoded.header.kid) return null; const signingKey = await appleJwksClient.getSigningKey(decoded.header.kid); const publicKey = signingKey.getPublicKey(); const verified = jwt.verify(identityToken, publicKey, { algorithms: ["RS256"], issuer: "https://appleid.apple.com", audience: APPLE_CLIENT_ID }) as jwt.JwtPayload; if (!verified.sub) return null; return { id: verified.sub, email: verified.email ?? "", name: (verified as any).name ?? "" }; } catch { return null; }
 }
 
-const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]), token: z.string().min(1), role: z.enum(["client", "lawyer"]).optional().default("client"), displayName: z.string().optional() });
+const socialSchema = z.object({ provider: z.enum(["google", "facebook", "apple"]), token: z.string().min(1), role: z.enum(["client", "lawyer"]).optional().default("client"), displayName: z.string().optional(), termsVersionId: z.string().min(1).optional(), termsContentHash: z.string().regex(/^[0-9a-fA-F]{64}$/).optional() });
 function roleMismatchResponse(role: string) { return { ok: false, error: "role_mismatch", roleUi: ROLE_UI[role as keyof typeof ROLE_UI], message: role === "lawyer" ? "عذراً، هذا الحساب مسجل كمحامٍ. يرجى الدخول من بوابة المحامين." : "عذراً، هذا الحساب مسجل كعميل. يرجى الدخول من بوابة العملاء." }; }
 function lawyerVerificationPendingResponse() { return { ok: false, error: "lawyer_verification_pending", accountStatus: "pending", message: "تم استلام طلب تسجيل المحامي. لا يمكن استخدام بوابة المحامين قبل التحقق المهني واعتماد الإدارة." }; }
 
@@ -49,10 +49,27 @@ function getUniqueViolationConstraint(err: unknown): string | null {
 
 const EMAIL_UNIQUE_CONSTRAINT = "users_email_unique";
 
+async function getRegistrationTerms(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], termsVersionId: string | undefined, termsContentHash: string | undefined) {
+  if (!termsVersionId || !termsContentHash) throw new Error("terms_consent_required");
+  const rows = await tx.select().from(termsVersionsTable).where(and(eq(termsVersionsTable.status, "published"), eq(termsVersionsTable.mandatory, true), lte(termsVersionsTable.effectiveAt, new Date()))).orderBy(desc(termsVersionsTable.version)).limit(1);
+  const current = rows[0];
+  if (!current) throw new Error("terms_not_configured");
+  if (current.id !== termsVersionId || current.contentHash.toLowerCase() !== termsContentHash.toLowerCase()) throw new Error("terms_content_hash_mismatch");
+  return current;
+}
+
+function termsRegistrationError(res: Response, error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "terms_consent_required") return res.status(400).json({ ok: false, error: "terms_consent_required" });
+  if (message === "terms_not_configured") return res.status(503).json({ ok: false, error: "terms_not_configured" });
+  if (message === "terms_content_hash_mismatch") return res.status(409).json({ ok: false, error: "terms_content_hash_mismatch" });
+  return null;
+}
+
 export async function socialAuth(req: Request, res: Response) {
   const parsed = socialSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { provider, token, role, displayName } = parsed.data;
+  const { provider, token, role, displayName, termsVersionId, termsContentHash } = parsed.data;
   try {
     let providerUser: { id: string; email: string; name: string } | null = null;
     if (provider === "google") providerUser = await verifyGoogleToken(token);
@@ -65,9 +82,17 @@ export async function socialAuth(req: Request, res: Response) {
       if (!providerUser.email) return res.status(400).json({ ok: false, error: "email_required", message: "البريد الإلكتروني الموثق من مزود الهوية مطلوب لإنشاء حساب جديد." });
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
-        const inserted = await db.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() }).onConflictDoNothing({ target: [usersTable.authProvider, usersTable.providerId] }).returning();
-        dbUser = inserted[0] ?? await findUserByProvider(provider, providerUser.id);
+        const inserted = await db.transaction(async (tx) => {
+          const current = await getRegistrationTerms(tx, termsVersionId, termsContentHash);
+          const [created] = await tx.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() }).onConflictDoNothing({ target: [usersTable.authProvider, usersTable.providerId] }).returning();
+          if (!created) return null;
+          await tx.insert(termsConsentsTable).values({ id: `consent-${newId}`, userId: newId, termsVersionId: current.id, version: current.version, contentHash: current.contentHash, source: "registration", ipAddress: req.ip ?? null, userAgent: req.get("user-agent") ?? null, metadata: null });
+          return created;
+        });
+        dbUser = inserted ?? await findUserByProvider(provider, providerUser.id);
       } catch (err) {
+        const termResponse = termsRegistrationError(res, err);
+        if (termResponse) return termResponse;
         const constraint = getUniqueViolationConstraint(err);
         if (constraint === EMAIL_UNIQUE_CONSTRAINT) return res.status(409).json({ ok: false, error: "email_conflict" });
         throw err;
@@ -77,9 +102,7 @@ export async function socialAuth(req: Request, res: Response) {
 
     if (dbUser.deletedAt && dbUser.deletionScheduledAt) {
       const now = new Date();
-      if (dbUser.deletionScheduledAt > now) {
-        return res.status(403).json({ ok: false, error: "account_reactivation_requires_verified_auth", message: "لا يمكن إعادة تفعيل الحساب المحذوف عبر تسجيل الدخول الاجتماعي دون مسار تحقق موثق." });
-      }
+      if (dbUser.deletionScheduledAt > now) return res.status(403).json({ ok: false, error: "account_reactivation_requires_verified_auth", message: "لا يمكن إعادة تفعيل الحساب المحذوف عبر تسجيل الدخول الاجتماعي دون مسار تحقق موثق." });
       return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
     }
     if (isBlockedAccountStatus(dbUser.accountStatus)) return res.status(403).json({ ok: false, error: "account_terminated", message: "عذراً، تم إيقاف هذا الحساب. يرجى التواصل مع الدعم." });
@@ -98,12 +121,12 @@ async function findUserByProvider(provider: string, providerId: string) {
   return rows[0] ?? null;
 }
 
-const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional() });
+const localAuthSchema = z.object({ email: z.string().email(), password: z.string().min(6).max(128), name: z.string().min(2).max(100).optional(), phone: z.string().max(30).optional(), country: z.enum(["qatar", "jordan"]).optional(), nationality: z.string().trim().min(2).max(100).optional(), role: z.enum(["client", "lawyer"]).optional().default("client"), specialization: z.string().max(200).optional(), bio: z.string().max(2000).optional(), hourlyRate: z.number().positive().optional(), termsVersionId: z.string().min(1).optional(), termsContentHash: z.string().regex(/^[0-9a-fA-F]{64}$/).optional() });
 
 export async function localAuth(req: Request, res: Response) {
   const parsed = localAuthSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
-  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate } = parsed.data;
+  const { email, password, name, country, nationality, role, specialization, bio, hourlyRate, termsVersionId, termsContentHash } = parsed.data;
   const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : undefined;
   const normalEmail = email.trim().toLowerCase();
   const DUMMY_HASH = "$2b$10$dummyhashfortimingsafetyXXXXXXXXXXXXXXXXX";
@@ -118,12 +141,10 @@ export async function localAuth(req: Request, res: Response) {
         req.log.warn({ userId: existing.id }, "local-auth: rejected password-link attempt for social-only account");
         return res.status(403).json({ ok: false, error: "social_account_only", message: "هذا الحساب مرتبط بتسجيل دخول اجتماعي (Google/Apple). يرجى استخدام نفس طريقة التسجيل." });
       }
-      // No account-state mutation is permitted before credential verification succeeds.
       if (existing.deletedAt && existing.deletionScheduledAt) {
         const now = new Date();
-        if (existing.deletionScheduledAt > now) {
-          await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, existing.id));
-        } else return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
+        if (existing.deletionScheduledAt > now) await db.update(usersTable).set({ deletedAt: null, deletionScheduledAt: null, accountStatus: "active", updatedAt: now }).where(eq(usersTable.id, existing.id));
+        else return res.status(403).json({ ok: false, error: "account_permanently_deleted", message: "عذراً، انتهت مدة استعادة الحساب (30 يوماً). تم حذف الحساب نهائياً." });
       }
       const refreshed = (await db.select().from(usersTable).where(eq(usersTable.id, existing.id)).limit(1))[0];
       if (!refreshed) return res.status(500).json({ ok: false, error: "user_creation_failed" });
@@ -143,9 +164,21 @@ export async function localAuth(req: Request, res: Response) {
     const isLawyerRegistration = role === "lawyer";
     const accountStatus = isLawyerRegistration ? "pending" : "active";
     const statusReason = isLawyerRegistration ? "lawyer_verification_required" : null;
-    await db.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus, statusReason, ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() });
-    if (isLawyerRegistration) return res.status(202).json({ ok: true, isNew: true, accountStatus: "pending", role: "lawyer", verificationRequired: true, message: "تم إنشاء طلب تسجيل المحامي. لا يمكن الدخول إلى بوابة المحامين حتى تتحقق الإدارة من الصفة المهنية وتعتمد الحساب.", user: { id: newId, name: name.trim(), email: normalEmail, role: "lawyer", accountStatus: "pending" } });
-    const jwtToken = signToken({ userId: newId, email: normalEmail, role, provider: "local" });
-    return res.status(201).json({ ok: true, jwt: jwtToken, userId: newId, isNew: true, roleUi: ROLE_UI[role], user: { id: newId, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
-  } catch (err) { req.log.error(err, "localAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" }); }
+    const created = await db.transaction(async (tx) => {
+      const current = await getRegistrationTerms(tx, termsVersionId, termsContentHash);
+      const [user] = await tx.insert(usersTable).values({ id: newId, name: name.trim(), email: normalEmail, passwordHash, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, role, authProvider: "local", accountStatus, statusReason, ...(role === "lawyer" ? { specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate != null ? String(hourlyRate) : null } : {}), createdAt: new Date(), updatedAt: new Date() }).returning();
+      if (!user) throw new Error("user_creation_failed");
+      await tx.insert(termsConsentsTable).values({ id: `consent-${newId}`, userId: newId, termsVersionId: current.id, version: current.version, contentHash: current.contentHash, source: "registration", ipAddress: req.ip ?? null, userAgent: req.get("user-agent") ?? null, metadata: null });
+      return user;
+    });
+    if (isLawyerRegistration) return res.status(202).json({ ok: true, isNew: true, accountStatus: "pending", role: "lawyer", verificationRequired: true, message: "تم إنشاء طلب تسجيل المحامي. لا يمكن الدخول إلى بوابة المحامين حتى تتحقق الإدارة من الصفة المهنية وتعتمد الحساب.", user: { id: created.id, name: created.name, email: created.email, role: "lawyer", accountStatus: "pending" } });
+    const jwtToken = signToken({ userId: created.id, email: normalEmail, role, provider: "local" });
+    return res.status(201).json({ ok: true, jwt: jwtToken, userId: created.id, isNew: true, roleUi: ROLE_UI[role], user: { id: created.id, name: name.trim(), email: normalEmail, role, phone, phoneCountry, country: country ?? null, nationality: nationality ?? null, specialization: specialization ?? null, bio: bio ?? null, hourlyRate: hourlyRate ?? null } });
+  } catch (err) {
+    const termResponse = termsRegistrationError(res, err);
+    if (termResponse) return termResponse;
+    const constraint = getUniqueViolationConstraint(err);
+    if (constraint === EMAIL_UNIQUE_CONSTRAINT) return res.status(409).json({ ok: false, error: "email_conflict" });
+    req.log.error(err, "localAuth failed"); return res.status(500).json({ ok: false, error: "internal_error" });
+  }
 }
