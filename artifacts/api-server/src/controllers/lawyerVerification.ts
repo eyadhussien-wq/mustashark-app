@@ -4,7 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { z } from "zod/v4";
-import { calculateDocumentHash, verifyProfessionalStatus } from "../services/professionalVerification";
+import { assertVerificationSubmissionTransition, calculateDocumentHash, verifyProfessionalStatus } from "../services/professionalVerification";
 
 const submissionSchema = z.object({
   licenseNumber: z.string().trim().min(2).max(100),
@@ -65,6 +65,9 @@ export async function submitLawyerVerification(req: Request, res: Response) {
 
     const outcome = await db.transaction(async (tx) => {
       const [existing] = await tx.select().from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, user.userId)).limit(1);
+      const fromStatus = existing?.status ?? "pending";
+      assertVerificationSubmissionTransition(fromStatus, status);
+
       const [verification] = existing
         ? await tx.update(lawyerVerificationsTable).set(values).where(eq(lawyerVerificationsTable.id, existing.id)).returning()
         : await tx.insert(lawyerVerificationsTable).values({ id: `lawyer_verification_${randomUUID()}`, userId: user.userId, ...values }).returning();
@@ -94,6 +97,8 @@ export async function submitLawyerVerification(req: Request, res: Response) {
       rejectionReason: outcome.verification.rejectionReason,
     }});
   } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message.startsWith("INVALID_VERIFICATION_TRANSITION:")) return res.status(409).json({ ok: false, error: "invalid_verification_transition" });
     req.log?.error?.(err, "submitLawyerVerification failed");
     return res.status(500).json({ ok: false, error: "internal_error" });
   }
@@ -130,7 +135,6 @@ export async function listPendingLawyerVerifications(req: Request, res: Response
   return res.json({ ok: true, items: rows });
 }
 
-/** Admin action is deliberately restricted to unresolved exceptions. */
 export async function reviewLawyerVerification(req: Request, res: Response) {
   const adminId = req.admin?.userId;
   if (!adminId) return res.status(401).json({ ok: false, error: "admin_only" });
