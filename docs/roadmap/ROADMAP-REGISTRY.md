@@ -298,6 +298,56 @@ Execution discipline:
 
 No child branches, no separate package PRs, no production DB mutation, and no speculative security rewrite.
 
+## 16 — PR-E15 LEGAL DOCUMENT STORAGE, INTEGRITY, ACCESS, RETENTION & DESTRUCTION
+
+**Official Roadmap ID:** `PR-E15`
+
+**Official name:** `Legal Document Storage, Integrity, Access, Retention & Destruction`
+
+**Classification:** `ADD TO MAP`
+
+**Priority:** `CRITICAL — LEGAL / SECURITY / PRIVACY FOUNDATION`
+
+**Purpose:** establish a single governed security and lifecycle boundary for every legal document and attachment handled by Mustashark. This stage covers actual object storage, confidentiality, integrity, access authorization, auditability, retention, legal hold, deletion/destruction, backup/restore and stale/deactivated identities.
+
+**Scope includes, at minimum:**
+
+- lawyer professional/practice-card documents;
+- client identity and legal documents;
+- agreements, POA and legal-representation documents;
+- case/matter documents and evidence;
+- payment proofs and financial attachments;
+- terms/consent evidence and legal attachments;
+- document versions, superseded objects and handovers;
+- backups, restoration and destruction evidence.
+
+**Mandatory control objectives:**
+
+- actual durable object storage must be proven, not inferred from a database storage key;
+- storage must be private and access-controlled;
+- encryption at rest/in transit and applicable key-management boundaries must be verified;
+- object integrity must be verifiable using server-derived content hashes and replacement/tampering detection;
+- object ownership and authorization must be enforced server-side;
+- direct public object URLs are prohibited for confidential legal material;
+- every sensitive access/mutation path must be auditable;
+- retention schedules and legal-hold rules must be explicit per document class;
+- deletion/destruction must cover primary storage and applicable replicas/backups according to policy;
+- backup/restore procedures must preserve confidentiality and integrity;
+- stale, suspended, deleted or deactivated identities must not retain unauthorized access;
+- metadata minimization and privacy boundaries must be explicit.
+
+**Canonical trace target:**
+
+`PR-E15 → Legal Document Security → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → repository storage/access implementation → tests → CI → evidence → Verify Main → CLOSED / VERIFIED`
+
+**Lifecycle:**
+
+`DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Governance boundary:** roadmap registration does not itself change runtime behavior, storage configuration or production data. No production migration or deletion is authorized by this registration alone.
+
+**Closure requirement:** PR-E15 cannot be marked `CLOSED / VERIFIED` until actual storage, access control, integrity, retention, destruction, backup/restore and audit evidence are implemented or verified for the applicable document classes.
+
 ## Final Governance Rules
 
 > No implementation before architectural classification.
@@ -311,3 +361,5 @@ No child branches, no separate package PRs, no production DB mutation, and no sp
 > No `CLOSED / VERIFIED` roadmap item without repository evidence, tests, security review, CI, final diff audit, and verification.
 >
 > E01-B professional entitlement is never granted from client-controlled state or stale JWT state; the authoritative professional state is database-backed and provider-gated.
+>
+> **PR-E15 legal documents are a critical security/privacy boundary: database metadata alone is not proof of secure object custody, integrity, retention or destruction.**
