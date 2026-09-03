@@ -83,15 +83,11 @@ export async function socialAuth(req: Request, res: Response) {
       const newId = `${provider}-${providerUser.id.substring(0, 12)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const inserted = await db.transaction(async (tx) => {
-          // Serialize creation for the exact provider identity. This closes the
-          // check-then-insert race without weakening either uniqueness boundary.
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${provider}:${providerUser.id}`}, 0))`);
-
           const existingProviderRows = await tx.select().from(usersTable)
             .where(and(eq(usersTable.authProvider, provider as any), eq(usersTable.providerId, providerUser.id)))
             .limit(1);
           if (existingProviderRows[0]) return existingProviderRows[0];
-
           const current = await getRegistrationTerms(tx, termsVersionId, termsContentHash);
           const [created] = await tx.insert(usersTable).values({ id: newId, name: providerUser.name || providerUser.email.split("@")[0], email: providerUser.email, authProvider: provider, providerId: providerUser.id, role, accountStatus: role === "lawyer" ? "pending" : "active", statusReason: role === "lawyer" ? "lawyer_verification_required" : null, createdAt: new Date(), updatedAt: new Date() }).onConflictDoNothing({ target: [usersTable.authProvider, usersTable.providerId] }).returning();
           if (!created) return null;
@@ -103,8 +99,12 @@ export async function socialAuth(req: Request, res: Response) {
         const termResponse = termsRegistrationError(res, err);
         if (termResponse) return termResponse;
         const constraint = getUniqueViolationConstraint(err);
-        if (constraint === EMAIL_UNIQUE_CONSTRAINT) return res.status(409).json({ ok: false, error: "email_conflict" });
-        throw err;
+        if (constraint === EMAIL_UNIQUE_CONSTRAINT) {
+          dbUser = await findUserByProvider(provider, providerUser.id);
+          if (!dbUser) return res.status(409).json({ ok: false, error: "email_conflict" });
+        } else {
+          throw err;
+        }
       }
       if (!dbUser) return res.status(500).json({ ok: false, error: "user_creation_failed" });
     }
