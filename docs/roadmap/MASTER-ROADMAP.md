@@ -371,7 +371,15 @@ Security states:
 
 `expired | suspended | revoked`
 
-**Current status:** `SECURITY GATE READY`; implementation closure evidence is recorded, but E01-B is not CLOSED / VERIFIED until the Security Gate passes on the same branch and the evidence is recorded.
+**Current status:** `CLOSED / VERIFIED`
+
+**Closure evidence:**
+- Implementation/evidence package is present on the same E01 branch.
+- Security Auth Verification Gate: **SUCCESS**
+- Workflow run: **#766**
+- Run ID: `33705013677`
+- Verified head: `65fefb4273ca1e484d7d0657531835b6cd54da57`
+- Closure record: `docs/security/E01-B-CLOSURE-EVIDENCE-2026-09-03.md`
 
 ### E01-A / C / D / E
 
