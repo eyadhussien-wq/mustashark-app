@@ -306,6 +306,33 @@ Payment Provider Integration · Tax/E-Invoicing · Payout Rails · Monitoring ·
 ### Phase 3+ — Strategic Expansion
 S03 Real Estate Opportunities · S04 Frozen / Near Future · S05 Lawyer Smart Safety Shield · **N1 advanced AI/search, law-firm mode, ecosystem, external integrations and future services**
 
+### PR-E15 — Legal Document Storage, Integrity, Access, Retention & Destruction
+
+**Critical legal/security/privacy foundation stage.** PR-E15 governs every legal document and attachment handled by Mustashark, including lawyer professional documents, client legal/identity documents, agreements/POA/representation documents, case evidence, payment proofs, terms/consent evidence, versions/superseded objects, handovers, backups and destruction.
+
+Required controls include:
+- actual durable object storage, proven rather than inferred from a database key;
+- private storage and server-side authorization;
+- encryption and applicable key-management boundaries;
+- server-derived content integrity hashes and tamper/replacement detection;
+- no direct public URLs for confidential legal material;
+- auditable sensitive access and mutations;
+- explicit retention schedules and legal-hold rules per document class;
+- deletion/destruction across primary storage and applicable replicas/backups according to policy;
+- backup/restore confidentiality and integrity;
+- stale/suspended/deleted/deactivated identity access revocation;
+- metadata minimization and privacy boundaries.
+
+**Canonical trace:**
+
+`PR-E15 → Legal Document Security → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → repository → tests/CI → evidence → Verify Main → CLOSED / VERIFIED`
+
+**Lifecycle:** `DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Current state:** `OPEN / CRITICAL FOUNDATION — ROADMAP REGISTERED, IMPLEMENTATION NOT YET AUTHORIZED BY THIS ENTRY ALONE`
+
+**Governance boundary:** registering PR-E15 does not change runtime behavior, storage configuration or production data. No production migration, deletion or destructive storage action is authorized by the roadmap entry alone.
+
 ## 09 — GLOBAL EXECUTION PROTOCOL
 
 ```text
@@ -394,4 +421,4 @@ E01 does not authorize changes to S02, Financial, Production DB, or other unrela
 
 ## Canonical lineage
 
-This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, N1 Lawyer Digital Office architecture, and the E01 Security Foundation overlay. It is a governance specification, not proof that every listed item is implemented.
+This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, N1 Lawyer Digital Office architecture, the E01 Security Foundation overlay, and the PR-E15 legal document security foundation stage. It is a governance specification, not proof that every listed item is implemented.
