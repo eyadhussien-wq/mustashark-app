@@ -8,6 +8,9 @@ export async function publishTermsVersion(req: Request, res: Response) {
   const termsVersionId = String(req.params.id ?? "").trim();
   if (!termsVersionId) return res.status(400).json({ ok: false, error: "terms_version_id_required" });
 
+  const adminUserId = req.authUser?.userId;
+  if (!adminUserId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
   try {
     const published = await db.transaction(async (tx) => {
       const rows = await tx.select().from(termsVersionsTable).where(eq(termsVersionsTable.id, termsVersionId)).limit(1);
@@ -35,7 +38,7 @@ export async function publishTermsVersion(req: Request, res: Response) {
 
       await tx.insert(adminAuditLogsTable).values({
         id: `audit_${randomUUID()}`,
-        adminId: req.authUser!.userId,
+        adminId: adminUserId,
         action: "TERMS_VERSION_PUBLISHED",
         entityType: "terms_version",
         entityId: updated.id,
