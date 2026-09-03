@@ -22,6 +22,7 @@ CREATE TABLE terms_versions (
 
 CREATE INDEX terms_versions_content_hash_idx ON terms_versions(content_hash);
 CREATE INDEX terms_versions_status_effective_idx ON terms_versions(status, effective_at);
+CREATE UNIQUE INDEX terms_versions_single_published_uidx ON terms_versions((1)) WHERE status = 'published';
 
 CREATE TABLE terms_consents (
   id text PRIMARY KEY,
@@ -40,7 +41,6 @@ CREATE TABLE terms_consents (
 CREATE INDEX terms_consents_user_id_idx ON terms_consents(user_id);
 CREATE INDEX terms_consents_version_id_idx ON terms_consents(terms_version_id);
 
--- The evidence row must agree with the immutable Terms version it references.
 CREATE OR REPLACE FUNCTION validate_terms_consent_evidence()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -71,13 +71,29 @@ BEFORE INSERT OR UPDATE ON terms_consents
 FOR EACH ROW
 EXECUTE FUNCTION validate_terms_consent_evidence();
 
--- Published/superseded legal text is immutable. Corrections require a new version.
+-- Legal text is immutable after publication. The only allowed state transition
+-- from a published row is published -> superseded; a new version carries any
+-- replacement legal text.
 CREATE OR REPLACE FUNCTION prevent_published_terms_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF OLD.status IN ('published', 'superseded') THEN
+  IF OLD.status = 'published' THEN
+    IF NEW.status <> 'superseded'
+       OR NEW.id <> OLD.id
+       OR NEW.version <> OLD.version
+       OR NEW.content <> OLD.content
+       OR lower(NEW.content_hash) <> lower(OLD.content_hash)
+       OR lower(NEW.hash_algorithm) <> lower(OLD.hash_algorithm)
+       OR NEW.mandatory <> OLD.mandatory
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.created_at <> OLD.created_at
+       OR NEW.metadata IS DISTINCT FROM OLD.metadata
+    THEN
+      RAISE EXCEPTION 'published_terms_version_immutable';
+    END IF;
+  ELSIF OLD.status = 'superseded' THEN
     RAISE EXCEPTION 'published_terms_version_immutable';
   END IF;
   RETURN NEW;
