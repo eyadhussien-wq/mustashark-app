@@ -255,6 +255,27 @@ Architectural Classification
 → CLOSED / VERIFIED
 ```
 
+## 14 — Lawyer OS Construction Phase Control
+
+The canonical construction sequence is now tracked separately from the historical product roadmap so that construction work cannot silently reopen or rewrite previously completed governance work.
+
+| Phase | Status | Scope |
+|---|---|---|
+| P0 Governance Baseline | `CLOSED / BASELINED` | LegalTech discovery, evidence hierarchy, liability/boundary analysis, operating-model hypotheses |
+| P1 Repository Audit | `COMPLETED / EVIDENCE RECORDED` | Classify current repository into Neutral Core / Commercial / Regulated and identify legacy remnants |
+| P1.5 CI Boundary Triage | `ACTIVE` | Resolve ownership of the failing legacy S01-03 Join concurrency gate; no blind rerun |
+| P2 Boundary Enforcement | `NEXT` | Prevent regulated/legacy dependencies from entering Neutral Core; lock sensitive flags |
+| P3 Lawyer OS v1 Scope Lock | `PLANNED` | Freeze approved Lawyer OS operational scope |
+| P4 Neutral Core Implementation | `PLANNED` | Build Lawyer OS v1 operational core |
+| P5 Commercial SaaS Design | `PLANNED / ISOLATED` | Fixed lawyer subscription model; no fee sharing or client-fund custody |
+| P6 Client Portal | `PLANNED` | Secure lawyer↔client communication and document exchange |
+| P7 Preview / Visual QA | `BLOCKED UNTIL REQUIRED CI GATES PASS` | Non-production visual inspection only |
+| P8 Compliance Lock-in | `PENDING` | Translate specialist decisions into technical/contractual constraints |
+| P9 Commercial Readiness | `BLOCKED` | Subscription/invoicing activation after applicable validation |
+| P10 Regulated Expansion | `BLOCKED` | Marketplace, referral economics, client-fund collection, settlement, commission, escrow/wallet |
+
+The detailed control record is `docs/governance/LAWYER-OS-CONSTRUCTION-PHASE-MATRIX-2026-09.md`.
+
 ## Final Governance Rules
 
 > No implementation before architectural classification.
@@ -266,3 +287,5 @@ Architectural Classification
 > No completed financial effect without FINANCIAL AUDIT INTEGRITY.
 >
 > No `CLOSED / VERIFIED` roadmap item without repository evidence, tests, security review, CI, final diff audit, and verification.
+>
+> Lawyer OS construction must follow the separate P0→P10 phase control record and may not reopen completed governance work without an explicit new decision record.

@@ -1,0 +1,195 @@
+# Mustasharek — Engineering & Governance Master Matrix
+
+**Effective:** 2026-09-02  
+**Current construction branch:** `construction/lawyer-os-v1-p1-audit-2026-09`  
+**Main branch:** untouched by this track  
+**Security Hold:** `ACTIVE`
+
+## Canonical rule
+
+This matrix is the execution index. It does not replace `MUSTASHARK-MASTER-MAP` or the legal discovery baseline. Historical decisions remain preserved. New implementation work enters through the current phase and must not reopen completed discovery unless new evidence materially changes a decision.
+
+| Phase | Scope | Status | Gate | Output |
+|---|---|---|---|---|
+| P0 — Governance Baseline | LegalTech discovery, evidence classification, Round 1–5, operating-model hypotheses | `RECORDED / BASELINED` | Legal operating model remains pending | Legal discovery baseline + decision records |
+| P1 — Repository Audit | Inventory runtime/tests, classify Neutral / Commercial / Regulated, identify legacy coupling | `COMPLETED FOR CURRENT SNAPSHOT` | No production mutation | Audit evidence on construction branch |
+| P1.5 — CI Boundary Triage | Decide ownership of legacy CI gates; quarantine regulated-dependent tests; restore scope-aligned CI | `COMPLETED — GREEN` | Current construction CI is green | P1.5 decision record + clean CI gate |
+| P2 — Neutral Core Architecture | Lawyer OS boundaries, RBAC, data minimization, auditability, exportability, module boundaries | `CONDITIONAL PASS / BASELINED` | Neutral domain boundary before feature expansion | P2 boundary decision + P3.1 boundary record |
+| **P3.1 — Neutral Domain Boundary Construction** | **Ownership, Matter, Documents, Calendar/Deadlines, Messaging, Time Tracking, Audit/Export, authorization tests** | **`IN PROGRESS — D + H GATES CLOSED`** | **No blocked-domain dependency; current capability baseline does not bypass active gates** | **Neutral boundary contracts + implementation evidence** |
+| P3 — Lawyer OS v1 Build | Lawyer Workspace, Clients, Matters/Cases, Documents, Scheduling, Messaging, Notifications, Audit Logs | `AUTHORIZED AFTER P3.1` | P3.1 boundary completion | Working Lawyer OS v1 |
+| P4 — Commercial SaaS | Fixed lawyer subscription model (hypothesis: 50 JOD/month), subscription lifecycle, invoice integration | `DESIGN / PENDING SPECIALIST VALIDATION` | Tax/e-invoicing/payment validation | Isolated SaaS billing layer |
+| P5 — Client Portal | Secure lawyer-client communication, document sharing, appointments | `PLANNED` | Privacy/controller-processor review | Client Portal |
+| P6 — Marketplace / Regulated Features | Discovery, referral, legal-fee collection, split settlement, commission, escrow, wallet | `BLOCKED` | Formal legal/regulatory validation | Future only; no active execution |
+| P7 — Production Commercial Activation | Commercial launch | `BLOCKED` | Compliance Gate + security + operational verification | Production release |
+
+## P1.5 decision: S01-03 Join
+
+The existing `S01-03 Join concurrency` test is classified as **legacy/regulated-dependent evidence**, not a Neutral Core acceptance gate. Its fixture writes `paid` and `held` financial states and its route contract depends on the legacy booking state machine. Therefore the correct action is quarantine, not repair inside Lawyer OS v1.
+
+The historical test is preserved under `scripts/quarantine/legacy-booking/`. Its active package command and CI workflow are removed from the construction acceptance path.
+
+The resulting CI verification completed **GREEN** on the construction branch. The green run included successful Concurrency, Production DB Guard, Auth smoke tests, X1 booking-cancel smoke tests, and workspace typecheck/build/dependency-alignment checks.
+
+This does **not** declare all future session/join behavior obsolete. A later Client Portal/session contract may introduce a new test designed specifically for the new model.
+
+## P2 operating decision: Neutral Core first
+
+The project now adopts the following engineering direction for construction:
+
+> **Mustasharek Lawyer OS v1 is a lawyer-facing operating system / SaaS core. The first commercial hypothesis is a fixed software subscription, currently modeled as 50 JOD/month, with no percentage commission, no legal-fee pricing by the platform, and no platform-held client funds in the initial model.**
+
+This is an **engineering/business hypothesis, not a legal conclusion**. The Legal Research track remains active. The subscription amount and all tax, invoicing, payment-provider, professional-regulation, and data-protection treatment remain subject to specialist validation.
+
+### P2 boundary rules
+
+1. Neutral Core may be built: identity, authentication, lawyer workspace, clients, matters/cases, documents, scheduling, secure messaging, notifications, audit logs, and export.
+2. Lawyer data must be isolated by tenant/ownership boundaries and protected by least-privilege RBAC.
+3. Sensitive actions must be auditable.
+4. Exportability (`Export → Lawyer`) is a first-class architectural requirement, not a later migration task.
+5. The Neutral Core must not depend on Marketplace or financial settlement modules.
+6. Historical financial/regulated code remains quarantined unless a future, separately approved phase explicitly reintroduces it.
+7. Marketplace, referral monetization, commission, escrow, wallet, split settlement, and client-fund custody remain blocked.
+8. No architecture decision in P2 is a legal authorization to operate; legal/regulatory evidence remains authoritative for commercial activation.
+
+## P3.1 boundary decision
+
+P3.1 establishes the Neutral Core implementation boundary before feature construction. The canonical boundary record is:
+
+`docs/governance/p3.1-neutral-domain-boundary-2026-09.md`
+
+The first implementation contract is:
+
+`artifacts/api-server/src/types/lawyerOs.ts`
+
+### P3.1 invariants
+
+- Lawyer ↔ Client relationship is a first-class Neutral Core concern; it must not depend solely on booking history.
+- Matter creation must not require an agreement, quote, payment, settlement, wallet, escrow, or client-fund event.
+- Neutral Documents must not require legal-representation or financial prerequisites merely to exist.
+- Legal Calendar, Secure Messaging, and Time Tracking are Neutral Core capabilities and must remain matter/ownership scoped.
+- Authorization is server-side and ownership/scope based.
+- Sensitive Neutral Core operations are auditable.
+- Export → Lawyer is independent of financial or marketplace state.
+- Existing legacy schemas remain preserved; P3.1 does not delete or rewrite historical data.
+
+### P3.1 capability baseline
+
+The architectural baseline is recorded in:
+
+`docs/architecture/P3.1-NEUTRAL-CORE-CAPABILITY-BASELINE-2026-09.md`
+
+The approved sequencing is:
+
+`P3.1-A Identity/Workspace → P3.1-B Relationship → P3.1-C Matter → P3.1-D Documents → P3.1-E Calendar/Deadlines/Tasks/Notifications → P3.1-F Matter-scoped Messaging → P3.1-G Neutral Time Tracking → P3.1-H Audit/Export → P3.1-I Permission/IDOR → P3.1-J CI/Evidence/Closure`
+
+These are architectural sequencing decisions only. They do not authorize implementation of later items before the active gate closes.
+
+### P3.1-D security gate closure
+
+**Status: `PASS / CLOSED`**
+
+The DB-backed authenticated Neutral Document IDOR gate was executed successfully on construction commit `301db5d7c5069f366c18bf56ce1c2519cbe2d0b6` in GitHub Actions run `33579958533`.
+
+Evidence:
+
+- Production DB guard: **PASS**
+- Isolated PostgreSQL service: **PASS** (`mustashark_neutral_idor_test` on localhost)
+- API build: **PASS**
+- API health: **PASS** (`/api/healthz`)
+- Lawyer A → Lawyer B document ID tampering: **DENY / PASS**
+- Lawyer B → Lawyer A document ID tampering: **DENY / PASS**
+- Authenticated client → explicitly shared documents: **ALLOW / PASS**
+- Revoked share → **DENY**, document retained: **PASS**
+- Archived relationship → **DENY**, document and relationship retained: **PASS**
+- Test result: **5/5 PASS, 0 FAIL**
+- Ephemeral PostgreSQL container/network teardown: **PASS**
+
+The Production DB Guard was not weakened or exempted. The integration test uses an explicit environment guard and contains no destructive cleanup SQL; the ephemeral CI database is disposed of by the workflow service-container lifecycle.
+
+Therefore **P3.1-D is formally closed**. No Production mutation occurred and no change to `main` is implied by this closure.
+
+## P3.1-H — Immutable Audit, Tamper Evidence & Integrity Alerting
+
+**Status: `PASS / CLOSED / SUCCESS`**
+
+The gate was executed successfully in GitHub Actions on the construction branch with the tested commit pinned and recorded as:
+
+`c259c8b598b2869f015fc3a7709048a7991fe3e5`
+
+Evidence:
+
+- Immutable audit event model: **PASS**
+- DB-level immutability trigger: **PASS**
+- Hash-chain verification: **PASS**
+- Genesis verification: **PASS**
+- Deterministic canonical hashing: **PASS**
+- Compensating Entries append without rewriting historical events: **PASS**
+- Cross-actor compensation target denied: **PASS**
+- `eventHash` tampering detected: **PASS**
+- `previousHash` tampering detected: **PASS**
+- Integrity Alerting Hook emits durable `SECURITY_INTEGRITY_VIOLATION`: **PASS**
+- Integrity Alerting Hook does not auto-isolate; returns `REVIEW_AND_CONTROLLED_ISOLATION`: **PASS**
+- Historical event remains unchanged after compensation: **PASS**
+- Test result: **8/8 PASS, 0 FAIL, 0 SKIPPED**
+- Production DB Guard before test: **PASS**
+- Production DB Guard after test: **PASS**
+- Isolated PostgreSQL test environment and teardown: **PASS**
+- No Production mutation: **CONFIRMED**
+- `main` changed by this track: **NO**
+
+The CI evidence also recorded the exact checked-out commit SHA, eliminating ambiguity between the tested source and the construction-branch head.
+
+The Node 20 Actions runtime warning is classified as **technical CI-environment noise only** for this gate and does not affect the security result or application integrity decision. It is intentionally ignored for this phase closure.
+
+The audit chain establishes tamper evidence and integrity verification. It does **not** by itself make a record legally admissible; identity, provenance, time, retention, custody, and applicable policy remain relevant to any future legal-evidence determination.
+
+Therefore **P3.1-H is formally closed: `CLOSED / SUCCESS`.**
+
+## P3.1 hard blocks
+
+```text
+MARKETPLACE          = BLOCKED
+COMMISSION           = BLOCKED
+CLIENT_FUNDS         = BLOCKED
+ESCROW               = BLOCKED
+WALLET               = BLOCKED
+SETTLEMENT           = BLOCKED
+PAYOUT               = BLOCKED
+PLATFORM_DUES        = BLOCKED
+FINANCIAL_LEDGER     = BLOCKED
+PAYMENT_COLLECTION   = BLOCKED
+```
+
+No P3.1 code may import or depend on these authorities.
+
+## Work-in-progress state
+
+```text
+SECURITY_HOLD                 = ACTIVE
+CONSTRUCTION_TRACK            = OPEN (scope-limited)
+LEGAL_RESEARCH                = ACTIVE
+P1_REPOSITORY_AUDIT           = COMPLETE FOR CURRENT SNAPSHOT
+P1.5_CI_BOUNDARY_TRIAGE       = COMPLETE / GREEN
+P2_NEUTRAL_CORE_ARCHITECTURE  = CONDITIONAL PASS / BASELINED
+P3.1_NEUTRAL_DOMAIN_BOUNDARY  = IN PROGRESS — D + H CLOSED
+P3.1_CURRENT_GATE             = NEXT: P3.1-I PERMISSION / IDOR
+FINANCIAL_COLLECTION          = BLOCKED
+PAYOUT_SETTLEMENT             = BLOCKED
+COMMISSION_ENGINE             = BLOCKED
+ESCROW_WALLET                 = BLOCKED
+CLIENT_FUNDS                  = BLOCKED
+MARKETPLACE                   = BLOCKED
+TAX_E_INVOICING               = BLOCKED UNTIL VALIDATED
+PRODUCTION_COMMERCIAL         = BLOCKED
+LAWYER_OS_V1_BUILD            = AUTHORIZED AFTER P3.1 BOUNDARY COMPLETION
+```
+
+## Mandatory phase transition
+
+`P1.5 TRIAGE → P2 ARCHITECTURE → P3.1 NEUTRAL BOUNDARY → P3 LAWYER OS V1 BUILD → P4/P5 → LEGAL/COMPLIANCE GATES → P6 IF APPROVED → PRODUCTION`
+
+No later phase may silently import assumptions from a blocked phase. A feature that belongs to P6 remains blocked even if code already exists historically.
+
+## No-return-to-zero rule
+
+When work resumes, start from this matrix and the linked evidence/decision records. Do not repeat the entire discovery conversation. Reopen only the specific decision whose evidence, scope, or legal assumption has materially changed.
