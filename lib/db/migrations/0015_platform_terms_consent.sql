@@ -72,8 +72,8 @@ FOR EACH ROW
 EXECUTE FUNCTION validate_terms_consent_evidence();
 
 -- Legal text is immutable after publication. The only allowed state transition
--- from a published row is published -> superseded; a new version carries any
--- replacement legal text.
+-- from a published row is published -> superseded; all legal and evidence
+-- metadata remain byte-for-byte/equivalent immutable during that transition.
 CREATE OR REPLACE FUNCTION prevent_published_terms_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -87,6 +87,8 @@ BEGIN
        OR lower(NEW.content_hash) <> lower(OLD.content_hash)
        OR lower(NEW.hash_algorithm) <> lower(OLD.hash_algorithm)
        OR NEW.mandatory <> OLD.mandatory
+       OR NEW.effective_at IS DISTINCT FROM OLD.effective_at
+       OR NEW.published_at IS DISTINCT FROM OLD.published_at
        OR NEW.created_by IS DISTINCT FROM OLD.created_by
        OR NEW.created_at <> OLD.created_at
        OR NEW.metadata IS DISTINCT FROM OLD.metadata
