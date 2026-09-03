@@ -26,6 +26,7 @@
     "s02-06:financial-closure": "tsx ./src/s02-06-case-financial-closure-guard-test.ts",
     "s02-07:lawyer-eligibility": "tsx ./src/s02-07-lawyer-operational-eligibility-test.ts",
     "e01-c:negative-runtime": "tsx ./src/e01-c-legal-data-isolation-negative-runtime-test.ts",
+    "e01-d:terms-consent-negative-runtime": "tsx ./src/e01-d-terms-consent-negative-runtime-test.ts",
     "test": "tsx ./src/s01-03-idempotency-test.ts && tsx ./src/s01-03-transition-concurrency-test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
