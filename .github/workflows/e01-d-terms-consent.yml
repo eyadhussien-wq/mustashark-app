@@ -1,0 +1,78 @@
+name: E01-D Terms Consent Enforcement
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  negative-runtime:
+    name: E01-D Terms consent negative runtime coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_e01d_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_e01d_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_e01d_test
+        run: pnpm --filter @workspace/db push
+
+      - name: Build workspace libraries
+        run: pnpm run typecheck:libs
+
+      - name: Typecheck API and scripts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_e01d_test
+          SESSION_SECRET: e01-d-negative-runtime-test-secret
+        run: |
+          pnpm --filter @workspace/api-server typecheck
+          pnpm --filter @workspace/scripts typecheck
+
+      - name: Run E01-D negative runtime coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_e01d_test
+          SESSION_SECRET: e01-d-negative-runtime-test-secret
+          NODE_ENV: test
+        run: pnpm --filter @workspace/scripts e01-d:terms-consent-negative-runtime
+
+      - name: Run E01-D authority and privacy runtime coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_e01d_test
+          SESSION_SECRET: e01-d-authority-privacy-test-secret
+          NODE_ENV: test
+        run: pnpm --filter @workspace/scripts e01-d:authority-privacy-runtime

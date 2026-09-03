@@ -9,6 +9,7 @@ import {
 } from "../controllers/profile";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
+import { requireCurrentTermsConsent } from "../middlewares/requireCurrentTermsConsent";
 import { getLawyerBankAccount, upsertLawyerBankAccount } from "../controllers/lawyerBankAccounts";
 import { getLawyerVerification, submitLawyerVerification } from "../controllers/lawyerVerification";
 
@@ -33,7 +34,14 @@ function protectResidenceCountry(req: any, res: any, next: any) {
   next();
 }
 
-profileRouter.patch("/profile", requireAuth, requireClientOrLawyer, protectResidenceCountry, updateProfile);
+profileRouter.patch(
+  "/profile",
+  requireAuth,
+  requireCurrentTermsConsent,
+  requireClientOrLawyer,
+  protectResidenceCountry,
+  updateProfile,
+);
 profileRouter.get("/profile/pending-changes", requireAuth, requireLawyer, getPendingChanges);
 profileRouter.get("/profile/bank-account", requireAuth, requireLawyer, getLawyerBankAccount);
 profileRouter.put("/profile/bank-account", requireAuth, requireLawyer, upsertLawyerBankAccount);

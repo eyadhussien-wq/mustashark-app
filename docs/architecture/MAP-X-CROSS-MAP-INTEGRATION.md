@@ -455,7 +455,45 @@ When maps disagree, resolve authority in this order:
 7. Repository implementation
 8. Tests and runtime evidence
 
-## 18 — Reference Status & Governance
+## 18 — PR-E15 LEGAL DOCUMENT STORAGE, INTEGRITY, ACCESS, RETENTION & DESTRUCTION
+
+**Official Roadmap ID:** `PR-E15`
+
+**Official name:** `Legal Document Storage, Integrity, Access, Retention & Destruction`
+
+**MAP-X classification:** `CRITICAL LEGAL / SECURITY / PRIVACY FOUNDATION`
+
+**MAP-X integration record:** `MX-SEC-15`
+
+**Scope:** all legal documents and attachments handled by Mustashark, including lawyer professional/practice-card documents, client identity/legal documents, agreements, POA and legal-representation documents, case/matter evidence, payment proofs, terms/consent evidence, versions/superseded objects, handovers, backups and destruction.
+
+**Canonical trace:**
+
+`PR-E15 → MX-SEC-15 → Legal Document Security → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → repository storage/access implementation → tests/CI → evidence → Verify Main → CLOSED / VERIFIED`
+
+**Mandatory control domains:**
+
+- actual durable object storage, proven rather than inferred from a database storage key;
+- private storage, server-side authorization and object ownership boundaries;
+- encryption and applicable key-management controls;
+- server-derived content hashes and object tamper/replacement detection;
+- no direct public URLs for confidential legal material;
+- auditable sensitive access and mutations;
+- explicit retention schedules and legal-hold rules per document class;
+- deletion/destruction across primary storage and applicable replicas/backups according to policy;
+- backup/restore confidentiality and integrity;
+- stale, suspended, deleted or deactivated identity access revocation;
+- metadata minimization and privacy boundaries.
+
+**Lifecycle:** `DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Current state:** `OPEN / CRITICAL FOUNDATION — ROADMAP REGISTERED`
+
+**Governance boundary:** this MAP-X registration does not change runtime behavior, storage configuration or production data. It does not authorize production migration, deletion or destructive storage actions.
+
+**Closure rule:** PR-E15 cannot become `CLOSED / VERIFIED` until actual storage, access control, integrity, retention, destruction, backup/restore and audit evidence are implemented or verified for the applicable document classes.
+
+## 19 — Reference Status & Governance
 
 This file is the **canonical MAP-X integration, intake, routing and change-control map**. Existing canonical maps remain authoritative for their own namespaces.
 
@@ -474,7 +512,7 @@ docs/roadmap/ROADMAP-REGISTRY.md
 docs/roadmap/N1-LAWYER-DIGITAL-OFFICE.md
 ```
 
-## 19 — Adoption Rule
+## 20 — Adoption Rule
 
 Every new build stage or material service request must register its MAP-X intersection before implementation begins and must retain the complete trace to applicable role/lifecycle, architecture, D02, security, data, tests and verification evidence.
 

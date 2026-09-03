@@ -306,6 +306,33 @@ Payment Provider Integration · Tax/E-Invoicing · Payout Rails · Monitoring ·
 ### Phase 3+ — Strategic Expansion
 S03 Real Estate Opportunities · S04 Frozen / Near Future · S05 Lawyer Smart Safety Shield · **N1 advanced AI/search, law-firm mode, ecosystem, external integrations and future services**
 
+### PR-E15 — Legal Document Storage, Integrity, Access, Retention & Destruction
+
+**Critical legal/security/privacy foundation stage.** PR-E15 governs every legal document and attachment handled by Mustashark, including lawyer professional documents, client legal/identity documents, agreements/POA/representation documents, case evidence, payment proofs, terms/consent evidence, versions/superseded objects, handovers, backups and destruction.
+
+Required controls include:
+- actual durable object storage, proven rather than inferred from a database key;
+- private storage and server-side authorization;
+- encryption and applicable key-management boundaries;
+- server-derived content integrity hashes and tamper/replacement detection;
+- no direct public URLs for confidential legal material;
+- auditable sensitive access and mutations;
+- explicit retention schedules and legal-hold rules per document class;
+- deletion/destruction across primary storage and applicable replicas/backups according to policy;
+- backup/restore confidentiality and integrity;
+- stale/suspended/deleted/deactivated identity access revocation;
+- metadata minimization and privacy boundaries.
+
+**Canonical trace:**
+
+`PR-E15 → Legal Document Security → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → repository → tests/CI → evidence → Verify Main → CLOSED / VERIFIED`
+
+**Lifecycle:** `DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Current state:** `OPEN / CRITICAL FOUNDATION — ROADMAP REGISTERED, IMPLEMENTATION NOT YET AUTHORIZED BY THIS ENTRY ALONE`
+
+**Governance boundary:** registering PR-E15 does not change runtime behavior, storage configuration or production data. No production migration, deletion or destructive storage action is authorized by the roadmap entry alone.
+
 ## 09 — GLOBAL EXECUTION PROTOCOL
 
 ```text
@@ -328,6 +355,70 @@ MASTER ROADMAP
 → CLOSED / VERIFIED
 ```
 
+## 10 — E01 SECURITY FOUNDATION
+
+E01 is now part of the canonical Master Roadmap as a cross-cutting security foundation. It overlays existing architecture; it does not create a competing namespace for X/Y/Z/W, N1, C-stage, T/S or D02.
+
+### E01 execution package
+
+`E01-A → E01-B → E01-C → E01-D → E01-E`
+
+One branch only:
+
+`main → security/e01-foundation-2026-09-03 → one final PR → main`
+
+### E01-B — Professional Trust
+
+**Purpose:** establish a secure, auditable professional-trust boundary for lawyer accreditation and entitlement without making the administrator the normal source of professional authority.
+
+**Canonical trace:**
+
+`E01-B → Professional Trust → Y/7 + Y/5 → N1.01–N1.02 → S05 → D02-01/02/03/05/06/08/09 → ProfessionalVerificationProvider → verification lifecycle/state → repository → tests → Security Gate`
+
+Approved direction:
+
+`lawyer registration → professional/bar number + practice card → automated evidence extraction/matching → permitted public/official source verification → automated decision → professional entitlement`
+
+Security constraints:
+
+- only technically and legally permitted public sources may be automated;
+- no private portal, credentialed service, bypass, rate-limit evasion or undocumented privileged endpoint;
+- provider boundary is explicit and fail-closed;
+- missing/unavailable source evidence cannot grant professional access;
+- professional entitlement is derived from authoritative DB state, not a stale JWT;
+- practice-card SHA-256 is derived server-side from actual submitted bytes;
+- verification and lawyer-account activation are atomic;
+- administrator intervention is restricted to unresolved exception cases and is audit logged.
+
+Lifecycle:
+
+`pending → verifying → approved | rejected | exception`
+
+Security states:
+
+`expired | suspended | revoked`
+
+**Current status:** `CLOSED / VERIFIED`
+
+**Closure evidence:**
+- Implementation/evidence package is present on the same E01 branch.
+- Security Auth Verification Gate: **SUCCESS**
+- Workflow run: **#766**
+- Run ID: `33705013677`
+- Verified head: `65fefb4273ca1e484d7d0657531835b6cd54da57`
+- Closure record: `docs/security/E01-B-CLOSURE-EVIDENCE-2026-09-03.md`
+
+### E01-A / C / D / E
+
+- **E01-A:** Authentication & Authorization — CLOSED on the E01 branch.
+- **E01-C:** Legal Data Isolation — open; overlays C12/C13 and X/Y/Z/W security boundaries.
+- **E01-D:** Terms / Privacy — open; overlays C30/C31 and X/Y/Z/W privacy boundaries.
+- **E01-E:** Final Security Gate — closes E01 only after A–D evidence, final diff audit, Security Gate and target-branch verification are complete.
+
+### Governance boundary
+
+E01 does not authorize changes to S02, Financial, Production DB, or other unrelated work merely by being present in the Master Roadmap. Any such work must retain its own roadmap identity and security/financial gates.
+
 ## Canonical lineage
 
-This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, and the new N1 Lawyer Digital Office architecture. It is a governance specification, not proof that every listed item is implemented.
+This document consolidates the canonical roadmap material established by the historical governance work in PRs #32, #35, and the consolidation in #47, with the current S02/S03 status, strategic S04/S05 tracks, N1 Lawyer Digital Office architecture, the E01 Security Foundation overlay, and the PR-E15 legal document security foundation stage. It is a governance specification, not proof that every listed item is implemented.

@@ -6,6 +6,7 @@ import availabilityRouter from "./availability";
 import lawyerClientsRouter from "./lawyerClients";
 import lawyerConsultationsRouter from "./lawyerConsultations";
 import authRouter from "./auth";
+import termsRouter from "./terms";
 import profileRouter from "./profile";
 import reviewsRouter from "./reviews";
 import notificationsRouter from "./notifications";
@@ -30,6 +31,7 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(termsRouter);
 router.use(profileRouter);
 router.use(adminRouter);
 router.use(bookingsRouter);
