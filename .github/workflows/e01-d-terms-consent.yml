@@ -69,3 +69,10 @@ jobs:
           SESSION_SECRET: e01-d-negative-runtime-test-secret
           NODE_ENV: test
         run: pnpm --filter @workspace/scripts e01-d:terms-consent-negative-runtime
+
+      - name: Run E01-D authority and privacy runtime coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_e01d_test
+          SESSION_SECRET: e01-d-authority-privacy-test-secret
+          NODE_ENV: test
+        run: pnpm --filter @workspace/scripts e01-d:authority-privacy-runtime
