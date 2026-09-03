@@ -38,11 +38,11 @@ async function run() {
 
     const currentId = id("e01d-current");
     const draftId = id("e01d-draft");
-    const clientId = id("e01d-registration-client");
     const failedId = id("e01d-failed-registration");
     const adminId = id("e01d-admin");
+    const clientEmail = `${id("e01d-registration-client")}@example.test`;
     termsIds.push(currentId, draftId);
-    userIds.push(clientId, failedId, adminId);
+    userIds.push(failedId, adminId);
 
     const currentContent = "E01-D hardened Terms v100";
     const draftContent = "E01-D hardened Terms v101";
@@ -71,16 +71,19 @@ async function run() {
     console.log("- registration with wrong hash -> account absent: PASS");
 
     assertStatus(await request(baseUrl, "POST", "/api/auth/local-auth", null, {
-      email: `${clientId}@example.test`, password: "Correct-Registration-123!", name: "Atomic Client", phone: "+962790000003", role: "client",
+      email: clientEmail, password: "Correct-Registration-123!", name: "Atomic Client", phone: "+962790000003", role: "client",
       termsVersionId: currentId, termsContentHash: sha256(currentContent),
     }), 201, "registration with exact current terms succeeds");
-    const consentRows = await db.select().from(termsConsentsTable).where(and(eq(termsConsentsTable.userId, clientId), eq(termsConsentsTable.termsVersionId, currentId)));
+    const [createdClient] = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(eq(usersTable.email, clientEmail));
+    assert.ok(createdClient, "successful registration must create an account");
+    userIds.push(createdClient.id);
+    const consentRows = await db.select().from(termsConsentsTable).where(and(eq(termsConsentsTable.userId, createdClient.id), eq(termsConsentsTable.termsVersionId, currentId)));
     assert.equal(consentRows.length, 1, "successful registration must create exactly one consent evidence row");
     console.log("- registration + consent in same transaction -> PASS");
 
     // Privacy boundary: unauthenticated access is denied, and authenticated access is self-scoped.
     assertStatus(await request(baseUrl, "GET", "/api/terms/consents/me", null), 401, "unauthenticated consent evidence read denied");
-    const clientActor: Actor = { userId: clientId, email: `${clientId}@example.test`, role: "client" };
+    const clientActor: Actor = { userId: createdClient.id, email: clientEmail, role: "client" };
     const own = await request(baseUrl, "GET", "/api/terms/consents/me", clientActor);
     assertStatus(own, 200, "authenticated own consent evidence read allowed");
     const ownBody = own.body as { consents?: Array<{ termsVersionId: string }> };
@@ -110,7 +113,7 @@ async function run() {
       /published_terms_version_immutable/,
     );
     await assert.rejects(
-      () => db.delete(termsConsentsTable).where(eq(termsConsentsTable.userId, clientId)),
+      () => db.delete(termsConsentsTable).where(eq(termsConsentsTable.userId, createdClient.id)),
       /terms_consent_immutable/,
     );
     console.log("- published Terms / consent immutability -> PASS");
