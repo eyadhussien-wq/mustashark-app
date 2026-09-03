@@ -1,15 +1,7 @@
 import { createHash } from "node:crypto";
 
 export type ProfessionalVerificationStatus = "verified" | "rejected" | "exception";
-export type LawyerVerificationState =
-  | "pending"
-  | "verifying"
-  | "approved"
-  | "rejected"
-  | "exception"
-  | "expired"
-  | "suspended"
-  | "revoked";
+export type LawyerVerificationState = "pending" | "verifying" | "approved" | "rejected" | "exception" | "expired" | "suspended" | "revoked";
 
 export type ProfessionalVerificationInput = {
   name: string;
@@ -68,14 +60,18 @@ export function assertLawyerVerificationTransition(from: LawyerVerificationState
   }
 }
 
-/** A submission always enters the verifying phase before the provider decision. */
+/** A submission must pass through verifying; rejected records first return to pending. */
 export function assertVerificationSubmissionTransition(
   from: LawyerVerificationState,
   decision: Exclude<LawyerVerificationState, "pending" | "verifying">,
 ): void {
-  if (from === "rejected") assertLawyerVerificationTransition(from, "pending");
-  else assertLawyerVerificationTransition(from, "verifying");
-  assertLawyerVerificationTransition("pending" === from ? "verifying" : from === "rejected" ? "pending" : "verifying", decision);
+  if (from === "rejected") {
+    assertLawyerVerificationTransition("rejected", "pending");
+    assertLawyerVerificationTransition("pending", "verifying");
+  } else {
+    assertLawyerVerificationTransition(from, "verifying");
+  }
+  assertLawyerVerificationTransition("verifying", decision);
 }
 
 const providers = new Map<string, ProfessionalVerificationProvider>();
