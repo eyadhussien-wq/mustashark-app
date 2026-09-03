@@ -2,14 +2,17 @@ import { type Request, type Response } from "express";
 import { db, lawyerVerificationsTable, usersTable, adminAuditLogsTable } from "@workspace/db";
 import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { z } from "zod/v4";
 import { calculateDocumentHash, verifyProfessionalStatus } from "../services/professionalVerification";
 
 const submissionSchema = z.object({
   licenseNumber: z.string().trim().min(2).max(100),
   barAssociation: z.string().trim().min(2).max(200),
-  // A practice card is mandatory for every new verification attempt.
+  // The upload path supplies the actual card bytes. The server hashes these bytes;
+  // the client never supplies the authoritative hash.
   documentStorageKey: z.string().trim().min(1).max(500),
+  documentContentBase64: z.string().min(1).max(12_000_000),
 });
 const reviewSchema = z.object({ status: z.enum(["approved", "rejected"]), rejectionReason: z.string().trim().max(1000).optional().nullable() });
 
@@ -27,13 +30,16 @@ export async function submitLawyerVerification(req: Request, res: Response) {
   if (!parsed.success) return res.status(400).json({ ok: false, error: "validation_error", issues: parsed.error.issues });
 
   try {
-    const [existing] = await db.select().from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, user.userId)).limit(1);
+    const documentBytes = Buffer.from(parsed.data.documentContentBase64, "base64");
+    if (documentBytes.length === 0) return res.status(400).json({ ok: false, error: "empty_document" });
+    const documentHash = calculateDocumentHash(documentBytes);
     const now = new Date();
     const result = await verifyProfessionalStatus({
       name: user.name,
       licenseNumber: parsed.data.licenseNumber,
       barAssociation: parsed.data.barAssociation,
       documentStorageKey: parsed.data.documentStorageKey,
+      documentHash,
     });
 
     const status = result.status === "verified" ? "approved" : result.status === "rejected" ? "rejected" : "exception";
@@ -41,7 +47,7 @@ export async function submitLawyerVerification(req: Request, res: Response) {
       licenseNumber: parsed.data.licenseNumber,
       barAssociation: parsed.data.barAssociation,
       documentStorageKey: parsed.data.documentStorageKey,
-      documentHash: result.documentHash,
+      documentHash,
       status,
       verificationSource: result.source,
       sourceReference: result.sourceReference,
@@ -59,30 +65,35 @@ export async function submitLawyerVerification(req: Request, res: Response) {
       updatedAt: now,
     };
 
-    const row = existing
-      ? (await db.update(lawyerVerificationsTable).set(values).where(eq(lawyerVerificationsTable.id, existing.id)).returning())[0]
-      : (await db.insert(lawyerVerificationsTable).values({ id: `lawyer_verification_${randomUUID()}`, userId: user.userId, ...values }).returning())[0];
+    const row = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, user.userId)).limit(1);
+      const [verification] = existing
+        ? await tx.update(lawyerVerificationsTable).set(values).where(eq(lawyerVerificationsTable.id, existing.id)).returning()
+        : await tx.insert(lawyerVerificationsTable).values({ id: `lawyer_verification_${randomUUID()}`, userId: user.userId, ...values }).returning();
+      if (!verification) throw new Error("VERIFICATION_WRITE_FAILED");
 
-    // Professional entitlement follows the automated verification decision.
-    // Exception and rejected states never activate the lawyer.
-    await db.update(usersTable).set({
-      accountStatus: result.status === "verified" ? "active" : result.status === "rejected" ? "rejected" : "pending",
-      statusReason: result.status === "verified" ? "lawyer_professional_verification_approved" : result.reason,
-      updatedAt: now,
-    }).where(and(eq(usersTable.id, user.userId), eq(usersTable.role, "lawyer")));
+      const accountStatus = result.status === "verified" ? "active" : result.status === "rejected" ? "rejected" : "pending";
+      const [updatedUser] = await tx.update(usersTable).set({
+        accountStatus,
+        statusReason: result.status === "verified" ? "lawyer_professional_verification_approved" : result.reason,
+        updatedAt: now,
+      }).where(and(eq(usersTable.id, user.userId), eq(usersTable.role, "lawyer"))).returning({ id: usersTable.id });
+      if (!updatedUser) throw new Error("LAWYER_ACCOUNT_WRITE_FAILED");
+      return verification;
+    });
 
-    return res.status(existing ? 200 : 201).json({ ok: true, verification: {
-      id: row!.id,
-      status: row!.status,
-      licenseNumber: row!.licenseNumber,
-      barAssociation: row!.barAssociation,
-      verificationSource: row!.verificationSource,
-      verificationMethod: row!.verificationMethod,
-      confidence: row!.confidence,
-      verifiedAt: row!.verifiedAt,
-      lastCheckedAt: row!.lastCheckedAt,
-      exceptionReason: row!.exceptionReason,
-      rejectionReason: row!.rejectionReason,
+    return res.status(row ? (row.createdAt.getTime() === row.updatedAt.getTime() ? 201 : 200) : 500).json({ ok: true, verification: {
+      id: row.id,
+      status: row.status,
+      licenseNumber: row.licenseNumber,
+      barAssociation: row.barAssociation,
+      verificationSource: row.verificationSource,
+      verificationMethod: row.verificationMethod,
+      confidence: row.confidence,
+      verifiedAt: row.verifiedAt,
+      lastCheckedAt: row.lastCheckedAt,
+      exceptionReason: row.exceptionReason,
+      rejectionReason: row.rejectionReason,
     }});
   } catch (err) {
     req.log?.error?.(err, "submitLawyerVerification failed");
@@ -121,10 +132,7 @@ export async function listPendingLawyerVerifications(req: Request, res: Response
   return res.json({ ok: true, items: rows });
 }
 
-/**
- * Admin action is deliberately restricted to unresolved exceptions. It is not
- * the normal professional verification authority.
- */
+/** Admin action is deliberately restricted to unresolved exceptions. */
 export async function reviewLawyerVerification(req: Request, res: Response) {
   const adminId = req.admin?.userId;
   if (!adminId) return res.status(401).json({ ok: false, error: "admin_only" });
