@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -37,7 +38,7 @@ export const termsVersionsTable = pgTable(
     content: text("content").notNull(),
     contentHash: text("content_hash").notNull(),
     hashAlgorithm: text("hash_algorithm").notNull().default("sha256"),
-    mandatory: text("mandatory").notNull().default("true"),
+    mandatory: boolean("mandatory").notNull().default(true),
     effectiveAt: timestamp("effective_at"),
     publishedAt: timestamp("published_at"),
     createdBy: text("created_by").references(() => usersTable.id),
