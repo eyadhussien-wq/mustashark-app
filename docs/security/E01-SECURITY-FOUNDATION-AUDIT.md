@@ -50,11 +50,11 @@ No production database mutation, destructive migration, branch proliferation, or
 
 ## E01-B — Professional Trust
 
-**Status: IN PROGRESS**
+**Status: IN PROGRESS — implementation pass completed; live-source enablement remains gated.**
 
 ### Approved product/security direction
 
-Mustashark will use an automated professional-trust flow. A lawyer must provide a professional/bar number and upload a practice card. The normal path must not require an administrator to approve the lawyer.
+Mustashark uses an automated professional-trust flow. A lawyer must provide a professional/bar number and upload a practice card. The normal path does not require an administrator to approve the lawyer.
 
 Target flow:
 
@@ -66,53 +66,65 @@ The administrator is an **exception/security handler only**, not the normal sour
 
 Only public information and public services that are technically and legally permitted for automated querying may be used. The existence of a public web page is **not** by itself authorization to scrape or automate it. No private portal, credentialed service, bypass, rate-limit evasion, or undocumented privileged endpoint is permitted.
 
-The architecture therefore uses a `ProfessionalVerificationProvider` boundary. A provider is opt-in and must be explicitly configured for an authorized public source. Missing/unavailable source evidence must never grant professional access; it produces an exception/non-verification outcome.
+The architecture therefore uses an explicit `ProfessionalVerificationProvider` boundary. Providers are opt-in and must be registered for an authorized public source. Missing/unavailable source evidence must never grant professional access; it produces an exception/non-verification outcome.
 
 ### Jordan professional verification
 
-The Jordan Bar Association currently publishes a public lawyer directory and an electronic-services portal. The directory is useful as a potential public verification source, but this audit does not assume that automated scraping is permitted. A formal/publicly permitted access path must be established before enabling a live provider.
+The Jordan Bar Association publishes a public lawyer directory and electronic services. These are potential evidence sources, but this implementation does not assume that automated scraping is permitted. A formally permitted public access path must be established before registering a live provider.
 
-The Ministry of Justice also provides public electronic services and lawyer-facing services, including workflows that use the lawyer's bar number. This is treated as a potential secondary official evidence source, not as an assumed integration permission.
+The Ministry of Justice also provides public electronic services and lawyer-facing services, including workflows that use the lawyer's bar number. This is treated as potential secondary official evidence, not as assumed integration permission.
 
-### Implemented boundary
+### C03 implementation completed on this branch
 
-`artifacts/api-server/src/services/professionalVerification.ts` establishes:
+The verification record now supports an auditable professional lifecycle:
 
-- provider-neutral professional verification input/output types;
-- explicit `ProfessionalVerificationProvider` interface;
-- verification result states: `verified`, `rejected`, `exception`;
-- verification methods including `public_source_match`, `document_evidence_only`, and `source_unavailable`;
-- document evidence hashing boundary;
-- fail-closed provider selection: an unconfigured source cannot grant professional access.
+`pending → verifying → approved | rejected | exception`
 
-This is intentionally an architecture/security boundary first. No unauthorized source automation is enabled by default.
+with additional administrative/security states:
 
-### Required next implementation steps
+`expired | suspended | revoked`
 
-1. Complete C03 lifecycle audit across registration, verification, account status and all approved-lawyer gates.
-2. Define the permitted public-source adapters and their exact access rules.
-3. Implement practice-card metadata/OCR handling as secondary evidence, with private storage and hashing.
-4. Extend the verification record with auditable source/method/timestamps only after the schema change is justified by the audit.
-5. Replace manual approval as the normal transition with automated verification; retain exception handling only for unresolved cases.
-6. Add stale-state and negative runtime tests: verified → professionally suspended/rejected → privileged operation must fail even with an existing JWT.
-7. Run the isolated Security Gate and typecheck before any closure decision.
+The record includes source, source reference/status, verification method, matched identity/license, confidence, verification timestamps, exception reason, and document reference hash metadata.
 
-### E01-B DoD
+The lawyer verification submission contract now requires:
 
-E01-B cannot be closed until:
+- professional/bar number;
+- bar association;
+- practice-card storage key.
 
-- practice card is mandatory for lawyer verification;
-- professional number is mandatory;
-- normal verification is automated;
-- no admin approval is required for a successful automated verification;
-- only permitted public/official sources are queried;
-- source failure cannot grant access;
-- identity/card/source matching is auditable;
-- professional status is enforced server-side;
-- stale JWT cannot retain privileged access after professional status loss;
-- exception handling is isolated from ordinary approval;
-- negative runtime tests pass;
-- typecheck and relevant CI checks pass.
+The submission invokes the provider orchestration boundary and derives the server-side decision from the provider result:
+
+- `verified` → `approved` + account becomes active;
+- `rejected` → `rejected` + account remains denied;
+- `exception` / unavailable source → `exception` + account remains pending.
+
+An administrator cannot approve a normal `pending` verification. Administrative review is restricted to unresolved `exception` cases and is audit logged. Professional privileged routes continue to require the canonical `approved` state from the database, so an existing JWT does not preserve professional entitlement after status loss.
+
+### Important evidence-integrity rule
+
+The current `documentHash` is explicitly a **storage-reference hash**, not a claim that the underlying practice-card bytes were cryptographically hashed. Byte-level hashing must be produced by the trusted upload/storage pipeline before it is used for document-reuse or fraud detection. No client-supplied hash is trusted as proof.
+
+### C03 automated-source boundary
+
+A provider may be registered only when its source is explicitly authorized for automated public querying. The repository intentionally contains no live JBA/MOJ scraper or undocumented endpoint. This prevents the security gate from silently turning a public page into an unauthorized data-collection mechanism.
+
+### C03 tests added
+
+`artifacts/api-server/src/security/professional-verification.contract.test.ts` covers:
+
+- fail-closed behavior when no authorized source provider exists;
+- automatic approval from an explicitly registered provider with an exact professional match;
+- automatic rejection from a registered provider when the provider reports a mismatch.
+
+### Remaining E01-B closure gates
+
+1. Establish the exact permitted public-source access method for each live source before registration.
+2. Implement only those approved public-source adapters.
+3. Connect trusted upload/storage byte hashing for the practice card.
+4. Add/execute runtime lifecycle tests for pending/exception/rejected/suspended/expired/revoked states and stale JWT denial.
+5. Verify migration/typecheck/Security Gate on the resulting branch head.
+
+E01-B is **not CLOSED yet** because no live external provider is being fabricated or enabled without a confirmed permitted automated access path.
 
 ## E01-C — Legal Data Isolation
 
