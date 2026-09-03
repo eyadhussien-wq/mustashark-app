@@ -8,7 +8,9 @@ export async function publishTermsVersion(req: Request, res: Response) {
   const termsVersionId = String(req.params.id ?? "").trim();
   if (!termsVersionId) return res.status(400).json({ ok: false, error: "terms_version_id_required" });
 
-  const adminUserId = req.authUser?.userId;
+  // requireAdmin is the authoritative middleware for this route and stores
+  // the verified, DB-backed admin identity on req.admin.
+  const adminUserId = req.admin?.userId;
   if (!adminUserId) return res.status(401).json({ ok: false, error: "unauthorized" });
 
   try {
