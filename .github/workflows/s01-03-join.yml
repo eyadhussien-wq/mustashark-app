@@ -43,7 +43,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        run: |
+          set -euo pipefail
+          # GitHub-hosted Ubuntu 24.04 images may contain Microsoft apt sources
+          # that return 403 in this runner environment. They are unrelated to
+          # this job, so exclude sourceparts for the package-index refresh and
+          # use the runner's standard Ubuntu sources only.
+          sudo apt-get update \
+            -o Dir::Etc::sourceparts="-" \
+            -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/ubuntu.sources" \
+            -o APT::Get::List-Cleanup="0"
+          sudo apt-get install -y --no-install-recommends postgresql-client
       - name: Provision isolated test schema
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
@@ -92,7 +102,12 @@ jobs:
         run: pnpm --filter @workspace/scripts s01-03-join-concurrency-test
       - name: Dump API logs on failure
         if: failure()
-        run: cat /tmp/mustashark-join-api.log
+        run: |
+          if [ -f /tmp/mustashark-join-api.log ]; then
+            cat /tmp/mustashark-join-api.log
+          else
+            echo "API log file was not created."
+          fi
       - name: Stop API server
         if: always()
         run: |
