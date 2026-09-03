@@ -1,6 +1,6 @@
 # E01 — Security Foundation Audit
 
-**Status:** DISCOVERY IN PROGRESS  
+**Status:** E01-A CLOSED / E01-B READY  
 **Branch:** `security/e01-foundation-2026-09-03`  
 **Canonical starting point:** `main` / `93378a1f72517ab3dedd0eef06499d4d8f4094ce`  
 **Scope:** C01, C02, C03, C12, C13, C30, C31  
@@ -14,6 +14,21 @@ This execution uses **one branch only** for the entire E01 package. E01-A throug
 No production database mutation, destructive migration, branch proliferation, or speculative security rewrite is authorized by this document.
 
 ## E01-A — Authentication & Authorization
+
+### Closure decision
+
+**E01-A is formally CLOSED on this branch.** Closure is based on source evidence, static authorization-boundary regression coverage, runtime negative authorization coverage, isolated Test DB execution, and typecheck evidence on the same branch.
+
+### Evidence recorded
+
+- Central route registry audited for the mounted API surface.
+- High-risk controller/service boundaries were source-verified for ownership, membership, actor relationship, and explicit administrative exceptions.
+- `artifacts/api-server/src/security/authorization-boundary.contract.test.ts` provides structural regression coverage for the audited authorization boundaries.
+- `artifacts/api-server/src/security/runtime-negative-authorization.integration.test.ts` provides runtime negative coverage for cross-resource and wrong-actor access.
+- Runtime negative coverage was expanded through R14, including cross-owner proposal, consultation, hearing, payment-proof, and unauthenticated/nonexistent-resource cases.
+- Latest verified security commit: `d05c3fe9bd98faaafbee3ea983d61f50578fe23d`.
+- Latest Security Auth workflow on that SHA passed the adversarial Security Gate, isolated Test DB guard/schema identity checks, library typecheck/declarations build, and API typecheck.
+- Historical failures were traced to older SHAs or a test assertion/fixture issue and are not treated as current failures of `d05c3fe9bd98faaafbee3ea983d61f50578fe23d`.
 
 ### Route inventory discovered on the canonical baseline
 
@@ -48,7 +63,7 @@ The API route registry currently mounts these route modules:
 
 The central route registry is `artifacts/api-server/src/routes/index.ts`.
 
-### High-risk controller audit — current pass
+### High-risk controller audit — closed pass
 
 The following object-level boundaries were source-verified on `security/e01-foundation-2026-09-03`:
 
@@ -64,57 +79,58 @@ The following object-level boundaries were source-verified on `security/e01-foun
 - Notifications are scoped to the authenticated user's ID for both reads and mutations.
 - Lawyer verification submission/read uses the authenticated lawyer's own ID; review is admin-protected and audit logged.
 - Lawyer availability update/delete uses only `req.authUser.id`; target availability lookup is limited to active lawyers.
+- Parameterized lawyer-client, lawyer-consultation, representation-proposal, case, hearing, milestone, payment-proof, and handover boundaries were included in the authorization contract audit.
+
+### Negative runtime coverage
+
+The runtime suite covers wrong-actor and cross-resource denial with required HTTP-equivalent authorization outcomes and mutation-safety assertions where applicable, including:
+
+- lawyer client directory isolation;
+- lawyer consultation directory isolation;
+- cross-owner case read denial;
+- cross-owner case transition denial;
+- cross-client milestone allocation denial before mutation;
+- lawyer-only route rejection for a client;
+- cross-client proposal list denial;
+- cross-lawyer proposal read denial;
+- consultation print-data isolation;
+- case-hearing list isolation;
+- case-hearing transition isolation;
+- payment-proof access isolation;
+- unauthenticated proposal access rejection;
+- nonexistent proposal returns 404 without cross-resource leakage.
+
+The suite is executed only against the isolated Security Test DB and refuses production/live database URLs.
 
 ### Important observations
 
-1. **No confirmed IDOR patch is authorized from this pass.** The inspected high-risk paths contain explicit ownership/membership checks. They still require negative tests to prove the checks cannot regress.
-2. **Availability lookup is actor-independent by design.** It is not classified as an IDOR solely because `lawyerId` is caller supplied; the security test must verify that only intended public availability fields are returned and no private lawyer data leaks.
-3. **No-show transfer/refund remains a Financial Authority concern.** The current path mutates escrow/platform-dues/wallet state. It is intentionally not being rewritten under E01-A without applying the canonical Financial Authority decision in its dedicated financial work.
+1. No speculative IDOR patch was introduced where source evidence already proved the object boundary.
+2. Availability lookup is actor-independent by design; security scope is limited to intended public availability fields and no private lawyer data leakage.
+3. No-show transfer/refund remains a Financial Authority concern. It was not rewritten under E01-A without applying the canonical Financial Authority decision in dedicated financial work.
 4. Existing `platform_dues` is preserved and is not treated as authoritative financial accounting merely because it exists.
 
-### Required negative tests
+### E01-A DoD — CLOSED
 
-| Boundary | Negative test | Required result |
+| Gate | Evidence | Result |
 |---|---|---|
-| Booking confirm | unrelated lawyer confirms another lawyer's booking | 403; no state change |
-| Booking join | unrelated client/lawyer joins another booking | 403; no state change |
-| Booking complete | unrelated lawyer completes another lawyer's booking | 403; no state change |
-| Booking dispute | unrelated user disputes another booking | 403; no state change |
-| No-show | unrelated client claims/refunds/transfers another client's booking | 403; no financial/state mutation |
-| Payment proof | proof from booking A used through booking B | 404/403; no proof/booking mutation |
-| Agreement version | version from agreement A published through agreement B | 409/404; no mutation |
-| Representation document | document from agreement A accessed/mutated through another agreement context | 403/404; no mutation |
-| Handover | unrelated user reads/mutates/completes another handover | 404/403; no mutation |
-| Verification | lawyer accesses/submits another lawyer's verification | impossible via self routes; negative test required |
-| Availability | lawyer update/delete redirected to another lawyer | impossible via route design; regression test required |
+| Route inventory | Central route registry + route matrix | PASS |
+| Auth/authz source audit | Controller/service inspection | PASS |
+| Static authorization contract | `authorization-boundary.contract.test.ts` | PASS |
+| Runtime negative authorization | `runtime-negative-authorization.integration.test.ts` R1–R14 | PASS |
+| Cross-resource isolation | Case/proposal/hearing/payment-proof/consultation coverage | PASS |
+| Unauthenticated denial | Runtime R13 | PASS |
+| Nonexistent-resource non-leakage | Runtime R14 | PASS |
+| Isolated Test DB | Security workflow DB guard + identity assertion | PASS |
+| Library typecheck | Latest verified Security Auth run | PASS |
+| API typecheck | Latest verified Security Auth run | PASS |
+| Production DB safety | Test URL guard; no production mutation | PASS |
+| Main protection | Work remains on E01 branch; no merge | PASS |
 
-### Initial middleware evidence
-
-- `profile.ts` uses `requireAuth` and role guards for client/lawyer profile operations.
-- `admin.ts` protects administrative operations with `requireAdmin`; admin login is intentionally separate.
-- `cases.ts` uses `requireAuth`, role guards, and `requireApprovedLawyer` on lawyer-sensitive operations.
-- `documentHandovers.ts` applies authentication to every route; object-level authorization is additionally enforced in the controller.
-- `legalRepresentationDocuments.ts` applies authentication and role guards; the service additionally enforces agreement participant access.
-
-### Required authorization matrix
-
-| Route family | Authentication | Role | Approved lawyer | Object-level owner/member check | Status |
-|---|---|---|---|---|---|
-| auth | public/auth-dependent by endpoint | endpoint-specific | no | endpoint-specific | AUDIT |
-| profile | required except login/public auth | client/lawyer | endpoint-specific | self | AUDIT |
-| admin | required | admin | no | admin scope | AUDIT |
-| bookings | required for protected mutations | endpoint-specific | endpoint-specific | booking participant | AUDIT |
-| availability | required for protected mutations | lawyer/client | lawyer where applicable | lawyer ownership | AUDIT |
-| lawyer clients | required | lawyer | yes where applicable | lawyer/client relationship | AUDIT |
-| lawyer consultations | required | lawyer/client | where applicable | consultation participant | AUDIT |
-| documents/handovers | required | endpoint-specific | endpoint-specific | document/case participant | AUDIT |
-| representation documents | required | client/lawyer/admin | lawyer actions as required | agreement participant | AUDIT |
-| cases | required | client/lawyer/admin | lawyer actions as required | case membership/ownership | AUDIT |
-| hearings | required | client/lawyer/admin | lawyer actions as required | case membership | AUDIT |
-
-The matrix remains AUDIT until every mounted route has controller/service evidence and corresponding negative coverage.
+**E01-A closure is now recorded in GitHub, not merely announced in chat.**
 
 ## E01-B — Professional Trust
+
+**Status: READY TO START**
 
 C03 must prove the complete lifecycle:
 
@@ -127,6 +143,8 @@ Required evidence:
 3. approval is server-authoritative;
 4. lawyer-only operations enforce the approval boundary at runtime;
 5. state transitions are auditable and tested negatively.
+
+E01-B starts only after this E01-A closure commit and continues on the same branch. No PR is opened yet.
 
 ## E01-C — Legal Data Isolation
 
