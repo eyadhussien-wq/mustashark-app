@@ -1,6 +1,6 @@
 # E01 — Security Foundation Audit
 
-**Status:** E01-A CLOSED / E01-B READY  
+**Status:** E01-A CLOSED / E01-B IN PROGRESS  
 **Branch:** `security/e01-foundation-2026-09-03`  
 **Canonical starting point:** `main` / `93378a1f72517ab3dedd0eef06499d4d8f4094ce`  
 **Scope:** C01, C02, C03, C12, C13, C30, C31  
@@ -26,125 +26,93 @@ No production database mutation, destructive migration, branch proliferation, or
 - `artifacts/api-server/src/security/authorization-boundary.contract.test.ts` provides structural regression coverage for the audited authorization boundaries.
 - `artifacts/api-server/src/security/runtime-negative-authorization.integration.test.ts` provides runtime negative coverage for cross-resource and wrong-actor access.
 - Runtime negative coverage was expanded through R14, including cross-owner proposal, consultation, hearing, payment-proof, and unauthenticated/nonexistent-resource cases.
-- Latest verified security commit: `d05c3fe9bd98faaafbee3ea983d61f50578fe23d`.
+- Latest verified security commit before E01-B: `d05c3fe9bd98faaafbee3ea983d61f50578fe23d`.
 - Latest Security Auth workflow on that SHA passed the adversarial Security Gate, isolated Test DB guard/schema identity checks, library typecheck/declarations build, and API typecheck.
-- Historical failures were traced to older SHAs or a test assertion/fixture issue and are not treated as current failures of `d05c3fe9bd98faaafbee3ea983d61f50578fe23d`.
-
-### Route inventory discovered on the canonical baseline
-
-The API route registry currently mounts these route modules:
-
-- health.ts
-- auth.ts
-- profile.ts
-- admin.ts
-- bookings.ts
-- availability.ts
-- lawyerClients.ts
-- lawyerConsultations.ts
-- reviews.ts
-- notifications.ts
-- documentHandovers.ts
-- paymentProofs.ts
-- consultationDocumentation.ts
-- representationQuoteRequests.ts
-- lawyerProposals.ts
-- agreements.ts
-- legalRepresentationDocuments.ts
-- cases.ts
-- caseHearings.ts
-- fundMilestone.ts
-- allocateMilestone.ts
-- createMilestoneProof.ts
-- createMilestoneReleaseRequest.ts
-- disputeMilestoneRelease.ts
-- releaseMilestone.ts
-- refundMilestone.ts
-
-The central route registry is `artifacts/api-server/src/routes/index.ts`.
-
-### High-risk controller audit — closed pass
-
-The following object-level boundaries were source-verified on `security/e01-foundation-2026-09-03`:
-
-- Booking confirmation checks the assigned lawyer against the authenticated actor; admin is an explicit exception.
-- Booking join checks the authenticated client or assigned lawyer before state transition.
-- Booking completion is restricted to the assigned lawyer or admin and uses optimistic versioning/idempotency.
-- Booking dispute is restricted to booking participants or admin and uses optimistic versioning/idempotency.
-- Lawyer no-show claim/refund/transfer checks the booking client; transfer also validates the replacement lawyer against the original lawyer's transfer rules.
-- Payment-proof confirmation/rejection binds `proofId` to the route `bookingId` and checks assigned-lawyer ownership for lawyer actors.
-- Agreement reads require agreement-party ownership; version creation/publishing is bound to the agreement lawyer and publishing additionally verifies `versionId` belongs to the same agreement.
-- Legal-representation document operations resolve the parent agreement and enforce agreement-party access. Upload permission is constrained by document type and actor role.
-- Document handovers check document ownership/requester/recipient; recipient operations also require active case membership. Operational status/tracking mutations are admin-only.
-- Notifications are scoped to the authenticated user's ID for both reads and mutations.
-- Lawyer verification submission/read uses the authenticated lawyer's own ID; review is admin-protected and audit logged.
-- Lawyer availability update/delete uses only `req.authUser.id`; target availability lookup is limited to active lawyers.
-- Parameterized lawyer-client, lawyer-consultation, representation-proposal, case, hearing, milestone, payment-proof, and handover boundaries were included in the authorization contract audit.
-
-### Negative runtime coverage
-
-The runtime suite covers wrong-actor and cross-resource denial with required HTTP-equivalent authorization outcomes and mutation-safety assertions where applicable, including:
-
-- lawyer client directory isolation;
-- lawyer consultation directory isolation;
-- cross-owner case read denial;
-- cross-owner case transition denial;
-- cross-client milestone allocation denial before mutation;
-- lawyer-only route rejection for a client;
-- cross-client proposal list denial;
-- cross-lawyer proposal read denial;
-- consultation print-data isolation;
-- case-hearing list isolation;
-- case-hearing transition isolation;
-- payment-proof access isolation;
-- unauthenticated proposal access rejection;
-- nonexistent proposal returns 404 without cross-resource leakage.
-
-The suite is executed only against the isolated Security Test DB and refuses production/live database URLs.
-
-### Important observations
-
-1. No speculative IDOR patch was introduced where source evidence already proved the object boundary.
-2. Availability lookup is actor-independent by design; security scope is limited to intended public availability fields and no private lawyer data leakage.
-3. No-show transfer/refund remains a Financial Authority concern. It was not rewritten under E01-A without applying the canonical Financial Authority decision in dedicated financial work.
-4. Existing `platform_dues` is preserved and is not treated as authoritative financial accounting merely because it exists.
 
 ### E01-A DoD — CLOSED
 
-| Gate | Evidence | Result |
-|---|---|---|
-| Route inventory | Central route registry + route matrix | PASS |
-| Auth/authz source audit | Controller/service inspection | PASS |
-| Static authorization contract | `authorization-boundary.contract.test.ts` | PASS |
-| Runtime negative authorization | `runtime-negative-authorization.integration.test.ts` R1–R14 | PASS |
-| Cross-resource isolation | Case/proposal/hearing/payment-proof/consultation coverage | PASS |
-| Unauthenticated denial | Runtime R13 | PASS |
-| Nonexistent-resource non-leakage | Runtime R14 | PASS |
-| Isolated Test DB | Security workflow DB guard + identity assertion | PASS |
-| Library typecheck | Latest verified Security Auth run | PASS |
-| API typecheck | Latest verified Security Auth run | PASS |
-| Production DB safety | Test URL guard; no production mutation | PASS |
-| Main protection | Work remains on E01 branch; no merge | PASS |
+| Gate | Result |
+|---|---|
+| Route inventory | PASS |
+| Auth/authz source audit | PASS |
+| Static authorization contract | PASS |
+| Runtime negative authorization R1–R14 | PASS |
+| Cross-resource isolation | PASS |
+| Unauthenticated denial | PASS |
+| Nonexistent-resource non-leakage | PASS |
+| Isolated Test DB | PASS |
+| Library typecheck | PASS |
+| API typecheck | PASS |
+| Production DB safety | PASS |
+| Main protection | PASS |
 
-**E01-A closure is now recorded in GitHub, not merely announced in chat.**
+**E01-A closure is recorded in GitHub, not merely announced in chat.**
 
 ## E01-B — Professional Trust
 
-**Status: READY TO START**
+**Status: IN PROGRESS**
 
-C03 must prove the complete lifecycle:
+### Approved product/security direction
 
-`applicant → pending → admin review → approved/rejected → login/authorization entitlement`
+Mustashark will use an automated professional-trust flow. A lawyer must provide a professional/bar number and upload a practice card. The normal path must not require an administrator to approve the lawyer.
 
-Required evidence:
+Target flow:
 
-1. pending lawyers cannot obtain lawyer-only capabilities;
-2. rejected/suspended/deleted users cannot retain privileged access;
-3. approval is server-authoritative;
-4. lawyer-only operations enforce the approval boundary at runtime;
-5. state transitions are auditable and tested negatively.
+`lawyer registration → professional number + practice card → automated evidence extraction/matching → permitted public/official source verification → automated decision → professional entitlement`
 
-E01-B starts only after this E01-A closure commit and continues on the same branch. No PR is opened yet.
+The administrator is an **exception/security handler only**, not the normal source of professional authority.
+
+### Source-access rule
+
+Only public information and public services that are technically and legally permitted for automated querying may be used. The existence of a public web page is **not** by itself authorization to scrape or automate it. No private portal, credentialed service, bypass, rate-limit evasion, or undocumented privileged endpoint is permitted.
+
+The architecture therefore uses a `ProfessionalVerificationProvider` boundary. A provider is opt-in and must be explicitly configured for an authorized public source. Missing/unavailable source evidence must never grant professional access; it produces an exception/non-verification outcome.
+
+### Jordan professional verification
+
+The Jordan Bar Association currently publishes a public lawyer directory and an electronic-services portal. The directory is useful as a potential public verification source, but this audit does not assume that automated scraping is permitted. A formal/publicly permitted access path must be established before enabling a live provider.
+
+The Ministry of Justice also provides public electronic services and lawyer-facing services, including workflows that use the lawyer's bar number. This is treated as a potential secondary official evidence source, not as an assumed integration permission.
+
+### Implemented boundary
+
+`artifacts/api-server/src/services/professionalVerification.ts` establishes:
+
+- provider-neutral professional verification input/output types;
+- explicit `ProfessionalVerificationProvider` interface;
+- verification result states: `verified`, `rejected`, `exception`;
+- verification methods including `public_source_match`, `document_evidence_only`, and `source_unavailable`;
+- document evidence hashing boundary;
+- fail-closed provider selection: an unconfigured source cannot grant professional access.
+
+This is intentionally an architecture/security boundary first. No unauthorized source automation is enabled by default.
+
+### Required next implementation steps
+
+1. Complete C03 lifecycle audit across registration, verification, account status and all approved-lawyer gates.
+2. Define the permitted public-source adapters and their exact access rules.
+3. Implement practice-card metadata/OCR handling as secondary evidence, with private storage and hashing.
+4. Extend the verification record with auditable source/method/timestamps only after the schema change is justified by the audit.
+5. Replace manual approval as the normal transition with automated verification; retain exception handling only for unresolved cases.
+6. Add stale-state and negative runtime tests: verified → professionally suspended/rejected → privileged operation must fail even with an existing JWT.
+7. Run the isolated Security Gate and typecheck before any closure decision.
+
+### E01-B DoD
+
+E01-B cannot be closed until:
+
+- practice card is mandatory for lawyer verification;
+- professional number is mandatory;
+- normal verification is automated;
+- no admin approval is required for a successful automated verification;
+- only permitted public/official sources are queried;
+- source failure cannot grant access;
+- identity/card/source matching is auditable;
+- professional status is enforced server-side;
+- stale JWT cannot retain privileged access after professional status loss;
+- exception handling is isolated from ordinary approval;
+- negative runtime tests pass;
+- typecheck and relevant CI checks pass.
 
 ## E01-C — Legal Data Isolation
 
@@ -184,8 +152,6 @@ The canonical baseline must be verified for:
 - server-side enforcement where consent is required;
 - separation between terms consent and legal-representation agreements.
 
-If these primitives are not present on canonical `main`, implementation is required; no assumption will be carried over from experimental branches.
-
 ### C31 Privacy/Data Boundary
 
 Required controls:
@@ -199,22 +165,7 @@ Required controls:
 
 ## E01-E — Final Security Gate
 
-E01 is not CLOSED until all of the following have evidence on the same branch:
-
-- route inventory complete;
-- auth/authz matrix complete;
-- IDOR/BOLA negative tests pass;
-- lawyer approval boundary proven;
-- document privacy tests pass;
-- case membership isolation tests pass;
-- Terms Consent status verified and enforced where required;
-- sensitive-field review complete;
-- typecheck passes;
-- relevant tests pass;
-- full required CI checks pass;
-- final diff audit passes;
-- branch is verified against the target `main` baseline;
-- one final PR is opened to `main`.
+E01 is not CLOSED until all required evidence exists on the same branch and the final diff has been audited. Only then is one final PR opened to `main`.
 
 ## Closure rule
 
