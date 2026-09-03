@@ -21,6 +21,7 @@ const {
   pool,
   usersTable,
   bookingsTable,
+  lawyerClientsTable,
   notificationsTable,
   representationQuoteRequestsTable,
   representationQuotesTable,
@@ -47,6 +48,8 @@ const ids = {
   outsiderClient: "runtime-authz-outsider-client",
   ownerLawyer: "runtime-authz-owner-lawyer",
   outsiderLawyer: "runtime-authz-outsider-lawyer",
+  lawyerClientOwner: "runtime-authz-lawyer-client-owner",
+  lawyerClientOther: "runtime-authz-lawyer-client-other",
   bookingOwner: "runtime-authz-booking-owner",
   bookingOther: "runtime-authz-booking-other",
   quote: "runtime-authz-quote",
@@ -109,6 +112,11 @@ async function seedFixture() {
     createdAt: new Date(),
     updatedAt: new Date(),
   })));
+
+  await db.insert(lawyerClientsTable).values([
+    { id: ids.lawyerClientOwner, lawyerId: ids.ownerLawyer, clientId: ids.ownerClient, status: "active" },
+    { id: ids.lawyerClientOther, lawyerId: ids.outsiderLawyer, clientId: ids.outsiderClient, status: "active" },
+  ]);
 
   await db.insert(bookingsTable).values([
     {
@@ -382,6 +390,7 @@ after(async () => {
   await db.delete(representationQuoteRequestsTable).where(eq(representationQuoteRequestsTable.id, "runtime-authz-request"));
   await db.delete(notificationsTable).where(eq(notificationsTable.id, "runtime-authz-notification"));
   await db.delete(bookingsTable).where(inArray(bookingsTable.id, [ids.bookingOwner, ids.bookingOther]));
+  await db.delete(lawyerClientsTable).where(inArray(lawyerClientsTable.id, [ids.lawyerClientOwner, ids.lawyerClientOther]));
   await db.delete(usersTable).where(inArray(usersTable.id, createdUserIds));
   await pool.end();
 });

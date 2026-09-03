@@ -18,7 +18,7 @@ function requirePatterns(name: string, text: string, patterns: RegExp[]) {
 test("E01-A negative authorization contract: lawyer client/consultation collections are actor-scoped", async () => {
   const clients = await source("src/controllers/lawyerClients.ts");
   const consultations = await source("src/controllers/lawyerConsultations.ts");
-  requirePatterns("lawyerClients", clients, [/eq\(bookingsTable\.lawyerId, lawyerId\)/]);
+  requirePatterns("lawyerClients", clients, [/listLawyerOwnedClients\(lawyerId\)/]);
   requirePatterns("lawyerConsultations", consultations, [/eq\(bookingsTable\.lawyerId, lawyerId\)/]);
 });
 
