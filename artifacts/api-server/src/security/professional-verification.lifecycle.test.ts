@@ -5,6 +5,7 @@ import {
   canTransitionLawyerVerification,
   type LawyerVerificationState,
 } from "../services/professionalVerification";
+import { isApprovedLawyerVerification } from "../services/lawyerEligibility";
 
 test("C03 lifecycle: normal verification path", () => {
   const path: LawyerVerificationState[] = ["pending", "verifying", "approved", "expired", "verifying", "approved"];
@@ -37,16 +38,13 @@ test("C03 lifecycle: approved entitlement can be lost", () => {
 });
 
 test("C03 lifecycle: illegal promotions are rejected", () => {
-  assert.throws(
-    () => assertLawyerVerificationTransition("pending", "approved"),
-    /INVALID_VERIFICATION_TRANSITION:pending->approved/,
-  );
-  assert.throws(
-    () => assertLawyerVerificationTransition("expired", "approved"),
-    /INVALID_VERIFICATION_TRANSITION:expired->approved/,
-  );
-  assert.throws(
-    () => assertLawyerVerificationTransition("revoked", "approved"),
-    /INVALID_VERIFICATION_TRANSITION:revoked->approved/,
-  );
+  assert.throws(() => assertLawyerVerificationTransition("pending", "approved"), /INVALID_VERIFICATION_TRANSITION:pending->approved/);
+  assert.throws(() => assertLawyerVerificationTransition("expired", "approved"), /INVALID_VERIFICATION_TRANSITION:expired->approved/);
+  assert.throws(() => assertLawyerVerificationTransition("revoked", "approved"), /INVALID_VERIFICATION_TRANSITION:revoked->approved/);
+});
+
+test("C03 security boundary: only approved DB verification grants professional entitlement", () => {
+  const states: LawyerVerificationState[] = ["pending", "verifying", "rejected", "exception", "expired", "suspended", "revoked"];
+  for (const state of states) assert.equal(isApprovedLawyerVerification(state), false, state);
+  assert.equal(isApprovedLawyerVerification("approved"), true);
 });
