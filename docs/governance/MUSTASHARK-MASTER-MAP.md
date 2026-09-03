@@ -95,9 +95,30 @@ The implementation record must additionally resolve to:
 - A later item may be implemented only when its upstream dependency is either `CLOSED / VERIFIED` or explicitly documented as a safe parallel dependency.
 
 ### PR sequence
-`PR-E01 Security Foundation → PR-E02 Financial Authority → PR-E03 Provider Payment → PR-E04 Escrow/Wallet/Settlement → PR-E05 Reconciliation → PR-E06 Marketplace → PR-E07 Consultation/Communication → PR-E08 Documents/Cases/Representation → PR-E09 Legal Services Catalog → PR-E10 Lawyer Digital Office → PR-E11 Lawyer SaaS → PR-E12 Tasks/Workflow → PR-E13 Trust/Admin → PR-E14 Product E2E/Release Gate`
+`PR-E01 Security Foundation → PR-E02 Financial Authority → PR-E03 Provider Payment → PR-E04 Escrow/Wallet/Settlement → PR-E05 Reconciliation → PR-E06 Marketplace → PR-E07 Consultation/Communication → PR-E08 Documents/Cases/Representation → PR-E09 Legal Services Catalog → PR-E10 Lawyer Digital Office → PR-E11 Lawyer SaaS → PR-E12 Tasks/Workflow → PR-E13 Trust/Admin → PR-E14 Product E2E/Release Gate → PR-E15 Legal Document Storage, Integrity, Access, Retention & Destruction`
 
 These are roadmap execution sequence identifiers, not existing GitHub PR numbers.
+
+### PR-E15 — Legal Document Storage, Integrity, Access, Retention & Destruction
+
+**Priority:** `P0 — CRITICAL LEGAL / SECURITY / PRIVACY FOUNDATION`
+
+**Classification:** `ADD TO MAP`
+
+**Purpose:** establish a single governed security and lifecycle boundary for every legal document and attachment handled by Mustashark. Database metadata such as `storageKey` or `contentHash` is not, by itself, proof of secure object custody.
+
+**Scope includes, at minimum:** lawyer professional/practice-card documents; client identity/legal documents; agreements, POA and representation documents; case/matter evidence; payment proofs; terms/consent evidence; versions/superseded objects; handovers; backups; restoration; deletion/destruction.
+
+**Mandatory controls:** actual durable object storage; private access; server-side authorization and object ownership; encryption and key-management boundaries; server-derived integrity hashes; tamper/replacement detection; no direct public URLs for confidential legal material; sensitive access/mutation auditability; explicit retention and legal-hold rules; destruction across applicable primary/replica/backup copies according to policy; backup/restore confidentiality and integrity; stale/suspended/deleted/deactivated identity access revocation; metadata minimization.
+
+**Canonical trace:**
+`PR-E15 → MX-SEC-15 → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → Repository → Tests/CI → Evidence → Verify Main → CLOSED / VERIFIED`
+
+**Lifecycle:** `DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Current state:** `OPEN / CRITICAL FOUNDATION — ROADMAP REGISTERED`
+
+**Governance boundary:** this roadmap entry does not change runtime behavior, storage configuration or production data, and does not authorize production migration or destructive deletion.
 
 ### E01 execution status
 
@@ -272,9 +293,42 @@ The Product Execution Roadmap sequences work; MAP-X controls cross-map traceabil
 
 Mustashark cannot be declared launch-ready until P0 security, Financial Authority, provider payment, escrow/wallet/settlement/reconciliation, core marketplace, Lawyer Digital Office, legal services, privacy/consent/audit/accessibility/RTL and required CI gates are verified.
 
-## 17 — Governance State
+## 17 — PR-E15 Critical Legal Document Control
 
-**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY + PRODUCT NORTH STAR + CAPABILITY INVENTORY V1 + PRODUCT EXECUTION ROADMAP V1`
+**Official ID:** `PR-E15`
+
+**Official name:** `Legal Document Storage, Integrity, Access, Retention & Destruction`
+
+**Governance classification:** `P0 — CRITICAL LEGAL / SECURITY / PRIVACY FOUNDATION`
+
+PR-E15 is the canonical control stage for all legal document custody and lifecycle boundaries. It applies across lawyer professional documents, client legal/identity documents, agreements, POA/representation documents, case evidence, payment proofs, terms/consent evidence, versions/superseded objects, handovers, backups and destruction.
+
+The stage MUST prove, rather than assume:
+
+- actual durable object storage;
+- private access and server-side authorization/object ownership;
+- encryption and key-management boundaries;
+- server-derived object integrity and tamper/replacement detection;
+- no direct public URLs for confidential legal material;
+- auditable sensitive access and mutations;
+- explicit retention/legal-hold policy per document class;
+- deletion/destruction of applicable primary, replica and backup copies according to policy;
+- backup/restore confidentiality and integrity;
+- revocation for stale/suspended/deleted/deactivated identities;
+- metadata minimization and privacy boundaries.
+
+**Canonical trace:**
+`PR-E15 → MX-SEC-15 → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → Repository → Tests/CI → Evidence → Verify Main → CLOSED / VERIFIED`
+
+**Lifecycle:** `DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
+
+**Current state:** `OPEN / CRITICAL FOUNDATION — GOVERNANCE ADOPTED; RUNTIME IMPLEMENTATION/VERIFICATION PENDING`
+
+**Non-negotiable boundary:** registering/adopting PR-E15 does not change runtime behavior, storage configuration or production data and does not authorize destructive production actions.
+
+## 18 — Governance State
+
+**Governance state:** `ADOPTED — CANONICAL OPERATING HIERARCHY + PRODUCT NORTH STAR + CAPABILITY INVENTORY V1 + PRODUCT EXECUTION ROADMAP V1 + PR-E15 CRITICAL LEGAL DOCUMENT CONTROL`
 
 **Canonical implementation baseline:** `main @ 93378a1f72517ab3dedd0eef06499d4d8f4094ce`
 
