@@ -325,6 +325,79 @@ function getUniqueViolationConstraint(
   return null;
 }
 
+function getDatabaseErrorDiagnostics(
+  err: unknown,
+) {
+  const diagnostics: Array<{
+    depth: number;
+    type: string;
+    constructor: string | null;
+    keys: string[];
+    code: string | null;
+    constraint: string | null;
+    constraintName: string | null;
+    hasCause: boolean;
+    messageLength: number | null;
+  }> = [];
+
+  let current: unknown = err;
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (
+      typeof current !== "object" ||
+      current === null
+    ) {
+      diagnostics.push({
+        depth,
+        type: typeof current,
+        constructor: null,
+        keys: [],
+        code: null,
+        constraint: null,
+        constraintName: null,
+        hasCause: false,
+        messageLength: null,
+      });
+      break;
+    }
+
+    const dbError =
+      current as DatabaseErrorLike;
+
+    diagnostics.push({
+      depth,
+      type: Object.prototype.toString.call(current),
+      constructor:
+        current.constructor?.name ?? null,
+      keys: Object.getOwnPropertyNames(current).sort(),
+      code:
+        typeof dbError.code === "string"
+          ? dbError.code
+          : null,
+      constraint:
+        typeof dbError.constraint === "string"
+          ? dbError.constraint
+          : null,
+      constraintName:
+        typeof dbError.constraint_name ===
+        "string"
+          ? dbError.constraint_name
+          : null,
+      hasCause:
+        "cause" in current &&
+        dbError.cause !== undefined,
+      messageLength:
+        current instanceof Error
+          ? current.message.length
+          : null,
+    });
+
+    current = dbError.cause;
+  }
+
+  return diagnostics;
+}
+
 const EMAIL_UNIQUE_CONSTRAINT =
   "users_email_unique";
 
@@ -678,6 +751,17 @@ export async function socialAuth(
           if (termResponse) {
             return termResponse;
           }
+
+          req.log.error(
+            {
+              event: "oauth_unique_violation_diagnostic",
+              provider,
+              attempt,
+              diagnostics:
+                getDatabaseErrorDiagnostics(err),
+            },
+            "temporary socialAuth database error diagnostics",
+          );
 
           const constraint =
             getUniqueViolationConstraint(
