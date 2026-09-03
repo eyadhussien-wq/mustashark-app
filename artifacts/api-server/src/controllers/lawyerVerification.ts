@@ -9,8 +9,6 @@ import { calculateDocumentHash, verifyProfessionalStatus } from "../services/pro
 const submissionSchema = z.object({
   licenseNumber: z.string().trim().min(2).max(100),
   barAssociation: z.string().trim().min(2).max(200),
-  // The upload path supplies the actual card bytes. The server hashes these bytes;
-  // the client never supplies the authoritative hash.
   documentStorageKey: z.string().trim().min(1).max(500),
   documentContentBase64: z.string().min(1).max(12_000_000),
 });
@@ -65,7 +63,7 @@ export async function submitLawyerVerification(req: Request, res: Response) {
       updatedAt: now,
     };
 
-    const row = await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
       const [existing] = await tx.select().from(lawyerVerificationsTable).where(eq(lawyerVerificationsTable.userId, user.userId)).limit(1);
       const [verification] = existing
         ? await tx.update(lawyerVerificationsTable).set(values).where(eq(lawyerVerificationsTable.id, existing.id)).returning()
@@ -79,21 +77,21 @@ export async function submitLawyerVerification(req: Request, res: Response) {
         updatedAt: now,
       }).where(and(eq(usersTable.id, user.userId), eq(usersTable.role, "lawyer"))).returning({ id: usersTable.id });
       if (!updatedUser) throw new Error("LAWYER_ACCOUNT_WRITE_FAILED");
-      return verification;
+      return { verification, created: !existing };
     });
 
-    return res.status(row ? (row.createdAt.getTime() === row.updatedAt.getTime() ? 201 : 200) : 500).json({ ok: true, verification: {
-      id: row.id,
-      status: row.status,
-      licenseNumber: row.licenseNumber,
-      barAssociation: row.barAssociation,
-      verificationSource: row.verificationSource,
-      verificationMethod: row.verificationMethod,
-      confidence: row.confidence,
-      verifiedAt: row.verifiedAt,
-      lastCheckedAt: row.lastCheckedAt,
-      exceptionReason: row.exceptionReason,
-      rejectionReason: row.rejectionReason,
+    return res.status(outcome.created ? 201 : 200).json({ ok: true, verification: {
+      id: outcome.verification.id,
+      status: outcome.verification.status,
+      licenseNumber: outcome.verification.licenseNumber,
+      barAssociation: outcome.verification.barAssociation,
+      verificationSource: outcome.verification.verificationSource,
+      verificationMethod: outcome.verification.verificationMethod,
+      confidence: outcome.verification.confidence,
+      verifiedAt: outcome.verification.verifiedAt,
+      lastCheckedAt: outcome.verification.lastCheckedAt,
+      exceptionReason: outcome.verification.exceptionReason,
+      rejectionReason: outcome.verification.rejectionReason,
     }});
   } catch (err) {
     req.log?.error?.(err, "submitLawyerVerification failed");
