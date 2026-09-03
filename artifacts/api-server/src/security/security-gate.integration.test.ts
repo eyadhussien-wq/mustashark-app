@@ -16,7 +16,7 @@ if (testDatabaseUrl && /(prod|production|live)/i.test(testDatabaseUrl)) {
 process.env.DATABASE_URL = testDatabaseUrl ?? "";
 process.env.GOOGLE_CLIENT_ID = "security-gate-test-client";
 
-const { db, pool, usersTable, termsVersionsTable } = await import("@workspace/db");
+const { db, pool, usersTable, termsVersionsTable, termsConsentsTable } = await import("@workspace/db");
 const { eq, and, sql } = await import("drizzle-orm");
 const bcrypt = (await import("bcryptjs")).default;
 const { signToken } = await import("../lib/jwt");
@@ -104,7 +104,13 @@ test("#3 Provider Identity: unique index is real and concurrent OAuth creates on
   globalThis.fetch = (async () => new Response(JSON.stringify({ sub: providerId, email, email_verified: "true", aud: "security-gate-test-client", name: "Concurrent OAuth User" }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
   try {
     const body = { provider: "google", token: "synthetic-security-gate-token", role: "client", termsVersionId: securityTermsId, termsContentHash: sha256(securityTermsContent) };
-    const makeReq = () => ({ body, log: { error() {}, warn() {}, info() {} } }) as any;
+    const makeReq = () => ({
+      body,
+      get(name: string) {
+        return name.toLowerCase() === "user-agent" ? "security-gate-test" : undefined;
+      },
+      log: { error() {}, warn() {}, info() {} },
+    }) as any;
     const r1 = responseMock();
     const r2 = responseMock();
     await Promise.all([socialAuth(makeReq(), r1 as any), socialAuth(makeReq(), r2 as any)]);
@@ -143,7 +149,10 @@ test("#3b Provider Identity: email collision never auto-links an unrelated local
 });
 
 after(async () => {
-  for (const id of createdUserIds) await db.delete(usersTable).where(eq(usersTable.id, id));
+  for (const id of createdUserIds) {
+    await db.delete(termsConsentsTable).where(eq(termsConsentsTable.userId, id));
+    await db.delete(usersTable).where(eq(usersTable.id, id));
+  }
   await db.delete(termsVersionsTable).where(eq(termsVersionsTable.id, securityTermsId)).catch(() => undefined);
   await pool.end();
 });
