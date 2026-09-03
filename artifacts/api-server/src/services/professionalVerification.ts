@@ -58,17 +58,11 @@ const allowedTransitions: Record<LawyerVerificationState, readonly LawyerVerific
   revoked: ["verifying"],
 };
 
-export function canTransitionLawyerVerification(
-  from: LawyerVerificationState,
-  to: LawyerVerificationState,
-): boolean {
+export function canTransitionLawyerVerification(from: LawyerVerificationState, to: LawyerVerificationState): boolean {
   return allowedTransitions[from].includes(to);
 }
 
-export function assertLawyerVerificationTransition(
-  from: LawyerVerificationState,
-  to: LawyerVerificationState,
-): void {
+export function assertLawyerVerificationTransition(from: LawyerVerificationState, to: LawyerVerificationState): void {
   if (!canTransitionLawyerVerification(from, to)) {
     throw new Error(`INVALID_VERIFICATION_TRANSITION:${from}->${to}`);
   }
@@ -79,8 +73,9 @@ export function assertVerificationSubmissionTransition(
   from: LawyerVerificationState,
   decision: Exclude<LawyerVerificationState, "pending" | "verifying">,
 ): void {
-  assertLawyerVerificationTransition(from, "verifying");
-  assertLawyerVerificationTransition("verifying", decision);
+  if (from === "rejected") assertLawyerVerificationTransition(from, "pending");
+  else assertLawyerVerificationTransition(from, "verifying");
+  assertLawyerVerificationTransition("pending" === from ? "verifying" : from === "rejected" ? "pending" : "verifying", decision);
 }
 
 const providers = new Map<string, ProfessionalVerificationProvider>();
