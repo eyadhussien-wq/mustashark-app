@@ -1,0 +1,113 @@
+name: Neutral Document IDOR Security Gate
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  neutral-document-idor:
+    name: P3.1-D DB-backed authenticated IDOR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_neutral_idor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_neutral_idor_test"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_neutral_idor_test
+      NEUTRAL_IDOR_BASE_URL: http://127.0.0.1:8081
+      SESSION_SECRET: ci-neutral-idor-test-secret-2026
+      NODE_ENV: test
+      PORT: 8081
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard against production database
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_neutral_idor_test"
+          case "$DATABASE_URL" in
+            *localhost:5432/mustashark_neutral_idor_test) ;;
+            *) echo "ERROR: unexpected database target"; exit 1 ;;
+          esac
+          echo "Production database guard: PASS"
+
+      - name: Provision isolated Neutral Core schema
+        run: pnpm --filter @workspace/db exec drizzle-kit push --config ./drizzle.config.ts
+
+      - name: Provision baseline authenticated fixtures
+        working-directory: artifacts/api-server
+        run: node scripts/seed-ci-test-users.mjs
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Start API server
+        working-directory: artifacts/api-server
+        run: |
+          nohup pnpm start > /tmp/neutral-idor-api.log 2>&1 &
+          echo $! > /tmp/neutral-idor-api.pid
+
+      - name: Wait for API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8081/api/healthz >/dev/null 2>&1; then
+              echo "API health: PASS"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API health: FAILED"
+          cat /tmp/neutral-idor-api.log || true
+          exit 1
+
+      - name: Run DB-backed authenticated IDOR tests
+        run: pnpm --filter @workspace/api-server exec tsx --test src/services/neutralDocumentAuthorization.integration.test.ts
+
+      - name: Dump API logs on failure
+        if: failure()
+        run: cat /tmp/neutral-idor-api.log || true
+
+      - name: Stop API server
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f /tmp/neutral-idor-api.pid ]]; then
+            kill "$(cat /tmp/neutral-idor-api.pid)" 2>/dev/null || true
+          fi

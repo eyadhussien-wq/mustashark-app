@@ -97,7 +97,7 @@ Every client-facing build item is now explicitly D02-bound. This includes the cl
 | Consultation Request | X/2/X/3 + T01-01 | D02-03/04/05/08/09 |
 | Proposal Review / Acceptance | X/2/X/3 + T01-02/03 | D02-04/05/06/08/09 |
 | Scheduling / Booking | S01 | D02-01/03/04/05/08/09 |
-| Payment / Payment Proof | T01-05 + C3 | D02-04/05/08/09 + C3 semantics |
+| Payment / Payment Proof | T01-05 + C3 | D02-04/05/08/09 |
 | Consultation Workspace | T01 | D02-01/03/05/06/08/09 |
 | Documents / Upload / Preview | T01-04/06 | D02-04/05/07/08/09 |
 | Messages / Communication | X/2/X/3 + T01 | D02-03/04/05/08/09 |
@@ -255,98 +255,26 @@ Architectural Classification
 → CLOSED / VERIFIED
 ```
 
-## 14 — E01 SECURITY FOUNDATION REGISTRY
+## 14 — Lawyer OS Construction Phase Control
 
-E01 is a cross-cutting security foundation package and must be traceable through the canonical X/Y/Z/W + N1 + lifecycle + D02 maps. E01 identifiers do not replace existing architecture identifiers.
+The canonical construction sequence is now tracked separately from the historical product roadmap so that construction work cannot silently reopen or rewrite previously completed governance work.
 
-| E01 package | Official scope | Primary placement | Lifecycle / overlay | D02 | Current state |
-|---|---|---|---|---|---|
-| E01-A | Authentication & Authorization | X/7, Y/7, Z/5–Z/6, W/5–W/7 | cross-cutting | D02-09/10 where user-facing | CLOSED |
-| **E01-B** | **Professional Trust** | **Y/7 + Y/5; N1.01–N1.02** | **S05 safety/verification overlay** | **D02-01/02/03/05/06/08/09** | **SECURITY GATE READY** |
-| E01-C | Legal Data Isolation | X/5, Y/5, Z/5–Z/6, W/5 | C12/C13 + N1.07–N1.15/N1.28–N1.29 | D02-04/05/07/08/09 | OPEN |
-| E01-D | Terms / Privacy | X/5/X/7, Y/5/Y/7, Z/5–Z/6, W/5/W/7 | C30/C31 + N1.28–N1.29 | D02-04/05/06/08/09 | OPEN |
-| E01-E | Final Security Gate | X/Y/Z/W + MAP-X | final E01 closure | D02-09/10 | OPEN |
+| Phase | Status | Scope |
+|---|---|---|
+| P0 Governance Baseline | `CLOSED / BASELINED` | LegalTech discovery, evidence hierarchy, liability/boundary analysis, operating-model hypotheses |
+| P1 Repository Audit | `COMPLETED / EVIDENCE RECORDED` | Classify current repository into Neutral Core / Commercial / Regulated and identify legacy remnants |
+| P1.5 CI Boundary Triage | `ACTIVE` | Resolve ownership of the failing legacy S01-03 Join concurrency gate; no blind rerun |
+| P2 Boundary Enforcement | `NEXT` | Prevent regulated/legacy dependencies from entering Neutral Core; lock sensitive flags |
+| P3 Lawyer OS v1 Scope Lock | `PLANNED` | Freeze approved Lawyer OS operational scope |
+| P4 Neutral Core Implementation | `PLANNED` | Build Lawyer OS v1 operational core |
+| P5 Commercial SaaS Design | `PLANNED / ISOLATED` | Fixed lawyer subscription model; no fee sharing or client-fund custody |
+| P6 Client Portal | `PLANNED` | Secure lawyer↔client communication and document exchange |
+| P7 Preview / Visual QA | `BLOCKED UNTIL REQUIRED CI GATES PASS` | Non-production visual inspection only |
+| P8 Compliance Lock-in | `PENDING` | Translate specialist decisions into technical/contractual constraints |
+| P9 Commercial Readiness | `BLOCKED` | Subscription/invoicing activation after applicable validation |
+| P10 Regulated Expansion | `BLOCKED` | Marketplace, referral economics, client-fund collection, settlement, commission, escrow/wallet |
 
-### E01-B canonical traceability record
-
-`E01-B → Professional Trust → Y/7 + Y/5 → N1.01–N1.02 → S05 → D02-01/02/03/05/06/08/09 → ProfessionalVerificationProvider → verification lifecycle/state → repository implementation → tests → Security Gate → final verification`
-
-Evidence already recorded for E01-B:
-
-- practice card required;
-- server-derived SHA-256 over actual submitted bytes;
-- fail-closed provider boundary;
-- automated provider decision;
-- `pending → verifying → approved | rejected | exception` lifecycle;
-- `expired | suspended | revoked` states;
-- DB-backed entitlement rather than JWT-only entitlement;
-- atomic verification/account-status update;
-- exception-only administrative review with audit logging;
-- no fabricated or unauthorized JBA/MOJ automation.
-
-**Closure rule:** E01-B is not `CLOSED / VERIFIED` until the Security Gate passes on the same branch and the resulting evidence is recorded.
-
-## 15 — E01 Branch / Evidence Authority
-
-Canonical execution branch:
-
-`security/e01-foundation-2026-09-03`
-
-Execution discipline:
-
-`main → E01 branch → one final PR → main`
-
-No child branches, no separate package PRs, no production DB mutation, and no speculative security rewrite.
-
-## 16 — PR-E15 LEGAL DOCUMENT STORAGE, INTEGRITY, ACCESS, RETENTION & DESTRUCTION
-
-**Official Roadmap ID:** `PR-E15`
-
-**Official name:** `Legal Document Storage, Integrity, Access, Retention & Destruction`
-
-**Classification:** `ADD TO MAP`
-
-**Priority:** `CRITICAL — LEGAL / SECURITY / PRIVACY FOUNDATION`
-
-**Purpose:** establish a single governed security and lifecycle boundary for every legal document and attachment handled by Mustashark. This stage covers actual object storage, confidentiality, integrity, access authorization, auditability, retention, legal hold, deletion/destruction, backup/restore and stale/deactivated identities.
-
-**Scope includes, at minimum:**
-
-- lawyer professional/practice-card documents;
-- client identity and legal documents;
-- agreements, POA and legal-representation documents;
-- case/matter documents and evidence;
-- payment proofs and financial attachments;
-- terms/consent evidence and legal attachments;
-- document versions, superseded objects and handovers;
-- backups, restoration and destruction evidence.
-
-**Mandatory control objectives:**
-
-- actual durable object storage must be proven, not inferred from a database storage key;
-- storage must be private and access-controlled;
-- encryption at rest/in transit and applicable key-management boundaries must be verified;
-- object integrity must be verifiable using server-derived content hashes and replacement/tampering detection;
-- object ownership and authorization must be enforced server-side;
-- direct public object URLs are prohibited for confidential legal material;
-- every sensitive access/mutation path must be auditable;
-- retention schedules and legal-hold rules must be explicit per document class;
-- deletion/destruction must cover primary storage and applicable replicas/backups according to policy;
-- backup/restore procedures must preserve confidentiality and integrity;
-- stale, suspended, deleted or deactivated identities must not retain unauthorized access;
-- metadata minimization and privacy boundaries must be explicit.
-
-**Canonical trace target:**
-
-`PR-E15 → Legal Document Security → X/5 + Y/5 + Z/5–Z/6 + W/5 → T01/S02 + N1.07–N1.15/N1.27–N1.29 → D02-04/05/07/08/09/10 → Domain/Data/State/Security/Privacy → repository storage/access implementation → tests → CI → evidence → Verify Main → CLOSED / VERIFIED`
-
-**Lifecycle:**
-
-`DISCOVER → CLASSIFY → MAP → IMPLEMENT → TEST → REVIEW → VERIFY → CLOSE`
-
-**Governance boundary:** roadmap registration does not itself change runtime behavior, storage configuration or production data. No production migration or deletion is authorized by this registration alone.
-
-**Closure requirement:** PR-E15 cannot be marked `CLOSED / VERIFIED` until actual storage, access control, integrity, retention, destruction, backup/restore and audit evidence are implemented or verified for the applicable document classes.
+The detailed control record is `docs/governance/LAWYER-OS-CONSTRUCTION-PHASE-MATRIX-2026-09.md`.
 
 ## Final Governance Rules
 
@@ -360,6 +288,4 @@ No child branches, no separate package PRs, no production DB mutation, and no sp
 >
 > No `CLOSED / VERIFIED` roadmap item without repository evidence, tests, security review, CI, final diff audit, and verification.
 >
-> E01-B professional entitlement is never granted from client-controlled state or stale JWT state; the authoritative professional state is database-backed and provider-gated.
->
-> **PR-E15 legal documents are a critical security/privacy boundary: database metadata alone is not proof of secure object custody, integrity, retention or destruction.**
+> Lawyer OS construction must follow the separate P0→P10 phase control record and may not reopen completed governance work without an explicit new decision record.
