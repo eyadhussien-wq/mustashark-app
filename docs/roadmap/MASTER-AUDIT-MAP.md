@@ -142,6 +142,11 @@ Architecture/Data → Data Model → State Machine → Financial Safety → Admi
 - N1 matter/client confidentiality isolation
 - N1 lawyer/staff permission boundaries
 - N1 public-profile vs private-office separation
+- **Professional Trust / accreditation verification**
+- **Professional entitlement derived from authoritative DB verification state**
+- **Fail-closed verification provider boundary**
+- **Server-derived practice-card evidence hash**
+- **Exception-only administrative intervention**
 
 ## 08 — State Transition Audit Rule
 
@@ -189,3 +194,58 @@ Governance / Legal-Regulatory decisions
 ```
 
 This map consolidates the Master Audit X/Y/Z/W and Financial Isolation / Audit Integrity controls and now explicitly participates in MAP-X without consuming or colliding with C-stage, N1 or D02 identifiers.
+
+## 12 — E01 SECURITY FOUNDATION OVERLAY
+
+E01 is the cross-cutting security foundation audit layer. It does not replace X/Y/Z/W, N1, C-stage or lifecycle identifiers; it overlays them through MAP-X.
+
+### E01-A — Authentication & Authorization
+
+- Primary placement: X/7, Y/7, Z/5–Z/6, W/5–W/7
+- Status: CLOSED on the E01 execution branch
+- Required evidence: route inventory, authorization source audit, static contracts, runtime negative authorization, isolated Test DB, typecheck and Security Gate
+
+### E01-B — Professional Trust
+
+**Canonical name:** `E01-B — Professional Trust`
+
+**Current state:** `SECURITY GATE READY` — implementation closure evidence recorded; final Security Gate still required before CLOSED.
+
+**Canonical trace:**
+
+`E01-B → Professional Trust → Y/7 + Y/5 → N1.01–N1.02 → S05 safety/verification overlay → D02-01/02/03/05/06/08/09 → provider boundary → lifecycle/state → repository evidence → tests → Security Gate`
+
+Controls:
+
+- professional/bar number required;
+- practice card required;
+- server-derived SHA-256 over actual document bytes;
+- explicit `ProfessionalVerificationProvider` boundary;
+- fail-closed when no authorized public provider is available;
+- automated decision from provider result;
+- `pending → verifying → approved | rejected | exception` lifecycle;
+- `expired | suspended | revoked` security states;
+- DB-backed professional entitlement, not JWT-only entitlement;
+- verification and lawyer-account activation in one transaction;
+- administrative intervention limited to unresolved `exception` cases and audit logged;
+- no unauthorized JBA/MOJ automation or undocumented endpoint assumption.
+
+**Evidence status:** implementation closure checklist PASS; Security Gate execution is the remaining closure gate.
+
+### E01-C — Legal Data Isolation
+
+Primary placement: X/5, Y/5, Z/5–Z/6, W/5; overlays C12/C13 and N1.07–N1.15/N1.28–N1.29 where applicable.
+
+### E01-D — Terms / Privacy
+
+Primary placement: X/5/X/7, Y/5/Y/7, Z/5–Z/6, W/5/W/7; overlays C30/C31 and N1.28–N1.29.
+
+### E01-E — Final Security Gate
+
+E01 closes only after E01-A through E01-D evidence is complete on the same branch, final diff audit is complete, Security Gate passes, and target-branch verification is recorded.
+
+**Branch discipline:**
+
+`main → security/e01-foundation-2026-09-03 → one final PR → main`
+
+No child branches, no separate E01 package PRs, no production DB mutation, and no speculative security rewrite are authorized by the E01 execution map.
