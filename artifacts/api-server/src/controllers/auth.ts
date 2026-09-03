@@ -313,6 +313,12 @@ function getUniqueViolationConstraint(
       }
     }
 
+    if (
+      current instanceof Error &&
+      current.message.includes(EMAIL_UNIQUE_CONSTRAINT)
+    ) {
+      return EMAIL_UNIQUE_CONSTRAINT;
+    }
     current = dbError.cause;
   }
 
