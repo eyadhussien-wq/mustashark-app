@@ -42,7 +42,7 @@ function normalize(value: string): string {
   return value.trim().toLocaleLowerCase("ar").replace(/[\s\-_/().،,:]+/g, "");
 }
 
-/** SHA-256 over the actual practice-card bytes supplied by the trusted upload path. */
+/** SHA-256 over the actual practice-card bytes supplied by the upload request. */
 export function calculateDocumentHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -50,7 +50,7 @@ export function calculateDocumentHash(bytes: Uint8Array): string {
 const allowedTransitions: Record<LawyerVerificationState, readonly LawyerVerificationState[]> = {
   pending: ["verifying", "rejected", "exception"],
   verifying: ["approved", "rejected", "exception"],
-  approved: ["expired", "suspended", "revoked"],
+  approved: ["verifying", "expired", "suspended", "revoked"],
   rejected: ["pending"],
   exception: ["verifying", "approved", "rejected"],
   expired: ["verifying", "revoked"],
@@ -72,6 +72,15 @@ export function assertLawyerVerificationTransition(
   if (!canTransitionLawyerVerification(from, to)) {
     throw new Error(`INVALID_VERIFICATION_TRANSITION:${from}->${to}`);
   }
+}
+
+/** A submission always enters the verifying phase before the provider decision. */
+export function assertVerificationSubmissionTransition(
+  from: LawyerVerificationState,
+  decision: Exclude<LawyerVerificationState, "pending" | "verifying">,
+): void {
+  assertLawyerVerificationTransition(from, "verifying");
+  assertLawyerVerificationTransition("verifying", decision);
 }
 
 const providers = new Map<string, ProfessionalVerificationProvider>();
