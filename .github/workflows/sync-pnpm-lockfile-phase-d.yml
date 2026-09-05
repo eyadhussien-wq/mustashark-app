@@ -1,0 +1,59 @@
+name: Sync pnpm lockfile for Phase D
+
+on:
+  push:
+    branches:
+      - "security/api-context-phase-a-2026-09-05"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lockfile:
+    name: Sync pnpm lockfile (isolated branch)
+    if: >-
+      !contains(github.event.head_commit.message, 'ci(security): sync Phase D pnpm lockfile')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: security/api-context-phase-a-2026-09-05
+          fetch-depth: 0
+
+      - name: Setup pnpm 10.26.1
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Assert workspace build-script allowlist
+        run: |
+          grep -A1 '^onlyBuiltDependencies:' pnpm-workspace.yaml | grep -Fx '  - esbuild'
+
+      - name: Synchronize lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Assert lockfile changed only by pnpm synchronization
+        run: |
+          git status --short
+          git diff --check
+          git diff -- pnpm-lock.yaml
+          test -z "$(git status --short | grep -v '^.M pnpm-lock.yaml$' || true)"
+
+      - name: Commit synchronized lockfile
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "pnpm-lock.yaml is already synchronized; no commit required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "ci(security): sync Phase D pnpm lockfile"
+          git push origin HEAD:security/api-context-phase-a-2026-09-05

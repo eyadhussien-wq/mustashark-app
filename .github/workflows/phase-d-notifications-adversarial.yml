@@ -1,0 +1,197 @@
+name: Phase D Notifications Adversarial Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "security/api-context-phase-a-2026-09-05"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  phase-d-adversarial:
+    name: Phase D notifications adversarial proof
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+      DATABASE_URL: postgresql://mustashark_rls_pilot:phase-d-rls-pilot@localhost:5432/mustashark_test
+      PNPM_CONFIG_AUTO_INSTALL_PEERS: "false"
+      SESSION_SECRET: phase-d-isolated-test-session-secret
+      PHASE_D_RLS_DIAGNOSTICS: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Assert pnpm lockfile configuration
+        run: |
+          test "$(pnpm config get autoInstallPeers)" = "false"
+          grep -A2 '^settings:' pnpm-lock.yaml | grep -q 'autoInstallPeers: false'
+
+      # Security: only esbuild is allowlisted for dependency build scripts.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard against production database
+        run: |
+          test "$ADMIN_DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_test"
+          test "$DATABASE_URL" = "postgresql://mustashark_rls_pilot:phase-d-rls-pilot@localhost:5432/mustashark_test"
+          ! printf '%s' "$ADMIN_DATABASE_URL" | grep -Eqi 'supabase|mustashark-beta|mustashark-production|db\.[a-z0-9]+\.supabase\.co'
+          ! printf '%s' "$DATABASE_URL" | grep -Eqi 'supabase|mustashark-beta|mustashark-production|db\.[a-z0-9]+\.supabase\.co'
+
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm --filter @workspace/db push
+
+      - name: Apply notifications RLS pilot migration
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm --filter @workspace/db phase-d:apply-notifications-rls-pilot
+
+      - name: Assert notifications RLS migration materialized
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          test "$(psql "$DATABASE_URL" -Atqc "select relrowsecurity from pg_class where oid='public.notifications'::regclass")" = "t"
+          test "$(psql "$DATABASE_URL" -Atqc "select relforcerowsecurity from pg_class where oid='public.notifications'::regclass")" = "t"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policies where schemaname='public' and tablename='notifications'")" = "3"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='*'")" = "0"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='r'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='w'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='d'")" = "0"
+
+      - name: Assert isolated database identity
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          test "$(psql "$DATABASE_URL" -Atqc 'select current_database()')" = "mustashark_test"
+          test "$(psql "$DATABASE_URL" -Atqc 'select current_schema()')" = "public"
+
+      - name: Create disposable non-bypass RLS test role
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mustashark_rls_pilot') THEN
+              CREATE ROLE mustashark_rls_pilot
+                LOGIN PASSWORD 'phase-d-rls-pilot'
+                NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+            END IF;
+          END
+          $$;
+          ALTER ROLE mustashark_rls_pilot
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO mustashark_rls_pilot;
+          GRANT SELECT ON TABLE public.users TO mustashark_rls_pilot;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.notifications TO mustashark_rls_pilot;
+          SQL
+          test "$(psql "$DATABASE_URL" -Atqc "select rolsuper from pg_roles where rolname='mustashark_rls_pilot'")" = "f"
+          test "$(psql "$DATABASE_URL" -Atqc "select rolbypassrls from pg_roles where rolname='mustashark_rls_pilot'")" = "f"
+
+      - name: Extract notifications RLS catalog evidence
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          echo '--- role ---'
+          psql "$DATABASE_URL" -x -c "select current_user, rolsuper, rolbypassrls from pg_roles where rolname=current_user;"
+          echo '--- table RLS state ---'
+          psql "$DATABASE_URL" -x -c "select c.oid::regclass as table_name, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as force_rls, pg_get_userbyid(c.relowner) as owner from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='notifications';"
+          echo '--- pg_policies ---'
+          psql "$DATABASE_URL" -x -c "select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_policies where schemaname='public' and tablename='notifications' order by policyname;"
+          echo '--- pg_policy raw command/roles ---'
+          psql "$DATABASE_URL" -x -c "select polname, polcmd, polpermissive, polroles, pg_get_expr(polqual, polrelid) as using_expr, pg_get_expr(polwithcheck, polrelid) as with_check_expr from pg_policy where polrelid='public.notifications'::regclass order by polname;"
+          echo '--- baseline GUC outside transaction ---'
+          psql "$DATABASE_URL" -x -c "select current_setting('app.actor_kind', true) as actor_kind, current_setting('app.actor_id', true) as actor_id, current_setting('app.user_id', true) as user_id, current_setting('app.role', true) as app_role;"
+
+      - name: Seed only the notifications RLS pilot fixture
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DELETE FROM public.notifications
+          WHERE id IN (
+            'phase-d-notification-a',
+            'phase-d-notification-b',
+            'phase-d-notification-c',
+            'phase-d-system-notification',
+            'phase-d-user-forged-insert'
+          );
+          DELETE FROM public.users
+          WHERE id IN ('phase-d-user-a', 'phase-d-user-b', 'phase-d-consultant-c');
+
+          INSERT INTO public.users (id, name, email, role, auth_provider, account_status)
+          VALUES
+            ('phase-d-user-a', 'Phase D User A', 'phase-d-user-a@example.test', 'client', 'local', 'active'),
+            ('phase-d-user-b', 'Phase D User B', 'phase-d-user-b@example.test', 'client', 'local', 'active'),
+            ('phase-d-consultant-c', 'Phase D Consultant C', 'phase-d-consultant-c@example.test', 'lawyer', 'local', 'active');
+
+          INSERT INTO public.notifications (id, user_id, title, body, kind)
+          VALUES
+            ('phase-d-notification-a', 'phase-d-user-a', 'phase-d-a', 'notification for A', 'info'),
+            ('phase-d-notification-b', 'phase-d-user-b', 'phase-d-b', 'notification for B', 'info'),
+            ('phase-d-notification-c', 'phase-d-consultant-c', 'phase-d-c', 'notification for Consultant C', 'info');
+          SQL
+
+      - name: Build referenced workspace declarations
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm exec tsc -b lib/db lib/api-zod
+
+      - name: Run Phase D adversarial HTTP + RLS proof
+        working-directory: artifacts/api-server
+        run: pnpm exec tsx --test src/security/phaseD.notifications.adversarial.test.ts
+
+      - name: Typecheck API server
+        working-directory: artifacts/api-server
+        run: pnpm typecheck
+
+      - name: Assert no fixture leakage and remove disposable RLS role
+        if: always()
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DELETE FROM public.notifications
+          WHERE id IN (
+            'phase-d-notification-a',
+            'phase-d-notification-b',
+            'phase-d-notification-c',
+            'phase-d-system-notification',
+            'phase-d-user-forged-insert'
+          );
+          DELETE FROM public.users
+          WHERE id IN ('phase-d-user-a', 'phase-d-user-b', 'phase-d-consultant-c');
+          DROP OWNED BY mustashark_rls_pilot;
+          DROP ROLE IF EXISTS mustashark_rls_pilot;
+          SQL

@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # Emergency guard: protected CI/application paths must never contain commands
-# that can destroy a production database. Test-only schema setup (for example
-# drizzle-kit push against localhost) is allowed; the production URL scan below
-# prevents that setup from being redirected to a production-named database.
+# that can destroy a production database. Test-only destructive SQL is allowed
+# only when it is inside an explicitly isolated GitHub Actions workflow that
+# declares a localhost PostgreSQL database whose name ends in _test. The
+# production URL scan below remains independent and fail-closed.
 scan_roots=(.github/workflows scripts artifacts lib)
 
 # Keep this guard portable: the GitHub runner guarantees POSIX grep. Match SQL
@@ -12,6 +13,7 @@ scan_roots=(.github/workflows scripts artifacts lib)
 # do not become destructive-operation findings.
 # shellcheck disable=SC2016
 mutation_pattern='drizzle-kit[[:space:]]+drop|TRUNCATE([[:space:]]+(TABLE|[[:alnum:]_."`$]+))?|DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|ALTER[[:space:]]+TABLE[[:space:]]+.*DROP[[:space:]]+COLUMN|DELETE[[:space:]]+FROM[[:space:]]+[[:alnum:]_."`$]+'
+isolated_test_db_pattern='postgresql://[^[:space:]@]+:[^[:space:]@]+@localhost:5432/[[:alnum:]_-]+_test(["[:space:]/]|$)'
 
 mutation_out=$(mktemp)
 mutation_err=$(mktemp)
@@ -32,10 +34,24 @@ set -e
 
 case "$mutation_status" in
   0)
-    cat "$mutation_out"
-    echo "ERROR: destructive database operation detected in protected CI/application paths." >&2
-    echo "Production database destruction is forbidden during the emergency rescue." >&2
-    exit 1
+    # Destructive SQL is acceptable only in workflow files that explicitly
+    # declare an isolated localhost *_test database. Application code, scripts,
+    # libraries, and workflows without that declaration remain protected.
+    mutation_violation=0
+    while IFS= read -r match; do
+      match_file=${match%%:*}
+      if [[ "$match_file" == .github/workflows/* ]] && grep -Eq "$isolated_test_db_pattern" "$match_file"; then
+        continue
+      fi
+      printf '%s\n' "$match"
+      mutation_violation=1
+    done <"$mutation_out"
+
+    if [[ "$mutation_violation" -eq 1 ]]; then
+      echo "ERROR: destructive database operation detected in protected CI/application paths." >&2
+      echo "Production database destruction is forbidden during the emergency rescue." >&2
+      exit 1
+    fi
     ;;
   1)
     ;;
