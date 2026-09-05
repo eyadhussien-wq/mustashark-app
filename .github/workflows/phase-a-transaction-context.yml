@@ -56,7 +56,7 @@ jobs:
         working-directory: artifacts/api-server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
-        run: node --experimental-strip-types --test src/security/transactionContext.integration.test.ts
+        run: pnpm exec tsx --test src/security/transactionContext.integration.test.ts
 
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server typecheck
