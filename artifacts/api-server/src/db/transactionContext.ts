@@ -11,7 +11,7 @@ export type DbRequestContext = {
 const emitRlsDiagnostic = async (tx: DbTransaction, phase: string): Promise<void> => {
   if (process.env.PHASE_D_RLS_DIAGNOSTICS !== "true") return;
 
-  const [row] = await tx.execute(sql`
+  const result = await tx.execute(sql`
     select
       current_user as current_user,
       pg_backend_pid() as backend_pid,
@@ -33,7 +33,7 @@ const emitRlsDiagnostic = async (tx: DbTransaction, phase: string): Promise<void
       and c.relname = 'notifications'
   `);
 
-  console.error(`[PHASE-D-RLS-EVIDENCE] ${phase}`, row);
+  console.error(`[PHASE-D-RLS-EVIDENCE] ${phase}`, result.rows[0] ?? null);
 };
 
 /**
