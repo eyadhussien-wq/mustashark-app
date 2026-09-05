@@ -33,6 +33,7 @@ jobs:
       DATABASE_URL: postgresql://mustashark_rls_pilot:phase-d-rls-pilot@localhost:5432/mustashark_test
       PNPM_CONFIG_AUTO_INSTALL_PEERS: "false"
       SESSION_SECRET: phase-d-isolated-test-session-secret
+      PHASE_D_RLS_DIAGNOSTICS: "true"
 
     steps:
       - name: Checkout
@@ -99,6 +100,21 @@ jobs:
           SQL
           test "$(psql "$DATABASE_URL" -Atqc "select rolsuper from pg_roles where rolname='mustashark_rls_pilot'")" = "f"
           test "$(psql "$DATABASE_URL" -Atqc "select rolbypassrls from pg_roles where rolname='mustashark_rls_pilot'")" = "f"
+
+      - name: Extract notifications RLS catalog evidence
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          echo '--- role ---'
+          psql "$DATABASE_URL" -x -c "select current_user, rolsuper, rolbypassrls from pg_roles where rolname=current_user;"
+          echo '--- table RLS state ---'
+          psql "$DATABASE_URL" -x -c "select c.oid::regclass as table_name, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as force_rls, pg_get_userbyid(c.relowner) as owner from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='notifications';"
+          echo '--- pg_policies ---'
+          psql "$DATABASE_URL" -x -c "select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_policies where schemaname='public' and tablename='notifications' order by policyname;"
+          echo '--- pg_policy raw command/roles ---'
+          psql "$DATABASE_URL" -x -c "select polname, polcmd, polpermissive, polroles, pg_get_expr(polqual, polrelid) as using_expr, pg_get_expr(polwithcheck, polrelid) as with_check_expr from pg_policy where polrelid='public.notifications'::regclass order by polname;"
+          echo '--- baseline GUC outside transaction ---'
+          psql "$DATABASE_URL" -x -c "select current_setting('app.actor_kind', true) as actor_kind, current_setting('app.actor_id', true) as actor_id, current_setting('app.user_id', true) as user_id, current_setting('app.role', true) as app_role;"
 
       - name: Seed only the notifications RLS pilot fixture
         env:
