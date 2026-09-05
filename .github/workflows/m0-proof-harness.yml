@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - "security/m0-ueb-foundation-2026-09-05"
+      - "security/id-01-a-ueb-2026-09-06"
   pull_request:
     branches:
       - "security/m0-ueb-foundation-2026-09-05"
+      - "security/id-01-a-ueb-2026-09-06"
 
 permissions:
   contents: read
@@ -51,5 +53,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_m0_test
         run: pnpm m0:db-observable
+      - name: M0 ID-01-A UEB proof
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_m0_test
+        run: pnpm m0:id01-a-ueb
 
 # Manual dispatch is intentionally available only for the isolated M0 proof gate.
