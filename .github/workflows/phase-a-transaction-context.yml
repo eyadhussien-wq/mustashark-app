@@ -1,0 +1,62 @@
+name: Phase A Transaction Context
+
+on:
+  push:
+    branches:
+      - "security/api-context-phase-a-2026-09-05"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  transaction-context:
+    name: Phase A transaction context integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision isolated test schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: pnpm --filter @workspace/db push
+
+      - name: Run transaction context integration tests
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+        run: node --experimental-strip-types --test src/security/transactionContext.integration.test.ts
+
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server typecheck
