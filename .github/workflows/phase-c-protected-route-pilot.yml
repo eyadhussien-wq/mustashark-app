@@ -1,6 +1,7 @@
 name: Phase C Protected Route Pilot
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "security/api-context-phase-a-2026-09-05"
