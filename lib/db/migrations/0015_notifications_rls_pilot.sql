@@ -45,12 +45,6 @@ WITH CHECK (
   AND "user_id" IS NOT NULL
 );
 
--- No DELETE policy is created. With RLS enabled this is deny-by-default.
--- The explicit policy name documents the intended invariant without granting
--- any delete path.
-CREATE POLICY "notifications_delete_deny"
-ON "notifications"
-FOR DELETE
-USING (false);
+-- DELETE intentionally has no policy. With RLS enabled this is default-deny.
 
 COMMIT;
