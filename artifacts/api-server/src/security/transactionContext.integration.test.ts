@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
-import { bindDbActorContext } from "../db/transactionContext.ts";
-import { systemActor, userActor } from "../db/systemActor.ts";
+import { bindDbActorContext } from "../db/transactionContext";
+import { systemActor, userActor } from "../db/systemActor";
 
 test("SET LOCAL identity remains on the same transaction connection", async () => {
   await db.transaction(async (tx) => {
