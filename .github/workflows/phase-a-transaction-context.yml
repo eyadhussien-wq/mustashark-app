@@ -52,6 +52,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
 
+      - name: Build referenced workspace declarations
+        run: pnpm exec tsc -b lib/db lib/api-zod
+
       - name: Run transaction context integration tests
         working-directory: artifacts/api-server
         env:
