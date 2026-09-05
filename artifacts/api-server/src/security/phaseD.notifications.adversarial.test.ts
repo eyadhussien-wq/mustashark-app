@@ -6,7 +6,7 @@ import app from "../app";
 import { signToken } from "../lib/jwt";
 import { withDbRequestContext } from "../db/transactionContext";
 import { systemActor, userActor } from "../db/systemActor";
-import { db, pool, notificationsTable } from "@workspace/db";
+import { pool, notificationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const userA = {
