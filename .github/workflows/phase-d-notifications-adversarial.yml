@@ -84,10 +84,10 @@ jobs:
           test "$(psql "$DATABASE_URL" -Atqc "select relforcerowsecurity from pg_class where oid='public.notifications'::regclass")" = "t"
           test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policies where schemaname='public' and tablename='notifications'")" = "3"
           test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='*'")" = "0"
-          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "0"
           test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='r'")" = "1"
           test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='w'")" = "1"
-          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "0"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='d'")" = "0"
 
       - name: Assert isolated database identity
         env:
