@@ -30,6 +30,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
+      PNPM_CONFIG_AUTO_INSTALL_PEERS: "false"
 
     steps:
       - name: Checkout
@@ -45,6 +46,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: Assert pnpm lockfile configuration
+        run: |
+          test "$(pnpm config get autoInstallPeers)" = "false"
+          grep -A2 '^settings:' pnpm-lock.yaml | grep -q 'autoInstallPeers: false'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
