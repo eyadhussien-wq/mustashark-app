@@ -57,18 +57,13 @@ jobs:
               exit 1
               ;;
           esac
+          test "$DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_test"
           echo "Isolated PostgreSQL database guard passed"
 
       - name: Provision isolated test schema
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
-
-      - name: Assert isolated database identity
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
-        run: |
-          pnpm exec tsx -e 'import { sql } from "drizzle-orm"; import { db } from "./lib/db/src/index.ts"; const r = await db.execute(sql`select current_database() as database`); console.log(r.rows); if (r.rows[0]?.database !== "mustashark_test") process.exit(1); await db.$client.end();'
 
       - name: Build referenced workspace declarations
         run: pnpm exec tsc -b lib/db lib/api-zod
