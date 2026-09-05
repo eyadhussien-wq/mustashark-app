@@ -65,6 +65,14 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
         run: pnpm --filter @workspace/db push
 
+      - name: Assert isolated database identity
+        env:
+          PGPASSWORD: postgres
+        run: |
+          test "$(psql -h localhost -U postgres -d mustashark_test -Atqc 'select current_database()')" = "mustashark_test"
+          test "$(psql -h localhost -U postgres -d mustashark_test -Atqc 'select current_schema()')" = "public"
+          echo "Isolated PostgreSQL identity/schema assertion passed"
+
       - name: Build referenced workspace declarations
         run: pnpm exec tsc -b lib/db lib/api-zod
 
