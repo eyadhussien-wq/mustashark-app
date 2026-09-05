@@ -31,6 +31,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_test
       PNPM_CONFIG_AUTO_INSTALL_PEERS: "false"
+      SESSION_SECRET: phase-d-isolated-test-session-secret
 
     steps:
       - name: Checkout
