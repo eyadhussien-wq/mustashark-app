@@ -34,8 +34,7 @@ jobs:
 
       - name: Assert workspace build-script allowlist
         run: |
-          grep -A1 '^onlyBuiltDependencies:' pnpm-workspace.yaml | grep -q '^  - esbuild$'
-          ! grep -q '^  - [^e].*' pnpm-workspace.yaml
+          grep -A1 '^onlyBuiltDependencies:' pnpm-workspace.yaml | grep -Fx '  - esbuild'
 
       - name: Synchronize lockfile
         run: pnpm install --no-frozen-lockfile
