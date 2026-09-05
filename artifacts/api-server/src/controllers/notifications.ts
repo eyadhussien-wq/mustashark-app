@@ -1,15 +1,23 @@
 import { Request, Response } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
-import { db } from "@workspace/db";
-import { notificationsTable } from "@workspace/db/schema";
+import { withDbRequestContext } from "../db/transactionContext";
+import { userActor } from "../db/systemActor";
+import {
+  listNotificationsService,
+  markNotificationReadService,
+} from "../services/notifications";
 
 export const listNotifications = async (req: Request, res: Response) => {
   try {
     const authUser = req.authUser!;
-    const notifications = await db.select().from(notificationsTable)
-      .where(eq(notificationsTable.userId, authUser.id))
-      .orderBy(desc(notificationsTable.createdAt))
-      .limit(50);
+    const notifications = await withDbRequestContext(
+      userActor(authUser.id, authUser.role),
+      async ({ tx }) =>
+        listNotificationsService(
+          { userId: authUser.id },
+          { tx },
+        ),
+    );
+
     return res.json({ ok: true, notifications });
   } catch (error) {
     console.error("List Notifications Error:", error);
@@ -21,8 +29,22 @@ export const markNotificationRead = async (req: Request, res: Response) => {
   try {
     const authUser = req.authUser!;
     const notificationId = String(req.params.id ?? "");
-    const [updated] = await db.update(notificationsTable).set({ readAt: new Date() }).where(and(eq(notificationsTable.id, notificationId), eq(notificationsTable.userId, authUser.id), isNull(notificationsTable.readAt))).returning();
-    if (!updated) return res.status(404).json({ ok: false, error: "notification_not_found" });
+    const updated = await withDbRequestContext(
+      userActor(authUser.id, authUser.role),
+      async ({ tx }) =>
+        markNotificationReadService(
+          {
+            userId: authUser.id,
+            notificationId,
+          },
+          { tx },
+        ),
+    );
+
+    if (!updated) {
+      return res.status(404).json({ ok: false, error: "notification_not_found" });
+    }
+
     return res.json({ ok: true, notification: updated });
   } catch (error) {
     console.error("Mark Notification Read Error:", error);
