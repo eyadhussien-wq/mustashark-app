@@ -8,6 +8,34 @@ export type DbRequestContext = {
   tx: DbTransaction;
 };
 
+const emitRlsDiagnostic = async (tx: DbTransaction, phase: string): Promise<void> => {
+  if (process.env.PHASE_D_RLS_DIAGNOSTICS !== "true") return;
+
+  const [row] = await tx.execute(sql`
+    select
+      current_user as current_user,
+      pg_backend_pid() as backend_pid,
+      current_setting('app.actor_kind', true) as actor_kind,
+      current_setting('app.actor_id', true) as actor_id,
+      current_setting('app.user_id', true) as user_id,
+      current_setting('app.role', true) as app_role,
+      c.relrowsecurity as rls_enabled,
+      c.relforcerowsecurity as force_rls,
+      exists (
+        select 1
+        from pg_policy p
+        where p.polrelid = c.oid
+          and p.polcmd = '*'
+      ) as has_all_policy
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'notifications'
+  `);
+
+  console.error(`[PHASE-D-RLS-EVIDENCE] ${phase}`, row);
+};
+
 /**
  * Bind the application actor to the current PostgreSQL transaction.
  *
@@ -32,6 +60,7 @@ export const bindDbActorContext = async (
     await tx.execute(
       sql`select set_config('app.role', ${actor.role}, true)`,
     );
+    await emitRlsDiagnostic(tx, `bound:user:${actor.userId}`);
     return;
   }
 
@@ -40,6 +69,7 @@ export const bindDbActorContext = async (
   );
   await tx.execute(sql`select set_config('app.user_id', '', true)`);
   await tx.execute(sql`select set_config('app.role', '', true)`);
+  await emitRlsDiagnostic(tx, `bound:system:${actor.actorId}`);
 };
 
 /**
