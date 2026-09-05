@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { test, after } from "node:test";
-import { eq, inArray } from "drizzle-orm";
 import app from "../app";
 import { signToken } from "../lib/jwt";
-import { db, notificationsTable, usersTable } from "@workspace/db";
+import { db, pool, notificationsTable, usersTable } from "@workspace/db";
+import { inArray } from "drizzle-orm";
 
 const userA = {
   id: "phase-c-user-a",
@@ -53,10 +53,7 @@ function tokenFor(user: typeof userA) {
   });
 }
 
-async function requestNotifications(
-  token: string,
-  init: RequestInit = {},
-): Promise<Response> {
+async function requestNotifications(token: string, init: RequestInit = {}) {
   return fetch(`${baseUrl}/api/notifications`, {
     ...init,
     headers: {
@@ -67,24 +64,24 @@ async function requestNotifications(
 }
 
 async function seed() {
-  await db
-    .delete(notificationsTable)
-    .where(inArray(notificationsTable.id, [notificationA.id, notificationB.id]));
-  await db
-    .delete(usersTable)
-    .where(inArray(usersTable.id, [userA.id, userB.id]));
+  await db.delete(notificationsTable).where(
+    inArray(notificationsTable.id, [notificationA.id, notificationB.id]),
+  );
+  await db.delete(usersTable).where(
+    inArray(usersTable.id, [userA.id, userB.id]),
+  );
 
   await db.insert(usersTable).values([userA, userB]);
   await db.insert(notificationsTable).values([notificationA, notificationB]);
 }
 
 async function cleanup() {
-  await db
-    .delete(notificationsTable)
-    .where(inArray(notificationsTable.id, [notificationA.id, notificationB.id]));
-  await db
-    .delete(usersTable)
-    .where(inArray(usersTable.id, [userA.id, userB.id]));
+  await db.delete(notificationsTable).where(
+    inArray(notificationsTable.id, [notificationA.id, notificationB.id]),
+  );
+  await db.delete(usersTable).where(
+    inArray(usersTable.id, [userA.id, userB.id]),
+  );
 }
 
 const ready = (async () => {
@@ -94,6 +91,7 @@ const ready = (async () => {
     server?.once("listening", () => resolve());
     server?.once("error", reject);
   });
+
   const address = server.address();
   assert.ok(address && typeof address === "object");
   baseUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
@@ -107,7 +105,11 @@ test("C-01/C-02: protected notifications route requires auth and binds runtime i
 
   const response = await requestNotifications(tokenFor(userA));
   assert.equal(response.status, 200);
-  const body = (await response.json()) as { ok: boolean; notifications: Array<{ id: string; userId: string }> };
+  const body = (await response.json()) as {
+    ok: boolean;
+    notifications: Array<{ id: string; userId: string }>;
+  };
+
   assert.equal(body.ok, true);
   assert.deepEqual(body.notifications.map((row) => row.id), [notificationA.id]);
   assert.ok(body.notifications.every((row) => row.userId === userA.id));
@@ -132,9 +134,7 @@ test("C-04/C-05: client-supplied identity hints cannot switch the authenticated 
   await ready;
 
   const response = await requestNotifications(tokenFor(userA), {
-    headers: {
-      "X-User-Id": userB.id,
-    },
+    headers: { "X-User-Id": userB.id },
   });
   assert.equal(response.status, 200);
   const body = (await response.json()) as { notifications: Array<{ id: string }> };
@@ -145,7 +145,9 @@ test("C-04/C-05: client-supplied identity hints cannot switch the authenticated 
     { headers: { authorization: `Bearer ${tokenFor(userA)}` } },
   );
   assert.equal(queryResponse.status, 200);
-  const queryBody = (await queryResponse.json()) as { notifications: Array<{ id: string }> };
+  const queryBody = (await queryResponse.json()) as {
+    notifications: Array<{ id: string }>;
+  };
   assert.deepEqual(queryBody.notifications.map((row) => row.id), [notificationA.id]);
 });
 
@@ -162,14 +164,18 @@ test("C-06/C-07/C-08/C-09: repeated live requests remain isolated across pooled 
   const bodies = await Promise.all(
     responses.map(
       async (response) =>
-        (await response.json()) as { notifications: Array<{ id: string; userId: string }> },
+        (await response.json()) as {
+          notifications: Array<{ id: string; userId: string }>;
+        },
     ),
   );
 
   for (let index = 0; index < bodies.length; index += 1) {
     const expected = index % 2 === 0 ? notificationA : notificationB;
     assert.deepEqual(bodies[index].notifications.map((row) => row.id), [expected.id]);
-    assert.ok(bodies[index].notifications.every((row) => row.userId === expected.userId));
+    assert.ok(
+      bodies[index].notifications.every((row) => row.userId === expected.userId),
+    );
   }
 });
 
@@ -178,5 +184,5 @@ after(async () => {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
   }
   await cleanup();
-  await db.$client.end();
+  await pool.end();
 });
