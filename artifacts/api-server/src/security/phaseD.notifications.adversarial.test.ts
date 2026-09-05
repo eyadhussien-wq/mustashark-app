@@ -218,22 +218,26 @@ test("D04-I05: only explicit SystemActor context may create a notification", asy
   assert.deepEqual(systemRow, [{ id: systemNotification, userId: consultant.id }]);
 });
 
-test("D04-D01: DELETE remains denied", async () => {
+test("D04-D01: DELETE remains denied by default", async () => {
   await ready;
 
-  const response = await withDbRequestContext(
+  await withDbRequestContext(
     userActor(userA.id, userA.role),
     async ({ tx }) => {
-      try {
-        await tx.delete(notificationsTable).where(eq(notificationsTable.id, notificationA));
-        return true;
-      } catch (error) {
-        return error;
-      }
+      await tx.delete(notificationsTable).where(eq(notificationsTable.id, notificationA));
     },
   );
 
-  assert.ok(response instanceof Error);
+  const remaining = await withDbRequestContext(
+    userActor(userA.id, userA.role),
+    async ({ tx }) =>
+      tx
+        .select({ id: notificationsTable.id })
+        .from(notificationsTable)
+        .where(eq(notificationsTable.id, notificationA)),
+  );
+
+  assert.deepEqual(remaining, [{ id: notificationA }]);
 });
 
 test("D04-C01/C02: concurrent Client and Consultant requests remain isolated", async () => {
