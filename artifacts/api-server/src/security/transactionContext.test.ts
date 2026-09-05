@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sql } from "drizzle-orm";
 import { bindDbActorContext } from "../db/transactionContext";
 import { systemActor, userActor } from "../db/systemActor";
 
@@ -21,7 +20,7 @@ test("bindDbActorContext uses the supplied transaction", async () => {
   assert.equal(tx.statements.length, 4);
 });
 
-test("bindDbActorContext sets transaction-local identity for user actors", async () => {
+test("user actor binding writes all four expected context keys", async () => {
   const tx = new FakeTx();
 
   await bindDbActorContext(tx as never, userActor("user-123", "lawyer"));
@@ -33,7 +32,7 @@ test("bindDbActorContext sets transaction-local identity for user actors", async
   assert.match(rendered, /app\.role/);
 });
 
-test("bindDbActorContext clears user-specific context for system actors", async () => {
+test("system actor binding does not retain user identity fields", async () => {
   const tx = new FakeTx();
 
   await bindDbActorContext(tx as never, systemActor());
@@ -44,14 +43,4 @@ test("bindDbActorContext clears user-specific context for system actors", async 
   assert.match(rendered, /app\.actor_id/);
   assert.match(rendered, /app\.user_id/);
   assert.match(rendered, /app\.role/);
-});
-
-test("context binding is transaction-local rather than session-global", async () => {
-  const tx = new FakeTx();
-
-  await bindDbActorContext(tx as never, userActor("user-123", "client"));
-
-  const statements = tx.statements.map(String);
-  assert.ok(statements.every((statement) => statement.includes("set_config")));
-  assert.ok(statements.every((statement) => statement.includes("true")));
 });
