@@ -76,6 +76,19 @@ jobs:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
         run: pnpm --filter @workspace/db phase-d:apply-notifications-rls-pilot
 
+      - name: Assert notifications RLS migration materialized
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: |
+          test "$(psql "$DATABASE_URL" -Atqc "select relrowsecurity from pg_class where oid='public.notifications'::regclass")" = "t"
+          test "$(psql "$DATABASE_URL" -Atqc "select relforcerowsecurity from pg_class where oid='public.notifications'::regclass")" = "t"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policies where schemaname='public' and tablename='notifications'")" = "3"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='*'")" = "0"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "0"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='r'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='w'")" = "1"
+          test "$(psql "$DATABASE_URL" -Atqc "select count(*) from pg_policy where polrelid='public.notifications'::regclass and polcmd='a'")" = "0"
+
       - name: Assert isolated database identity
         env:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
