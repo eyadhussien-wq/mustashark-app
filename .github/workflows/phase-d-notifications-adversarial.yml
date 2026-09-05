@@ -71,6 +71,11 @@ jobs:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
         run: pnpm --filter @workspace/db push
 
+      - name: Apply notifications RLS pilot migration
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm --filter @workspace/db phase-d:apply-notifications-rls-pilot
+
       - name: Assert isolated database identity
         env:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
