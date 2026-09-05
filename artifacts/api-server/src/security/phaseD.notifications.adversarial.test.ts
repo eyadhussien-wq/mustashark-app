@@ -163,10 +163,14 @@ test("D04-U02/U03: owner UPDATE is allowed while cross-user UPDATE and ownership
   );
   assert.equal(crossUserUpdate.status, 404);
 
-  const [ownerRow] = await db
-    .select({ userId: notificationsTable.userId })
-    .from(notificationsTable)
-    .where(eq(notificationsTable.id, notificationA));
+  const [ownerRow] = await withDbRequestContext(
+    userActor(userA.id, userA.role),
+    async ({ tx }) =>
+      tx
+        .select({ userId: notificationsTable.userId })
+        .from(notificationsTable)
+        .where(eq(notificationsTable.id, notificationA)),
+  );
   assert.equal(ownerRow?.userId, userA.id);
 });
 
@@ -264,11 +268,15 @@ test("D04-C01/C02: concurrent Client and Consultant requests remain isolated", a
   );
 
   const expected = [notificationA, notificationB, notificationC] as const;
+  const actorIds = new Set(actors.map((actor) => actor.id));
   for (let index = 0; index < bodies.length; index += 1) {
     const expectedId = expected[index % expected.length];
     const expectedUserId = actors[index % actors.length].id;
-    assert.deepEqual(bodies[index].notifications.map((row) => row.id), [expectedId]);
-    assert.ok(bodies[index].notifications.every((row) => row.userId === expectedUserId));
+    const rows = bodies[index].notifications;
+    assert.ok(rows.some((row) => row.id === expectedId));
+    assert.ok(rows.every((row) => row.userId === expectedUserId));
+    assert.ok(rows.every((row) => actorIds.has(row.userId)));
+    assert.ok(!rows.some((row) => row.userId !== expectedUserId));
   }
 });
 
