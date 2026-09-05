@@ -1,6 +1,7 @@
 name: M0 Proof Harness
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "security/m0-ueb-foundation-2026-09-05"
