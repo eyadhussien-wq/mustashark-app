@@ -52,6 +52,7 @@ jobs:
           test "$(pnpm config get autoInstallPeers)" = "false"
           grep -A2 '^settings:' pnpm-lock.yaml | grep -q 'autoInstallPeers: false'
 
+      # Security: only esbuild is allowlisted for dependency build scripts.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
