@@ -39,7 +39,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.22.0
+          version: 10.26.1
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -59,7 +59,7 @@ jobs:
       - name: Guard against production database
         run: |
           test "$DATABASE_URL" = "postgresql://postgres:postgres@localhost:5432/mustashark_test"
-          ! printf '%s' "$DATABASE_URL" | grep -Eqi 'supabase|mustashark-beta|mustashark-production|db\\.[a-z0-9]+\\.supabase\\.co'
+          ! printf '%s' "$DATABASE_URL" | grep -Eqi 'supabase|mustashark-beta|mustashark-production|db\.[a-z0-9]+\.supabase\.co'
 
       - name: Provision isolated test schema
         run: pnpm --filter @workspace/db push
