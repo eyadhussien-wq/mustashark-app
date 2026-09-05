@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { sql } from "drizzle-orm";
 import { test } from "node:test";
-import { db, pool } from "../src/index";
-import { assertNoUebDbActorContext, UebError, withNestedUeb, withUeb } from "../src/ueb";
+import { db, pool } from "../src/index.ts";
+import { assertNoUebDbActorContext, UebError, withNestedUeb, withUeb } from "../src/ueb.ts";
 
 function isolatedUrl(): string {
   const value = process.env.DATABASE_URL;
