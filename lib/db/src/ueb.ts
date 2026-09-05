@@ -1,12 +1,17 @@
-import { sql } from "drizzle-orm";
-import type { NodePgDatabase, NodePgTransaction } from "drizzle-orm/node-postgres";
-import * as schema from "./schema";
+import { sql, type ExtractTablesWithRelations } from "drizzle-orm";
+import type { NodePgDatabase, NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+import * as schema from "./schema/index.ts";
 
 export type UebActor = Readonly<{ id: string; role: string }>;
 export type UebContext = Readonly<{ actor: UebActor }>;
 
 type UebDatabase = NodePgDatabase<typeof schema>;
-type UebTransaction = NodePgTransaction<typeof schema, typeof schema>;
+type UebTransaction = PgTransaction<
+  NodePgQueryResultHKT,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
 
 export class UebError extends Error {
   constructor(message: string) {
