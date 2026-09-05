@@ -14,6 +14,7 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export * from "./ueb";
 
 // Explicit public exports for the availability/booking tables. These are
 // intentionally part of @workspace/db so API consumers can import the same
