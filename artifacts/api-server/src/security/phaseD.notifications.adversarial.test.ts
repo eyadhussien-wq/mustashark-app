@@ -5,7 +5,7 @@ import { after, test } from "node:test";
 import app from "../app";
 import { signToken } from "../lib/jwt";
 import { db, pool, notificationsTable, usersTable } from "@workspace/db";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 const userA = {
   id: "phase-d-user-a",
@@ -128,16 +128,12 @@ test("D04-I01/I02: notifications have no direct HTTP creation endpoint", async (
   assert.equal(crossUserInjection.status, 404);
 
   const [forgedA, forgedB] = await Promise.all([
-    db.select().from(notificationsTable).where(eqId("attacker-notification-a")),
-    db.select().from(notificationsTable).where(eqId("attacker-notification-b")),
+    db.select().from(notificationsTable).where(eq(notificationsTable.id, "attacker-notification-a")),
+    db.select().from(notificationsTable).where(eq(notificationsTable.id, "attacker-notification-b")),
   ]);
   assert.equal(forgedA.length, 0);
   assert.equal(forgedB.length, 0);
 });
-
-function eqId(id: string) {
-  return (notificationsTable.id as typeof notificationsTable.id).mapWith((value) => value).$eq(id);
-}
 
 test("D04-I03/I04: client identity hints cannot change the authenticated actor", async () => {
   await ready;
@@ -175,11 +171,11 @@ test("D04-U02/U03: a user cannot mark another user's notification as read", asyn
   const [row] = await db
     .select({ readAt: notificationsTable.readAt })
     .from(notificationsTable)
-    .where(eqId(notificationB.id));
+    .where(eq(notificationsTable.id, notificationB.id));
   assert.equal(row?.readAt, null);
 });
 
- test("D04-C01/C02: concurrent actors remain isolated", async () => {
+test("D04-C01/C02: concurrent actors remain isolated", async () => {
   await ready;
 
   const responses = await Promise.all(
