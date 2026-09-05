@@ -4,47 +4,38 @@ import type { Server } from "node:http";
 import { after, test } from "node:test";
 import app from "../app";
 import { signToken } from "../lib/jwt";
-import { db, pool, notificationsTable, usersTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { withDbRequestContext } from "../db/transactionContext";
+import { systemActor, userActor } from "../db/systemActor";
+import { db, pool, notificationsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const userA = {
   id: "phase-d-user-a",
-  name: "Phase D User A",
   email: "phase-d-user-a@example.test",
   role: "client" as const,
-  authProvider: "local" as const,
-  accountStatus: "active" as const,
 };
 
 const userB = {
   id: "phase-d-user-b",
-  name: "Phase D User B",
   email: "phase-d-user-b@example.test",
   role: "client" as const,
-  authProvider: "local" as const,
-  accountStatus: "active" as const,
 };
 
-const notificationA = {
-  id: "phase-d-notification-a",
-  userId: userA.id,
-  title: "phase-d-a",
-  body: "notification for A",
-  kind: "info",
+const consultant = {
+  id: "phase-d-consultant-c",
+  email: "phase-d-consultant-c@example.test",
+  role: "lawyer" as const,
 };
 
-const notificationB = {
-  id: "phase-d-notification-b",
-  userId: userB.id,
-  title: "phase-d-b",
-  body: "notification for B",
-  kind: "info",
-};
+const notificationA = "phase-d-notification-a";
+const notificationB = "phase-d-notification-b";
+const notificationC = "phase-d-notification-c";
+const systemNotification = "phase-d-system-notification";
 
 let server: Server | undefined;
 let baseUrl = "";
 
-function tokenFor(user: typeof userA) {
+function tokenFor(user: typeof userA | typeof userB | typeof consultant) {
   return signToken({
     userId: user.id,
     email: user.email,
@@ -57,29 +48,7 @@ function authHeaders(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-async function seed() {
-  await db.delete(notificationsTable).where(
-    inArray(notificationsTable.id, [notificationA.id, notificationB.id]),
-  );
-  await db.delete(usersTable).where(
-    inArray(usersTable.id, [userA.id, userB.id]),
-  );
-
-  await db.insert(usersTable).values([userA, userB]);
-  await db.insert(notificationsTable).values([notificationA, notificationB]);
-}
-
-async function cleanup() {
-  await db.delete(notificationsTable).where(
-    inArray(notificationsTable.id, [notificationA.id, notificationB.id]),
-  );
-  await db.delete(usersTable).where(
-    inArray(usersTable.id, [userA.id, userB.id]),
-  );
-}
-
 const ready = (async () => {
-  await seed();
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve, reject) => {
     server?.once("listening", () => resolve());
@@ -91,7 +60,7 @@ const ready = (async () => {
   baseUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
 })();
 
-test("D04-I01/I02: notifications have no direct HTTP creation endpoint", async () => {
+test("D04-I01/I02: direct notification creation is absent and cannot be forged over HTTP", async () => {
   await ready;
 
   const selfInjection = await fetch(`${baseUrl}/api/notifications`, {
@@ -126,16 +95,33 @@ test("D04-I01/I02: notifications have no direct HTTP creation endpoint", async (
 
   assert.equal(selfInjection.status, 404);
   assert.equal(crossUserInjection.status, 404);
-
-  const [forgedA, forgedB] = await Promise.all([
-    db.select().from(notificationsTable).where(eq(notificationsTable.id, "attacker-notification-a")),
-    db.select().from(notificationsTable).where(eq(notificationsTable.id, "attacker-notification-b")),
-  ]);
-  assert.equal(forgedA.length, 0);
-  assert.equal(forgedB.length, 0);
 });
 
-test("D04-I03/I04: client identity hints cannot change the authenticated actor", async () => {
+test("D04-R01/R02/R03: Client and Consultant actors are isolated by transaction-local identity", async () => {
+  await ready;
+
+  const cases = [
+    { actor: userA, expected: notificationA },
+    { actor: userB, expected: notificationB },
+    { actor: consultant, expected: notificationC },
+  ] as const;
+
+  for (const current of cases) {
+    const response = await fetch(`${baseUrl}/api/notifications`, {
+      headers: authHeaders(tokenFor(current.actor)),
+    });
+
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      notifications: Array<{ id: string; userId: string }>;
+    };
+
+    assert.deepEqual(body.notifications.map((row) => row.id), [current.expected]);
+    assert.ok(body.notifications.every((row) => row.userId === current.actor.id));
+  }
+});
+
+test("D04-I03/I04: request identity hints cannot override the authenticated actor", async () => {
   await ready;
 
   const spoofed = await fetch(
@@ -152,38 +138,115 @@ test("D04-I03/I04: client identity hints cannot change the authenticated actor",
   const body = (await spoofed.json()) as {
     notifications: Array<{ id: string; userId: string }>;
   };
-  assert.deepEqual(body.notifications.map((row) => row.id), [notificationA.id]);
+  assert.deepEqual(body.notifications.map((row) => row.id), [notificationA]);
   assert.ok(body.notifications.every((row) => row.userId === userA.id));
 });
 
-test("D04-U02/U03: a user cannot mark another user's notification as read", async () => {
+test("D04-U02/U03: owner UPDATE is allowed while cross-user UPDATE and ownership transfer are denied", async () => {
   await ready;
 
-  const response = await fetch(
-    `${baseUrl}/api/notifications/${encodeURIComponent(notificationB.id)}/read`,
+  const ownUpdate = await fetch(
+    `${baseUrl}/api/notifications/${encodeURIComponent(notificationA)}/read`,
     {
       method: "POST",
       headers: authHeaders(tokenFor(userA)),
     },
   );
+  assert.equal(ownUpdate.status, 200);
 
-  assert.equal(response.status, 404);
-  const [row] = await db
-    .select({ readAt: notificationsTable.readAt })
+  const crossUserUpdate = await fetch(
+    `${baseUrl}/api/notifications/${encodeURIComponent(notificationB)}/read`,
+    {
+      method: "POST",
+      headers: authHeaders(tokenFor(userA)),
+    },
+  );
+  assert.equal(crossUserUpdate.status, 404);
+
+  const [ownerRow] = await db
+    .select({ userId: notificationsTable.userId })
     .from(notificationsTable)
-    .where(eq(notificationsTable.id, notificationB.id));
-  assert.equal(row?.readAt, null);
+    .where(eq(notificationsTable.id, notificationA));
+  assert.equal(ownerRow?.userId, userA.id);
 });
 
-test("D04-C01/C02: concurrent actors remain isolated", async () => {
+test("D04-I05: only explicit SystemActor context may create a notification", async () => {
   await ready;
 
+  const userInsert = await withDbRequestContext(
+    userActor(userA.id, userA.role),
+    async ({ tx }) => {
+      try {
+        await tx.insert(notificationsTable).values({
+          id: "phase-d-user-forged-insert",
+          userId: userB.id,
+          title: "forged",
+          body: "forged",
+          kind: "info",
+        });
+        return true;
+      } catch (error) {
+        return error;
+      }
+    },
+  );
+  assert.ok(userInsert instanceof Error);
+
+  const systemInsert = await withDbRequestContext(
+    systemActor(),
+    async ({ tx }) => {
+      await tx.insert(notificationsTable).values({
+        id: systemNotification,
+        userId: consultant.id,
+        title: "system-created",
+        body: "trusted business notification",
+        kind: "info",
+      });
+      return true;
+    },
+  );
+  assert.equal(systemInsert, true);
+
+  const systemRow = await withDbRequestContext(
+    userActor(consultant.id, consultant.role),
+    async ({ tx }) =>
+      tx
+        .select({ id: notificationsTable.id, userId: notificationsTable.userId })
+        .from(notificationsTable)
+        .where(eq(notificationsTable.id, systemNotification)),
+  );
+  assert.deepEqual(systemRow, [{ id: systemNotification, userId: consultant.id }]);
+});
+
+test("D04-D01: DELETE remains denied", async () => {
+  await ready;
+
+  const response = await withDbRequestContext(
+    userActor(userA.id, userA.role),
+    async ({ tx }) => {
+      try {
+        await tx.delete(notificationsTable).where(eq(notificationsTable.id, notificationA));
+        return true;
+      } catch (error) {
+        return error;
+      }
+    },
+  );
+
+  assert.ok(response instanceof Error);
+});
+
+test("D04-C01/C02: concurrent Client and Consultant requests remain isolated", async () => {
+  await ready;
+
+  const actors = [userA, userB, consultant] as const;
   const responses = await Promise.all(
-    Array.from({ length: 20 }, (_, index) =>
-      fetch(`${baseUrl}/api/notifications`, {
-        headers: authHeaders(index % 2 === 0 ? tokenFor(userA) : tokenFor(userB)),
-      }),
-    ),
+    Array.from({ length: 30 }, (_, index) => {
+      const actor = actors[index % actors.length];
+      return fetch(`${baseUrl}/api/notifications`, {
+        headers: authHeaders(tokenFor(actor)),
+      });
+    }),
   );
 
   assert.ok(responses.every((response) => response.status === 200));
@@ -196,10 +259,12 @@ test("D04-C01/C02: concurrent actors remain isolated", async () => {
     ),
   );
 
+  const expected = [notificationA, notificationB, notificationC] as const;
   for (let index = 0; index < bodies.length; index += 1) {
-    const expected = index % 2 === 0 ? notificationA : notificationB;
-    assert.deepEqual(bodies[index].notifications.map((row) => row.id), [expected.id]);
-    assert.ok(bodies[index].notifications.every((row) => row.userId === expected.userId));
+    const expectedId = expected[index % expected.length];
+    const expectedUserId = actors[index % actors.length].id;
+    assert.deepEqual(bodies[index].notifications.map((row) => row.id), [expectedId]);
+    assert.ok(bodies[index].notifications.every((row) => row.userId === expectedUserId));
   }
 });
 
@@ -207,6 +272,5 @@ after(async () => {
   if (server) {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
   }
-  await cleanup();
   await pool.end();
 });
