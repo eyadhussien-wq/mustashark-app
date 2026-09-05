@@ -9,7 +9,9 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts && node ./scripts/ensure-dispute-state-machine-guards.mjs",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts && node ./scripts/ensure-dispute-state-machine-guards.mjs"
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts && node ./scripts/ensure-dispute-state-machine-guards.mjs",
+    "m0:proof": "node ./scripts/m0-proof-harness.mjs",
+    "m0:db-observable": "node ./scripts/m0-db-observable-harness.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
