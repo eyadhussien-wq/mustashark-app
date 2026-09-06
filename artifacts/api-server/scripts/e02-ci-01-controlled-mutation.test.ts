@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   assertNoUebDbActorContext,
   db,
@@ -29,14 +29,15 @@ const ids = {
   milestoneA: `e02-ci01-milestone-a-${randomUUID()}`,
   milestoneInsufficient: `e02-ci01-milestone-insufficient-${randomUUID()}`,
   milestoneWrongState: `e02-ci01-milestone-wrong-state-${randomUUID()}`,
+  milestoneConcurrent: `e02-ci01-milestone-concurrent-${randomUUID()}`,
   escrowA: `e02-ci01-escrow-a-${randomUUID()}`,
 };
 
-const makeReq = (actorId: string, role: string, key: string, body: unknown = {}) => ({
+const makeReq = (actorId: string, role: string, key: string, milestoneId = ids.milestoneA, body: unknown = {}) => ({
   authUser: { userId: actorId, role },
   method: "POST",
-  path: `/representation-milestones/${ids.milestoneA}/allocate`,
-  params: { milestoneId: ids.milestoneA },
+  path: `/representation-milestones/${milestoneId}/allocate`,
+  params: { milestoneId },
   query: {},
   body,
   route: { path: "/representation-milestones/:milestoneId/allocate" },
@@ -74,13 +75,14 @@ await db.insert(representationMilestonesTable).values([
   { id: ids.milestoneA, quoteId: ids.quoteA, stage: "stage_1", percentage: "66.67", amount: "100.00", title: "Allocation A", status: "funded" },
   { id: ids.milestoneInsufficient, quoteId: ids.quoteA, stage: "stage_2", percentage: "33.33", amount: "100.00", title: "Allocation insufficient", status: "funded" },
   { id: ids.milestoneWrongState, quoteId: ids.quoteA, stage: "stage_3", percentage: "0.00", amount: "0.00", title: "Wrong state", status: "awaiting_deposit" },
+  { id: ids.milestoneConcurrent, quoteId: ids.quoteA, stage: "stage_1", percentage: "10.00", amount: "25.00", title: "Allocation concurrent", status: "funded" },
 ]);
 
 await db.insert(escrowAccountsTable).values({
   id: ids.escrowA,
   quoteId: ids.quoteA,
   currency: "JOD",
-  depositedAmount: "150.00",
+  depositedAmount: "175.00",
   allocatedAmount: "0.00",
   releasedAmount: "0.00",
   refundedAmount: "0.00",
@@ -110,11 +112,12 @@ console.log(JSON.stringify({ oracle: "F04-F05-IDEMPOTENT-REPLAY", result: "PASS"
 
 const concurrentKey = "e02-ci01-concurrent-same-key";
 const concurrent = await Promise.all([
-  allocateMilestone(makeReq(ids.clientA, "client", concurrentKey), ids.milestoneInsufficient, ids.clientA),
-  allocateMilestone(makeReq(ids.clientA, "client", concurrentKey), ids.milestoneInsufficient, ids.clientA),
+  allocateMilestone(makeReq(ids.clientA, "client", concurrentKey, ids.milestoneConcurrent), ids.milestoneConcurrent, ids.clientA),
+  allocateMilestone(makeReq(ids.clientA, "client", concurrentKey, ids.milestoneConcurrent), ids.milestoneConcurrent, ids.clientA),
 ]);
 assert.equal(concurrent.filter((r) => "status" in r && r.status === 200).length, 1);
 assert.equal(concurrent.filter((r) => "replay" in r && r.replay).length, 1);
+assert.equal(await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneConcurrent)).then((r) => r.length), 1);
 console.log(JSON.stringify({ oracle: "F07-CONCURRENCY-SAME-IDEMPOTENCY-KEY", result: "PASS" }));
 
 const crossActorBefore = await db.select().from(escrowAccountsTable).where(eq(escrowAccountsTable.id, ids.escrowA));
@@ -122,26 +125,24 @@ const crossActor = await allocateMilestone(makeReq(ids.clientB, "client", "e02-c
 assert.deepEqual(crossActor, { error: "forbidden" });
 const crossActorAfter = await db.select().from(escrowAccountsTable).where(eq(escrowAccountsTable.id, ids.escrowA));
 assert.deepEqual(crossActorAfter, crossActorBefore);
-assert.equal(await db.select({ count: sql<number>`count(*)` }).from(escrowTransactionsTable).where(and(eq(escrowTransactionsTable.milestoneId, ids.milestoneA), eq(escrowTransactionsTable.createdBy, ids.clientB))).then((r) => Number(r[0]?.count ?? 0)), 0);
+assert.equal(await db.select().from(escrowTransactionsTable).where(and(eq(escrowTransactionsTable.milestoneId, ids.milestoneA), eq(escrowTransactionsTable.createdBy, ids.clientB))).then((r) => r.length), 0);
 console.log(JSON.stringify({ oracle: "F13-CROSS-ACTOR-DENY", result: "PASS" }));
 
-const wrongState = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-wrong-state"), ids.milestoneWrongState, ids.clientA);
+const wrongState = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-wrong-state", ids.milestoneWrongState), ids.milestoneWrongState, ids.clientA);
 assert.deepEqual(wrongState, { error: "milestone_not_allocatable" });
-const insufficient = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-insufficient"), ids.milestoneInsufficient, ids.clientA);
+const insufficient = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-insufficient", ids.milestoneInsufficient), ids.milestoneInsufficient, ids.clientA);
 assert.deepEqual(insufficient, { error: "insufficient_unallocated_funds" });
 console.log(JSON.stringify({ oracle: "F06-PRECONDITION-DENIALS", result: "PASS" }));
 
-const forged = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-forged", { amount: "1.00", currency: "QAR" }), ids.milestoneA, ids.clientA);
+const forged = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-forged", ids.milestoneA, { amount: "1.00", currency: "QAR" }), ids.milestoneA, ids.clientA);
 assert.equal("replay" in forged, true);
-assert.equal((await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneA))).at(0)?.amount, "100.00");
-assert.equal((await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneA))).at(0)?.currency, "JOD");
+const transactionRows = await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneA));
+assert.equal(transactionRows[0]?.amount, "100.00");
+assert.equal(transactionRows[0]?.currency, "JOD");
 console.log(JSON.stringify({ oracle: "F02-CLIENT-AMOUNT-CURRENCY-CANNOT-OVERRIDE", result: "PASS" }));
 
-const mismatchReq = makeReq(ids.clientA, "client", "e02-ci01-success", { changed: true });
-await assert.rejects(
-  () => allocateMilestone(mismatchReq, ids.milestoneA, ids.clientA),
-  /IDEMPOTENCY_REQUEST_MISMATCH/,
-);
+const mismatchReq = makeReq(ids.clientA, "client", "e02-ci01-success", ids.milestoneA, { changed: true });
+await assert.rejects(() => allocateMilestone(mismatchReq, ids.milestoneA, ids.clientA), /IDEMPOTENCY_REQUEST_MISMATCH/);
 console.log(JSON.stringify({ oracle: "F05-IDEMPOTENCY-MISMATCH-DENY", result: "PASS" }));
 
 const wrongRoleReq = makeReq(ids.lawyerA, "lawyer", "e02-ci01-wrong-role");
@@ -152,7 +153,7 @@ assert.deepEqual(response.body, { ok: false, error: "client_role_required" });
 console.log(JSON.stringify({ oracle: "F01-CONTROLLER-ROLE-GATE", result: "PASS" }));
 
 await assert.rejects(
-  () => allocateMilestone({ ...makeReq(ids.clientA, "client", "e02-ci01-actor-mismatch"), authUser: undefined }, ids.milestoneA, ids.clientA),
+  () => allocateMilestone({ ...makeReq(ids.clientA, "client", "e02-ci01-no-actor"), authUser: undefined }, ids.milestoneA, ids.clientA),
   /UEB_TRUSTED_ACTOR_REQUIRED/,
 );
 await assert.rejects(
@@ -162,11 +163,11 @@ await assert.rejects(
 await assertNoUebDbActorContext(db);
 console.log(JSON.stringify({ oracle: "F01-UEB-TRUSTED-ACTOR-AND-CONTEXT-CLEANUP", result: "PASS" }));
 
-await db.delete(idempotencyKeysTable).where(sql`user_id in (${sql.join([sql`${ids.clientA}`, sql`${ids.clientB}`], sql`, `})`);
+await db.delete(idempotencyKeysTable).where(inArray(idempotencyKeysTable.userId, [ids.clientA, ids.clientB]));
 await db.delete(escrowTransactionsTable).where(eq(escrowTransactionsTable.escrowAccountId, ids.escrowA));
 await db.delete(escrowAccountsTable).where(eq(escrowAccountsTable.id, ids.escrowA));
 await db.delete(representationMilestonesTable).where(eq(representationMilestonesTable.quoteId, ids.quoteA));
 await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteA));
-await db.delete(usersTable).where(sql`id in (${sql.join([sql`${ids.clientA}`, sql`${ids.clientB}`, sql`${ids.lawyerA}`], sql`, `})`);
+await db.delete(usersTable).where(inArray(usersTable.id, [ids.clientA, ids.clientB, ids.lawyerA]));
 await assertNoUebDbActorContext(db);
 console.log(JSON.stringify({ harness: "E02-CI-01-CONTROLLED-MUTATION-V1", seam: "milestone-allocation-funded-to-in_progress", result: "DB-ORACLE-PASS" }));
