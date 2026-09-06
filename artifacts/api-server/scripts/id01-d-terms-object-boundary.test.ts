@@ -96,6 +96,10 @@ async function cleanup() {
   await db.delete(usersTable).where(eq(usersTable.id, ids.outsider));
 }
 
+test.before(async () => {
+  await seedUsers();
+});
+
 test.after(async () => {
   await cleanup();
 });
@@ -186,7 +190,6 @@ test("ID-01-D Terms Enforcement Oracle", async () => {
 });
 
 test("ID-01-D Cases Object Boundary Oracle", async () => {
-  await seedUsers();
   await seedCases();
 
   const caseAForClientA = await getCaseById(ids.caseA, ids.clientA, "client");
