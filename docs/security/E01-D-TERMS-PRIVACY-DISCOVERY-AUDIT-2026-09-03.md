@@ -1,3 +1,11 @@
+# DEPRECATED / ARCHIVED — E01-D Terms, Consent & Privacy Discovery Audit
+
+> **Historical audit record only.** This 2026-09-03 E01-D discovery document is superseded by ID-01-D and the canonical Master State Register. Do not use it as the live execution status or implementation authority. Preserve it for audit trail.
+>
+> **Current execution authority:** `docs/governance/MUSTASHARK-MASTER-STATE-2026-09-03.md`
+
+---
+
 # E01-D — Terms, Consent & Privacy Discovery Audit
 
 **Date:** 2026-09-03  
