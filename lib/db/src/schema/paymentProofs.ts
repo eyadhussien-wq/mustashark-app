@@ -1,6 +1,6 @@
 import { pgEnum, pgTable, text, timestamp, numeric } from "drizzle-orm/pg-core";
-import { bookingsTable } from "./bookings";
-import { usersTable } from "./users";
+import { bookingsTable } from "./bookings.ts";
+import { usersTable } from "./users.ts";
 
 export const paymentProofChannelEnum = pgEnum("payment_proof_channel", ["platform", "external"]);
 export const paymentProofMethodEnum = pgEnum("payment_proof_method", ["visa_mastercard", "local_wallet", "bank_transfer", "western_union", "other"]);

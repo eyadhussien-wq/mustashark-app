@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const consultationRescheduleRequestsTable = pgTable("consultation_reschedule_requests", {
   id: text("id").primaryKey(),

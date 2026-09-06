@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const notificationKindEnum = pgEnum("notification_kind", [
   "info",

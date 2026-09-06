@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const neutralAuditOutcomeEnum = pgEnum("neutral_audit_outcome", [
   "allowed",

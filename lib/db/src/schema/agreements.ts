@@ -1,5 +1,4 @@
 import {
-  AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -9,8 +8,9 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
-import { representationQuotesTable } from "./representationFinance";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { usersTable } from "./users.ts";
+import { representationQuotesTable } from "./representationFinance.ts";
 
 export const agreementStatusEnum = pgEnum("agreement_status", [
   "draft",

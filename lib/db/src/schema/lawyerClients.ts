@@ -1,5 +1,5 @@
 import { pgTable, pgEnum, text, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const lawyerClientStatusEnum = pgEnum("lawyer_client_status", ["active", "archived"]);
 

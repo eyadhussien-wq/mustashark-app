@@ -1,5 +1,5 @@
 import { boolean, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const lawyerAvailabilityTable = pgTable(
   "lawyer_availability",

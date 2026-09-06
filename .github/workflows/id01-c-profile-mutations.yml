@@ -1,0 +1,62 @@
+name: ID-01-C Profile Mutations Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "security/id-01-c-profile-mutations-2026-09-06"
+  pull_request:
+    branches:
+      - "main"
+
+permissions:
+  contents: read
+
+jobs:
+  id01-c-proof:
+    name: ID-01-C UEB + atomicity/isolation proof (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_id01c_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_id01c_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Production DB guard
+        run: bash scripts/security/forbid-production-db-mutations.sh
+      - name: Provision isolated test schema
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_id01c_test
+        run: pnpm push
+      - name: Build shared workspace declarations
+        run: |
+          pnpm --filter @workspace/db exec tsc --build
+          pnpm --filter @workspace/api-zod exec tsc --build
+      - name: API typecheck
+        working-directory: artifacts/api-server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_id01c_test
+        run: pnpm typecheck
+      - name: ID-01-C UEB + atomicity/isolation oracle
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_id01c_test
+        run: node --experimental-strip-types --test ./scripts/id01-c-profile-mutations.test.ts

@@ -5,8 +5,8 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { casesTable } from "./cases";
-import { usersTable } from "./users";
+import { casesTable } from "./cases.ts";
+import { usersTable } from "./users.ts";
 
 export const caseHearingStatusEnum = pgEnum("case_hearing_status", [
   "scheduled",

@@ -1,0 +1,62 @@
+name: M0 Proof Harness
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "security/m0-ueb-foundation-2026-09-05"
+      - "security/id-01-a-ueb-2026-09-06"
+  pull_request:
+    branches:
+      - "security/m0-ueb-foundation-2026-09-05"
+      - "security/id-01-a-ueb-2026-09-06"
+
+permissions:
+  contents: read
+
+jobs:
+  m0-proof-harness:
+    name: M0 DB-observable proof harness (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_m0_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_m0_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Production DB guard
+        run: bash scripts/security/forbid-production-db-mutations.sh
+      - name: M0 registry self-check
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_m0_test
+        run: pnpm m0:proof
+      - name: M0 DB-observable oracle
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_m0_test
+        run: pnpm m0:db-observable
+      - name: M0 ID-01-A UEB proof
+        working-directory: lib/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mustashark_m0_test
+        run: pnpm m0:id01-a-ueb
+
+# Manual dispatch is intentionally available only for the isolated M0 proof gate.

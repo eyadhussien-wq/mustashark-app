@@ -6,8 +6,8 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
-import { agreementsTable } from "./agreements";
+import { usersTable } from "./users.ts";
+import { agreementsTable } from "./agreements.ts";
 
 export const caseStatusEnum = pgEnum("case_status", ["active", "completed", "closed"]);
 
