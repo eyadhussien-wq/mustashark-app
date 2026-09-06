@@ -1,3 +1,11 @@
+# DEPRECATED / ARCHIVED — E01-E Final Security Closure Evidence
+
+> **Historical audit record only.** This 2026-09-03 E01-E closure document describes the superseded E01 execution line. It is preserved for audit trail and historical reconstruction and MUST NOT be used as the current promotion, merge, or next-unit authority.
+>
+> **Current execution authority:** `docs/governance/MUSTASHARK-MASTER-STATE-2026-09-03.md`
+
+---
+
 # E01-E — Final Security Closure Evidence
 
 **Date:** 2026-09-03  
