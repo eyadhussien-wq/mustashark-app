@@ -2,7 +2,7 @@ import { AnyPgColumn, pgEnum, pgTable, text, timestamp, jsonb, index } from "dri
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users.ts";
-import { agreementsTable } from "./agreements";
+import { agreementsTable } from "./agreements.ts";
 import { casesTable } from "./cases";
 
 export const legalRepresentationDocumentTypeEnum = pgEnum("legal_representation_document_type", [
