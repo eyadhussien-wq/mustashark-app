@@ -1,0 +1,54 @@
+name: E02 Financial Authority Seam Disposable Proof
+
+on:
+  push:
+    branches:
+      - security/e02-financial-authority-boundary-2026-09-07
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lib/db/scripts/e02-financial-authority-seam-proof.mjs'
+      - '.github/workflows/e02-financial-authority-seam-proof.yml'
+
+jobs:
+  disposable-proof:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_e02_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_e02_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mustashark_e02_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Production database guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$DATABASE_URL" in
+            *localhost*|*127.0.0.1*|*::1*) ;;
+            *) echo 'PRODUCTION_DB_GUARD_FAILED'; exit 1 ;;
+          esac
+          case "$DATABASE_URL" in
+            *_test) echo 'PRODUCTION_DB_GUARD_PASS' ;;
+            *) echo 'TEST_DB_SUFFIX_GUARD_FAILED'; exit 1 ;;
+          esac
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run disposable seam proof
+        run: node lib/db/scripts/e02-financial-authority-seam-proof.mjs
