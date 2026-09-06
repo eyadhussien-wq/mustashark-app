@@ -1,4 +1,5 @@
-import { AnyPgColumn, pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users.ts";
