@@ -1,3 +1,11 @@
+# DEPRECATED / ARCHIVED — E01 Security Foundation Audit
+
+> **Historical audit record only.** This 2026-09-03 E01 execution document is superseded by the current ID-01 line and the canonical Master State Register. Do not use this document to determine current status, open a new unit, or authorize implementation. Preserve it for audit trail and historical reconstruction.
+>
+> **Current execution authority:** `docs/governance/MUSTASHARK-MASTER-STATE-2026-09-03.md`
+
+---
+
 # E01 — Security Foundation Audit
 
 **Status:** E01-A CLOSED / E01-B SECURITY GATE READY  
