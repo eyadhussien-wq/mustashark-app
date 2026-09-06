@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   agreementsTable,
   caseMembershipsTable,
@@ -85,10 +85,12 @@ async function cleanup() {
   await db.delete(agreementsTable).where(eq(agreementsTable.id, ids.agreementB));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteA));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteB));
-  await db.delete(termsConsentsTable).where(eq(termsConsentsTable.userId, ids.clientA));
-  await db.delete(termsConsentsTable).where(eq(termsConsentsTable.userId, ids.clientB));
-  await db.delete(termsVersionsTable).where(eq(termsVersionsTable.id, ids.termsV1));
-  await db.delete(termsVersionsTable).where(eq(termsVersionsTable.id, ids.termsV2));
+
+  // Terms are intentionally immutable. Cleanup must not issue DELETE against the
+  // protected Terms tables; the disposable *_test database is the lifecycle boundary.
+  await db.execute(sql`DROP TABLE IF EXISTS terms_consents CASCADE`);
+  await db.execute(sql`DROP TABLE IF EXISTS terms_versions CASCADE`);
+
   await db.delete(usersTable).where(eq(usersTable.id, ids.clientA));
   await db.delete(usersTable).where(eq(usersTable.id, ids.clientB));
   await db.delete(usersTable).where(eq(usersTable.id, ids.lawyerA));
