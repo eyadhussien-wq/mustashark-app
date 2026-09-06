@@ -9,7 +9,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const termsVersionStatusEnum = pgEnum("terms_version_status", [
   "draft",

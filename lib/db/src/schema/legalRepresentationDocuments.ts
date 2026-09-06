@@ -1,9 +1,10 @@
-import { AnyPgColumn, pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { usersTable } from "./users";
-import { agreementsTable } from "./agreements";
-import { casesTable } from "./cases";
+import { usersTable } from "./users.ts";
+import { agreementsTable } from "./agreements.ts";
+import { casesTable } from "./cases.ts";
 
 export const legalRepresentationDocumentTypeEnum = pgEnum("legal_representation_document_type", [
   "poa",

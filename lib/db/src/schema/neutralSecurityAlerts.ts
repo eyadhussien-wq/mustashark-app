@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const neutralSecurityAlertStatusEnum = pgEnum("neutral_security_alert_status", [
   "open",

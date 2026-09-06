@@ -1,5 +1,5 @@
 import { pgTable, pgEnum, text, timestamp, index } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const neutralMatterStatusEnum = pgEnum("neutral_matter_status", [
   "active",

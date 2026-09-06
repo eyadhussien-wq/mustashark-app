@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
-import { bookingsTable } from "./bookings";
+import { usersTable } from "./users.ts";
+import { bookingsTable } from "./bookings.ts";
 
 export const bookingTimeBlocksTable = pgTable(
   "booking_time_blocks",

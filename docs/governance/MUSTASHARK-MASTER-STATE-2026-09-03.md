@@ -1,134 +1,114 @@
 # MUSTASHARK — MASTER STATE REGISTER
 
 **Status:** CANONICAL CURRENT-STATE REGISTER
-**Date:** 2026-09-03
+**Date:** 2026-09-06
 **Authority:** `docs/governance/MUSTASHARK-MASTER-MAP.md`
-**Execution branch:** `security/e01-foundation-2026-09-03`
+**Execution branch:** `security/id-01-d-terms-object-boundary-2026-09-06`
 **Target:** one final PR → `main`
 
 ## 1. Operating Rule — Single Linear Execution
 
-Mustashark security/product consolidation is now governed by one linear execution path:
+The isolated ID-01 security line has completed A→D verification. The final promotion gate is now a governance/reconciliation gate only; it does not authorize a merge by itself.
 
-`MAIN → security/e01-foundation-2026-09-03 → E01-A → E01-B → E01-C → E01-D → E01-E → FINAL SECURITY GATE → ONE PR → MAIN`
-
-The E01 packages are **logical work packages / sequential commits**, not child branches and not separate PRs.
+`ID-01-A → ID-01-B → ID-01-C → ID-01-D → FINAL ID-01 PROMOTION GATE → HUMAN MERGE AUTHORIZATION → ONE PR → MAIN`
 
 ### Absolute controls
 
-- **One active E01 branch only:** `security/e01-foundation-2026-09-03`
-- **No child branches for E01.**
-- **No separate PR per E01 package.**
-- **No direct edits to `main` during E01.**
-- **No force-reset of the E01 branch.** Existing E01 work must be preserved.
-- **No production database mutation.**
-- **No destructive migration.**
-- **No speculative security rewrite.**
-- Every package closes only with evidence: code review, tests, typecheck, CI, security gate where applicable, and final main verification.
+- **Active execution branch:** `security/id-01-d-terms-object-boundary-2026-09-06`
+- **`main` remains untouched by this gate.**
+- **No force-reset or deletion of prior ID-01 work.**
+- **Production DB mutation = 0.**
+- **No production-code mutation outside the authorized isolated work.**
+- **Existing migration `0015_platform_terms_consent.sql` remains unchanged.**
+- **RLS activation = 0.**
+- **Financial-core modification = 0.**
+- **PR #135 remains frozen.**
+- **PR #136 remains isolated/frozen.**
+- **PR #137 remains isolated/frozen.**
+- **PR #138 remains Draft / Open / Unmerged and is a verification checkpoint only.**
 
-## 2. Current Git State
+## 2. Final Gate Evidence
 
-### `main`
+The current reconciled head is `21871df2c2ceb110d7be390c39108e295a932752`.
 
-Current canonical product baseline: `da6a90606176d986b63a03a84d9e3f0348130706`.
+Verified CI evidence on this exact head:
 
-The older Capability Inventory baseline recorded elsewhere (`93378a1f72517ab3dedd0eef06499d4d8f4094ce`) is historical and must not be treated as the current `main` head.
+- **Run `34048461779` — SUCCESS:** general CI, including typecheck, Auth smoke tests, concurrency smoke tests, X1 booking cancel financial/idempotency smoke test, and Production DB guard.
+- **Run `34048461712` — SUCCESS:** ID-01-D Terms/Object-Boundary Oracle, including isolated PostgreSQL, existing Terms migration application, declaration builds, API typecheck, Terms Oracle, Cases Object-Boundary Oracle, and final isolation assertion.
+- Historical decisive ID-01-D verification: **Run `34044580658` — SUCCESS**.
+- ID-01-B: **Run `34029296261` — SUCCESS**.
+- ID-01-C: **Run `34032250566` — SUCCESS**.
+- M0 proof infrastructure: **Run `33994312755` — SUCCESS**.
 
-### E01 branch
+The current head is `91` commits ahead of `main` and `0` commits behind it. The large commit count reflects the intentionally preserved isolated ID-01/M0 ancestry; it is not a claim that 91 new production features are being promoted.
 
-Current E01 branch head: `df6547385f6ea343201ad5cc60cfad66a42df134`.
+## 3. ID-01 Final Promotion Decision
 
-The branch contains the E01 security foundation work already performed, including recent OAuth concurrency hardening and Security Gate test cleanup.
+### Unit states
 
-### Divergence status
+| Unit | Scope | Status | Evidence |
+|---|---|---|---|
+| **ID-01-A** | Unified Execution Boundary infrastructure | **CLOSED / VERIFIED** | Isolated CI + M0 DB Oracle PASS |
+| **ID-01-B** | `GET /profile/pending-changes` | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Run `34029296261` |
+| **ID-01-C** | `PATCH /profile` mutations | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Run `34032250566` |
+| **ID-01-D** | Terms Enforcement + Cases Object Boundary | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Runs `34044580658` and `34048461712` |
+| **ID-01 Final Promotion Gate** | Consolidated evidence + main compatibility review | **GATE PASS — PROMOTION READY** | Current-head CI + reconciliation checks below |
 
-The E01 branch was created from an earlier `main` baseline and is currently divergent from current `main`. It is **94 commits ahead and 3 commits behind** relative to the current comparison baseline.
+### Gate checks
 
-This divergence is a reconciliation task, not permission to erase E01 history.
+1. **A/B/C/D evidence preserved:** PASS.
+2. **Current active head has green general CI:** PASS (`34048461779`).
+3. **Current active head has green ID-01-D Oracle:** PASS (`34048461712`).
+4. **Production DB guard:** PASS.
+5. **Isolated PostgreSQL boundary:** PASS.
+6. **Terms immutable migration behavior:** PASS.
+7. **Cases object-boundary negative Oracle:** PASS.
+8. **Typecheck / declarations:** PASS.
+9. **Concurrency / idempotency regression coverage:** PASS.
+10. **Main compatibility ancestry:** PASS — active head is ahead of main and not behind it; no reconciliation reset was required.
+11. **PR isolation:** PASS — PR #138 remains Draft/Open/Unmerged; no merge authorization was issued.
+12. **Protected changes outside scope:** PASS — no production DB, RLS activation, financial-core change, or modification of migration `0015` was introduced by this gate.
 
-**Required handling:** reconcile current `main` into the existing E01 branch carefully, preserve E01 work, resolve only real overlapping changes, then continue the E01 sequence on the same branch.
+### Final gate result
 
-## 3. E01 Security Foundation State
+**ID-01 FINAL PROMOTION GATE = PASS / PROMOTION READY.**
 
-| Package | Status | Rule |
-|---|---|---|
-| **E01-A — Auth/Authz + IDOR/BOLA** | **CLOSED** | Do not reopen completed discovery unless new evidence requires it. |
-| **E01-B — Lawyer Verification** | **READY FOR SECURITY GATE** | Close only after the Security Gate passes and evidence is recorded. |
-| **E01-C — Documents/Cases Isolation** | **IMPLEMENTED / PENDING GATE** | Verify object-level authorization, private access, ownership/membership and IDOR/BOLA denial. |
-| **E01-D — Terms/Privacy** | **IMPLEMENTED / PENDING GATE** | Verify versioned consent, server enforcement, privacy boundaries and auditability. |
-| **E01-E — Final Gate** | **NOT STARTED** | Final typecheck/tests/CI/diff audit/main verification after A-D are closed. |
+This is a promotion-readiness decision, **not a merge authorization**. The final merge remains a separate human authorization step.
 
-## 4. E01 Closure Contract
+## 4. T06 Boundary Obligation
 
-### E01-A — Authentication & Authorization
+T06 remains explicitly recorded as an API/auth-boundary proof obligation. The service-level `recordTermsConsent` function accepts an explicit `userId`; therefore the isolated Terms Oracle does not falsely claim that Actor A cannot submit consent for Actor B without proving the authenticated HTTP binding.
 
-Required closure evidence is already recorded in the E01 audit chain. The closed package covers route inventory, authentication enforcement, authorization checks, negative authorization, cross-resource isolation, nonexistent-resource non-leakage, isolated test DB use, typecheck, production safety and main protection.
+This does not block the ID-01 promotion-readiness gate because the obligation is correctly bounded to the authenticated API boundary and was not misrepresented as a service-layer property. It must remain visible for the next authenticated Terms-consent implementation/verification work.
 
-### E01-B — Lawyer Professional Verification
+## 5. Safety Record
 
-The implementation must maintain:
+| Safety invariant | Result |
+|---|---:|
+| Production DB mutation | **0** |
+| Production code mutation outside authorized isolated scope | **0** |
+| Existing migration `0015` modification | **0** |
+| RLS activation | **0** |
+| Financial-core modification | **0** |
+| PR #135 mutation | **0** |
+| PR #136 mutation | **0** |
+| PR #137 mutation | **0** |
+| PR #138 merge | **0** |
+| `main` direct modification during gate | **0** |
 
-- practice-card requirement;
-- server-derived SHA-256 evidence;
-- provider boundary that fails closed;
-- lifecycle states: pending / verifying / approved / rejected / exception / expired / suspended / revoked;
-- rejection and resubmission;
-- stale-session DB-backed entitlement checks;
-- atomic verification + account update;
-- exception-only admin review;
-- audit logging;
-- no fabricated JBA/MOJ automation;
-- Security Gate evidence before closure.
+## 6. Post-Gate Governance Rule
 
-### E01-C — Documents & Cases
+ID-01 is now **PROMOTION READY**. No automatic merge is performed.
 
-Prove object-level ownership/participant authorization, private storage/access, secure read/download/mutation boundaries, sensitive metadata protection, case ownership/membership separation, hearing membership inheritance, transition authorization and cross-user/cross-tenant IDOR/BOLA denial.
+The next allowed action is one of the following, in order:
 
-### E01-D — Terms & Privacy
+1. **Human merge authorization** for PR #138 after review, or
+2. if human review requires changes, return only to the specifically identified review obligation on the isolated branch.
 
-Terms Consent is separate from legal-representation Agreements. Consent is versioned, immutable/auditable and enforced server-side for governed actions. Privacy review must cover object-level access, sensitive fields, least privilege, cross-user isolation, admin exception boundaries and audit logging.
-
-### E01-E — Final Security Gate
-
-Final gate requires:
-
-`Typecheck → Tests → Security Gate → CI → Diff Audit → Main Verification → Closure Record`
-
-Only after E01-E passes is E01 authorized for one final PR into `main`.
-
-## 5. Next Execution Order
-
-Do not skip or reorder the following sequence:
-
-1. **Reconcile E01 branch with current `main`** without resetting or deleting E01 work.
-2. **Run E01-B Security Gate** and close E01-B only on passing evidence.
-3. Complete/verify **E01-C** and close it with isolation evidence.
-4. Complete/verify **E01-D** and close it with consent/privacy evidence.
-5. Execute **E01-E Final Security Gate**.
-6. Perform final diff audit and verify current `main` compatibility.
-7. Open **one PR only** from `security/e01-foundation-2026-09-03` to `main`.
-8. Merge only after all required checks are green.
-9. Verify `main` after merge.
-10. Only then begin **E02 Financial Authority**.
-
-## 6. Downstream Roadmap Lock
-
-The post-E01 sequence remains:
-
-`E01 Security Foundation → E02 Financial Authority → E03 Provider Payment → E04 Escrow/Wallet/Settlement → E05 Reconciliation → E06 Marketplace → E07 Consultation/Communication → E08 Documents/Cases/Representation → E09 Legal Services Catalog → E10 Lawyer Digital Office → E11 Lawyer SaaS → E12 Tasks/Workflow → E13 Trust/Admin → E14 Product E2E/Release Gate`
-
-**Financial work is blocked until E01 is closed.**
-
-The Lawyer SaaS product rule remains:
-
-`Verified Lawyer → 30-Day Free Trial → 50 JOD/month → Renewal / Expiry → Entitlement Enforcement`
-
-The subscription entitlement remains conceptually separate from client service money and lawyer earned service entitlements.
+Only after an actual merge authorization and successful merge should the master map select the next protected migration unit. **No new feature unit, financial unit, RLS activation, or production DB action is authorized by this gate.**
 
 ## 7. Anti-Drift Rule
 
-This register exists to prevent repeated discovery, branch proliferation, accidental reopening of closed work, loss of prior decisions and roadmap drift.
+This register is the current execution-state record for the isolated ID-01 line. Historical E01 documents remain preserved as historical governance records and must not silently override the reconciled ID-01 sequence.
 
-When a future session asks "where are we?", use this register together with the canonical Master Map and the E01 security audit document before starting new discovery.
-
-Historical maps and documents remain preserved. They are not competing execution authorities. Current execution state is governed by this register and the canonical Master Map.
+Future sessions must use this register together with the canonical Master Map and the recorded CI evidence. Completion is determined by evidence, not by code presence or PR metadata alone.

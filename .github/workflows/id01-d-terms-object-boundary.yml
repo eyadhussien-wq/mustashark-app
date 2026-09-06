@@ -1,0 +1,93 @@
+name: ID-01-D Terms and Object Boundary Oracle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - security/id-01-d-terms-object-boundary-2026-09-06
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  id01-d-oracle:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_id01d_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_id01d_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mustashark_id01d_test
+      NODE_ENV: test
+      CI: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production DB mutation guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$DATABASE_URL" in
+            *localhost*|*127.0.0.1*|*::1*) ;;
+            *) echo "Production DB guard failed: non-local DATABASE_URL"; exit 1 ;;
+          esac
+          case "$DATABASE_URL" in
+            *_test*) ;;
+            *) echo "Production DB guard failed: database name is not *_test"; exit 1 ;;
+          esac
+
+      - name: Verify isolated PostgreSQL
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'select current_database(), inet_server_addr(), inet_server_port();'
+
+      - name: Push base schema to isolated database only
+        run: pnpm --filter @workspace/db push
+
+      - name: Apply existing ID-01-D Terms migration in isolated database
+        run: pnpm --filter @workspace/db exec node ./scripts/apply-id01-d-terms-migration.mjs
+
+      - name: Build DB declarations
+        run: pnpm --filter @workspace/db exec tsc --build
+
+      - name: Build API Zod declarations
+        run: pnpm --filter @workspace/api-zod exec tsc --build
+
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: ID-01-D negative Oracle
+        run: node --experimental-strip-types --test ./scripts/id01-d-terms-object-boundary.test.ts
+        working-directory: artifacts/api-server
+
+      - name: Final database isolation assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          isolated_database="$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c "select current_database() like '%_test';")"
+          test "$isolated_database" = "t"
