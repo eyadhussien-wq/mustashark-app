@@ -70,8 +70,7 @@ jobs:
         run: pnpm --filter @workspace/db push
 
       - name: Apply existing ID-01-D Terms migration in isolated database
-        run: node ./scripts/apply-id01-d-terms-migration.mjs
-        working-directory: artifacts/api-server
+        run: pnpm --filter @workspace/db exec node ./scripts/apply-id01-d-terms-migration.mjs
 
       - name: Build DB declarations
         run: pnpm --filter @workspace/db exec tsc --build
