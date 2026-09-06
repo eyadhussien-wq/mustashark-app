@@ -30,6 +30,7 @@ const ids = {
   milestoneInsufficient: `e02-ci01-milestone-insufficient-${randomUUID()}`,
   milestoneWrongState: `e02-ci01-milestone-wrong-state-${randomUUID()}`,
   milestoneConcurrent: `e02-ci01-milestone-concurrent-${randomUUID()}`,
+  milestoneForged: `e02-ci01-milestone-forged-${randomUUID()}`,
   escrowA: `e02-ci01-escrow-a-${randomUUID()}`,
 };
 
@@ -76,6 +77,7 @@ await db.insert(representationMilestonesTable).values([
   { id: ids.milestoneInsufficient, quoteId: ids.quoteA, stage: "stage_2", percentage: "33.33", amount: "100.00", title: "Allocation insufficient", status: "funded" },
   { id: ids.milestoneWrongState, quoteId: ids.quoteA, stage: "stage_3", percentage: "0.00", amount: "0.00", title: "Wrong state", status: "awaiting_deposit" },
   { id: ids.milestoneConcurrent, quoteId: ids.quoteA, stage: "stage_1", percentage: "10.00", amount: "25.00", title: "Allocation concurrent", status: "funded" },
+  { id: ids.milestoneForged, quoteId: ids.quoteA, stage: "stage_2", percentage: "10.00", amount: "25.00", title: "Allocation forged-input", status: "funded" },
 ]);
 
 await db.insert(escrowAccountsTable).values({
@@ -102,6 +104,19 @@ assert.equal(after.transactions[0]?.createdBy, ids.clientA);
 assert.equal(after.idempotency.length, 1);
 assert.notDeepEqual(after, before);
 console.log(JSON.stringify({ oracle: "F01-AUTHORITY-DB-DERIVED-INPUTS", result: "PASS" }));
+
+const forged = await allocateMilestone(
+  makeReq(ids.clientA, "client", "e02-ci01-forged", ids.milestoneForged, { amount: "1.00", currency: "QAR" }),
+  ids.milestoneForged,
+  ids.clientA,
+);
+assert.equal(forged.replay, false);
+assert.equal(forged.status, 200);
+const forgedTx = await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneForged));
+assert.equal(forgedTx.length, 1);
+assert.equal(forgedTx[0]?.amount, "25.00");
+assert.equal(forgedTx[0]?.currency, "JOD");
+console.log(JSON.stringify({ oracle: "F02-CLIENT-AMOUNT-CURRENCY-CANNOT-OVERRIDE", result: "PASS" }));
 
 const replay = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-success"), ids.milestoneA, ids.clientA);
 assert.equal(replay.replay, true);
@@ -133,13 +148,6 @@ assert.deepEqual(wrongState, { error: "milestone_not_allocatable" });
 const insufficient = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-insufficient", ids.milestoneInsufficient), ids.milestoneInsufficient, ids.clientA);
 assert.deepEqual(insufficient, { error: "insufficient_unallocated_funds" });
 console.log(JSON.stringify({ oracle: "F06-PRECONDITION-DENIALS", result: "PASS" }));
-
-const forged = await allocateMilestone(makeReq(ids.clientA, "client", "e02-ci01-forged", ids.milestoneA, { amount: "1.00", currency: "QAR" }), ids.milestoneA, ids.clientA);
-assert.equal("replay" in forged, true);
-const transactionRows = await db.select().from(escrowTransactionsTable).where(eq(escrowTransactionsTable.milestoneId, ids.milestoneA));
-assert.equal(transactionRows[0]?.amount, "100.00");
-assert.equal(transactionRows[0]?.currency, "JOD");
-console.log(JSON.stringify({ oracle: "F02-CLIENT-AMOUNT-CURRENCY-CANNOT-OVERRIDE", result: "PASS" }));
 
 const mismatchReq = makeReq(ids.clientA, "client", "e02-ci01-success", ids.milestoneA, { changed: true });
 await assert.rejects(() => allocateMilestone(mismatchReq, ids.milestoneA, ids.clientA), /IDEMPOTENCY_REQUEST_MISMATCH/);
