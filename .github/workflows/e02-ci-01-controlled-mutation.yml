@@ -1,0 +1,67 @@
+name: E02-CI-01 Controlled Mutation
+
+on:
+  push:
+    branches:
+      - security/e02-ci-01-controlled-implementation-2026-09-07
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'artifacts/api-server/src/services/allocateMilestone.ts'
+      - 'artifacts/api-server/src/controllers/allocateMilestone.ts'
+      - 'artifacts/api-server/scripts/e02-ci-01-controlled-mutation.test.ts'
+      - 'lib/db/src/ueb.ts'
+      - 'lib/db/src/index.ts'
+      - '.github/workflows/e02-ci-01-controlled-mutation.yml'
+
+jobs:
+  controlled-mutation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mustashark_e02_ci01_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mustashark_e02_ci01_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mustashark_e02_ci01_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Production database guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$DATABASE_URL" in
+            *localhost*|*127.0.0.1*|*::1*) ;;
+            *) echo 'PRODUCTION_DB_GUARD_FAILED'; exit 1 ;;
+          esac
+          case "$DATABASE_URL" in
+            *_test) echo 'PRODUCTION_DB_GUARD_PASS' ;;
+            *) echo 'TEST_DB_SUFFIX_GUARD_FAILED'; exit 1 ;;
+          esac
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Provision isolated schema
+        run: corepack pnpm --filter @workspace/db push
+
+      - name: Library typecheck
+        run: corepack pnpm run typecheck:libs
+
+      - name: API typecheck
+        run: corepack pnpm --filter @workspace/api-server typecheck
+
+      - name: E02-CI-01 disposable DB oracle
+        run: corepack pnpm exec tsx artifacts/api-server/scripts/e02-ci-01-controlled-mutation.test.ts
