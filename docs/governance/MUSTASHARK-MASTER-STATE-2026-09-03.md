@@ -1,114 +1,106 @@
 # MUSTASHARK — MASTER STATE REGISTER
 
-**Status:** CANONICAL CURRENT-STATE REGISTER
-**Date:** 2026-09-06
-**Authority:** `docs/governance/MUSTASHARK-MASTER-MAP.md`
-**Execution branch:** `security/id-01-d-terms-object-boundary-2026-09-06`
-**Target:** one final PR → `main`
+**Status:** CANONICAL CURRENT-STATE REGISTER — SINGLE SOURCE OF TRUTH  
+**Date:** 2026-09-06  
+**Execution state:** POST-ID-01 MERGE / MASTER MAP CONSOLIDATION  
+**Canonical product authority:** `docs/governance/MUSTASHARK-MASTER-MAP.md`  
+**Execution-state authority:** THIS DOCUMENT  
+**Current main merge:** PR #138 → `main` via Squash Merge  
+**Merge commit:** `4a039b7390ae7ea0d47a2351b7643d1008f44e16`
 
-## 1. Operating Rule — Single Linear Execution
+> **SINGLE SOURCE OF TRUTH:** Future implementation gates, migration-unit selection, closure status, and execution sequencing MUST use this register for current security execution state. Historical E01/C3 labels remain traceability labels only and MUST NOT override this register.
 
-The isolated ID-01 security line has completed A→D verification. The final promotion gate is now a governance/reconciliation gate only; it does not authorize a merge by itself.
+## 1. Mapping Matrix — Historical Labels → Current ID-01 Line
 
-`ID-01-A → ID-01-B → ID-01-C → ID-01-D → FINAL ID-01 PROMOTION GATE → HUMAN MERGE AUTHORIZATION → ONE PR → MAIN`
+| Historical label / era | Current mapped unit | Current result | Evidence / disposition |
+|---|---|---|---|
+| M0 / UEB Proof Harness | M0 — independent proof infrastructure | **CLOSED / VERIFIED** | Run `33994312755` — DB-ORACLE-PASS |
+| E01-A — Authentication / Authorization foundation | ID-01-A — Unified Execution Boundary infrastructure | **CLOSED / VERIFIED** | Isolated CI + M0 DB Oracle; certified commit `137f783bc32429af477605b88f866867c7dddd1d` |
+| E01-A route/authz audit artifacts | ID-01-A + later object-boundary obligations | **HISTORICAL / ARCHIVED** | Preserved for audit trail; current status lives here |
+| E01-B — Professional Trust | Historical E01 label | **HISTORICAL / NOT CURRENT EXECUTION UNIT** | Do not infer next unit from E01-B; use this register + Master Map |
+| E01-C — Legal Data Isolation / C12-C13 | ID-01-D Cases Object Boundary coverage | **VERIFIED within ID-01-D scope** | Cases negative Oracle; Runs `34044580658` / `34048461712` |
+| E01-D — C30 Terms + C31 Privacy/Data Boundary | ID-01-D — Terms Enforcement + Cases Object Boundary | **VERIFIED / G8 PASS** | Run `34044580658` and decisive Run `34048461712` |
+| E01-E — Final Security Closure | ID-01 Final Promotion Gate + PR #138 | **COMPLETED / MERGED** | PR #138 Squash Merge commit `4a039b7390ae7ea0d47a2351b7643d1008f44e16` |
+| C30 — Terms / Legal Consent | ID-01-D Terms Enforcement | **VERIFIED / G8 PASS** | 8/8 Terms proofs; immutable published/consent behavior verified |
+| C31 — Privacy / Data Access Boundary | ID-01-D Cases Object Boundary | **VERIFIED / G8 PASS** | 10/10 Cases proofs; cross-object denial/no-leakage checks |
+| C3 — Financial & Legal Operating Foundation | C3 remains the active financial/legal architectural dependency | **ACTIVE / NOT ARCHIVED** | C3 is not a historical alias for ID-01 and remains required for future financial/legal behavior |
 
-### Absolute controls
+### Mapping rule
 
-- **Active execution branch:** `security/id-01-d-terms-object-boundary-2026-09-06`
-- **`main` remains untouched by this gate.**
-- **No force-reset or deletion of prior ID-01 work.**
-- **Production DB mutation = 0.**
-- **No production-code mutation outside the authorized isolated work.**
-- **Existing migration `0015_platform_terms_consent.sql` remains unchanged.**
-- **RLS activation = 0.**
-- **Financial-core modification = 0.**
-- **PR #135 remains frozen.**
-- **PR #136 remains isolated/frozen.**
-- **PR #137 remains isolated/frozen.**
-- **PR #138 remains Draft / Open / Unmerged and is a verification checkpoint only.**
+`Historical label → traceability only → current execution unit/status here → current CI evidence`
 
-## 2. Final Gate Evidence
+No historical document may reopen a closed ID-01 unit or authorize a new unit.
 
-The current reconciled head is `21871df2c2ceb110d7be390c39108e295a932752`.
-
-Verified CI evidence on this exact head:
-
-- **Run `34048461779` — SUCCESS:** general CI, including typecheck, Auth smoke tests, concurrency smoke tests, X1 booking cancel financial/idempotency smoke test, and Production DB guard.
-- **Run `34048461712` — SUCCESS:** ID-01-D Terms/Object-Boundary Oracle, including isolated PostgreSQL, existing Terms migration application, declaration builds, API typecheck, Terms Oracle, Cases Object-Boundary Oracle, and final isolation assertion.
-- Historical decisive ID-01-D verification: **Run `34044580658` — SUCCESS**.
-- ID-01-B: **Run `34029296261` — SUCCESS**.
-- ID-01-C: **Run `34032250566` — SUCCESS**.
-- M0 proof infrastructure: **Run `33994312755` — SUCCESS**.
-
-The current head is `91` commits ahead of `main` and `0` commits behind it. The large commit count reflects the intentionally preserved isolated ID-01/M0 ancestry; it is not a claim that 91 new production features are being promoted.
-
-## 3. ID-01 Final Promotion Decision
-
-### Unit states
+## 2. ID-01 Official Closure Record
 
 | Unit | Scope | Status | Evidence |
 |---|---|---|---|
-| **ID-01-A** | Unified Execution Boundary infrastructure | **CLOSED / VERIFIED** | Isolated CI + M0 DB Oracle PASS |
-| **ID-01-B** | `GET /profile/pending-changes` | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Run `34029296261` |
-| **ID-01-C** | `PATCH /profile` mutations | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Run `34032250566` |
-| **ID-01-D** | Terms Enforcement + Cases Object Boundary | **VERIFIED / G8 PASS / PROMOTION CANDIDATE** | Runs `34044580658` and `34048461712` |
-| **ID-01 Final Promotion Gate** | Consolidated evidence + main compatibility review | **GATE PASS — PROMOTION READY** | Current-head CI + reconciliation checks below |
+| **M0** | Independent UEB proof infrastructure | **CLOSED / VERIFIED** | Run `33994312755` |
+| **ID-01-A** | Unified Execution Boundary infrastructure | **CLOSED / VERIFIED** | Isolated CI + M0 DB Oracle |
+| **ID-01-B** | `GET /profile/pending-changes` | **VERIFIED / G8 PASS** | Run `34029296261` |
+| **ID-01-C** | `PATCH /profile` mutations | **VERIFIED / G8 PASS** | Run `34032250566` |
+| **ID-01-D** | Terms Enforcement + Cases Object Boundary | **VERIFIED / G8 PASS** | Runs `34044580658`, `34048461712` |
+| **ID-01 Final Promotion Gate** | Consolidated evidence and main compatibility | **PASS** | Green current-head CI before merge |
+| **PR #138** | Controlled ID-01-D verification checkpoint | **MERGED** | Squash commit `4a039b7390ae7ea0d47a2351b7643d1008f44e16` |
 
-### Gate checks
+## 3. Post-Merge Main State
 
-1. **A/B/C/D evidence preserved:** PASS.
-2. **Current active head has green general CI:** PASS (`34048461779`).
-3. **Current active head has green ID-01-D Oracle:** PASS (`34048461712`).
-4. **Production DB guard:** PASS.
-5. **Isolated PostgreSQL boundary:** PASS.
-6. **Terms immutable migration behavior:** PASS.
-7. **Cases object-boundary negative Oracle:** PASS.
-8. **Typecheck / declarations:** PASS.
-9. **Concurrency / idempotency regression coverage:** PASS.
-10. **Main compatibility ancestry:** PASS — active head is ahead of main and not behind it; no reconciliation reset was required.
-11. **PR isolation:** PASS — PR #138 remains Draft/Open/Unmerged; no merge authorization was issued.
-12. **Protected changes outside scope:** PASS — no production DB, RLS activation, financial-core change, or modification of migration `0015` was introduced by this gate.
+- `main` now contains the authorized ID-01 promotion through PR #138.
+- PR #138 was explicitly converted to Ready for Review and then merged with Squash Merge.
+- The merge returned commit `4a039b7390ae7ea0d47a2351b7643d1008f44e16`.
+- Any pre-merge statement that PR #138 was Draft/Open/Unmerged is historical and superseded by this post-merge record.
+- Master Map Consolidation is documentation/governance work only; it does not authorize a new implementation unit.
 
-### Final gate result
+## 4. ID-01-D Evidence Preserved
 
-**ID-01 FINAL PROMOTION GATE = PASS / PROMOTION READY.**
+- Terms Oracle: **8/8 proofs — DB-ORACLE-PASS**.
+- Cases Object Boundary Oracle: **10/10 proofs — DB-ORACLE-PASS**.
+- T08/T09 were verified against the existing immutable Terms migration behavior in the isolated database.
+- T06 remains an explicitly bounded API/authentication-boundary proof obligation because the internal consent primitive accepts an explicit `userId`; it was not falsely promoted to a service-layer guarantee.
+- General CI and ID-01-D Oracle passed on reconciled head `21871df2c2ceb110d7be390c39108e295a932752` via Runs `34048461779` and `34048461712`.
 
-This is a promotion-readiness decision, **not a merge authorization**. The final merge remains a separate human authorization step.
-
-## 4. T06 Boundary Obligation
-
-T06 remains explicitly recorded as an API/auth-boundary proof obligation. The service-level `recordTermsConsent` function accepts an explicit `userId`; therefore the isolated Terms Oracle does not falsely claim that Actor A cannot submit consent for Actor B without proving the authenticated HTTP binding.
-
-This does not block the ID-01 promotion-readiness gate because the obligation is correctly bounded to the authenticated API boundary and was not misrepresented as a service-layer property. It must remain visible for the next authenticated Terms-consent implementation/verification work.
-
-## 5. Safety Record
+## 5. Safety Record — Immutable Controls
 
 | Safety invariant | Result |
 |---|---:|
 | Production DB mutation | **0** |
-| Production code mutation outside authorized isolated scope | **0** |
-| Existing migration `0015` modification | **0** |
+| Production-code mutation outside authorized ID-01 scope | **0** |
+| Modification of existing `0015_platform_terms_consent.sql` | **0** |
 | RLS activation | **0** |
 | Financial-core modification | **0** |
 | PR #135 mutation | **0** |
 | PR #136 mutation | **0** |
 | PR #137 mutation | **0** |
-| PR #138 merge | **0** |
-| `main` direct modification during gate | **0** |
+| Unauthorized merge | **0** |
+| Force-reset / history rewrite | **0** |
 
-## 6. Post-Gate Governance Rule
+## 6. Historical Documentation Policy
 
-ID-01 is now **PROMOTION READY**. No automatic merge is performed.
+The repository keeps historical E01 records for auditability, but they are not live execution authorities.
 
-The next allowed action is one of the following, in order:
+- **E01 documents that describe the superseded 2026-09-03 execution sequence are DEPRECATED / ARCHIVED.**
+- Their content is preserved; archival headers are the semantic change.
+- **C3 financial/legal architecture documents are NOT deprecated merely because ID-01 is complete.** C3 remains an active architectural dependency.
+- When a historical C3 label appears in a document, it must be interpreted through the Mapping Matrix above.
+- New implementation work MUST NOT select a unit from an archived E01 document.
 
-1. **Human merge authorization** for PR #138 after review, or
-2. if human review requires changes, return only to the specifically identified review obligation on the isolated branch.
+## 7. Governance Authority Chain
 
-Only after an actual merge authorization and successful merge should the master map select the next protected migration unit. **No new feature unit, financial unit, RLS activation, or production DB action is authorized by this gate.**
+`MUSTASHARK-MASTER-MAP.md` = canonical product / architecture authority  
+`MUSTASHARK-MASTER-STATE-2026-09-03.md` = canonical current execution-state authority / Single Source of Truth  
+Historical E01 records = audit trail only  
+C3 Financial & Legal Operating Foundation = active architectural authority
 
-## 7. Anti-Drift Rule
+If documents disagree on current execution status, this register wins and the discrepancy is documentation drift.
 
-This register is the current execution-state record for the isolated ID-01 line. Historical E01 documents remain preserved as historical governance records and must not silently override the reconciled ID-01 sequence.
+## 8. Next-Unit Gate
 
-Future sessions must use this register together with the canonical Master Map and the recorded CI evidence. Completion is determined by evidence, not by code presence or PR metadata alone.
+**No new migration/security unit is opened by Master Map Consolidation alone.**
+
+The next unit may be selected only after this consolidation is committed and its repository/CI verification is green. Selection MUST be made from the reconciled current Master Map + this register, not from historical E01 execution labels.
+
+Financial Authority / E02 remains separately gated and is not automatically authorized by completion of ID-01.
+
+## 9. Anti-Drift Rule
+
+Every future execution session begins by reading this register and the canonical Master Map. Historical E01 documents may be consulted only to reconstruct audit history. No historical document, old branch, stale PR description, or chat statement may silently override the current register.
