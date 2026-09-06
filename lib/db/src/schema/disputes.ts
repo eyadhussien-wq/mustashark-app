@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { casesTable } from "./cases";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const disputeLifecycleStateEnum = pgEnum("dispute_lifecycle_state", [
   "open",
