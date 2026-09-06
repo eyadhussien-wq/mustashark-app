@@ -1,12 +1,12 @@
 import { Router } from "express";
 import {
   updateProfile,
-  getPendingChanges,
   softDeleteClient,
   requestLawyerDeletion,
   getDeletionStatus,
   dismissRejectionNote,
 } from "../controllers/profile";
+import { getPendingChanges } from "../controllers/profilePendingChanges";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
 import { requireCurrentTermsConsent } from "../middlewares/requireCurrentTermsConsent";
