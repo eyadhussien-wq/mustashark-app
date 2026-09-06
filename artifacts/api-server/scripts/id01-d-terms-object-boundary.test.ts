@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   agreementsTable,
   caseMembershipsTable,
@@ -85,11 +85,10 @@ async function cleanup() {
   await db.delete(agreementsTable).where(eq(agreementsTable.id, ids.agreementB));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteA));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteB));
-  await db.delete(usersTable).where(eq(usersTable.id, ids.clientA));
-  await db.delete(usersTable).where(eq(usersTable.id, ids.clientB));
-  await db.delete(usersTable).where(eq(usersTable.id, ids.lawyerA));
-  await db.delete(usersTable).where(eq(usersTable.id, ids.lawyerB));
-  await db.delete(usersTable).where(eq(usersTable.id, ids.outsider));
+
+  // Terms consent/version rows are intentionally immutable and users are retained.
+  // The disposable *_test PostgreSQL service is the lifecycle boundary and is
+  // destroyed after CI, so cleanup must not violate immutable Terms/FK invariants.
 }
 
 test.before(async () => {
