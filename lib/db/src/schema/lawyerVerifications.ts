@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, real } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const lawyerVerificationStatusEnum = pgEnum("lawyer_verification_status", [
   "pending",
