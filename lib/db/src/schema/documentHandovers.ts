@@ -1,7 +1,7 @@
 import { pgEnum, pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const documentStatusEnum = pgEnum("document_status", ["draft", "ready", "handover_pending", "handed_over", "archived"]);
 export const handoverModeEnum = pgEnum("handover_mode", ["local", "office", "courier", "international"]);
