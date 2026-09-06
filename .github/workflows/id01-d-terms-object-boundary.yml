@@ -86,5 +86,8 @@ jobs:
         working-directory: artifacts/api-server
 
       - name: Final database isolation assertion
+        shell: bash
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'select current_database() like ''%_test'' as isolated_database;'
+          set -euo pipefail
+          isolated_database="$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c "select current_database() like '%_test';")"
+          test "$isolated_database" = "t"
