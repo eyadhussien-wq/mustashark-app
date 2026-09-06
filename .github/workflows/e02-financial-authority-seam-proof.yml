@@ -52,8 +52,3 @@ jobs:
 
       - name: Run disposable seam proof
         run: node lib/db/scripts/e02-financial-authority-seam-proof.mjs
-
-      - name: Final teardown
-        if: always()
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -X -c 'DROP TABLE IF EXISTS e02_seam_tx, e02_seam_milestones, e02_seam_escrow, e02_seam_quotes' || true
