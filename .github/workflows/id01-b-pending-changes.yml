@@ -7,7 +7,7 @@ on:
       - "security/id-01-b-pending-changes-2026-09-06"
   pull_request:
     branches:
-      - "security/id-01-b-pending-changes-2026-09-06"
+      - "main"
 
 permissions:
   contents: read
