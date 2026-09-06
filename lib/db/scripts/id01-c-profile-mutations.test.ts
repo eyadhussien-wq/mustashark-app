@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import {
-  and,
-  eq,
-} from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   assertNoUebDbActorContext,
   db,
@@ -37,10 +34,7 @@ function request(userId: string, role: "client" | "lawyer", body: unknown) {
   const req = {
     authUser: { userId, role },
     body,
-    log: {
-      info() {},
-      error() {},
-    },
+    log: { info() {}, error() {} },
   } as any;
   return { req, res: response };
 }
@@ -110,11 +104,14 @@ test("ID-01-C UEB profile mutation oracle", async () => {
     assert.equal(clientCall.res.statusCode, 200);
     assert.deepEqual((clientCall.res.payload as any).pendingFields, []);
 
-    const concurrent = await Promise.all([
-      updateProfile(request(actorA, "lawyer", { phone: "+962790000001" }).req, request(actorA, "lawyer", { phone: "+962790000001" }).res),
-      updateProfile(request(actorB, "lawyer", { phone: "+962790000002" }).req, request(actorB, "lawyer", { phone: "+962790000002" }).res),
+    const aConcurrent = request(actorA, "lawyer", { phone: "+962790000001" });
+    const bConcurrent = request(actorB, "lawyer", { phone: "+962790000002" });
+    await Promise.all([
+      updateProfile(aConcurrent.req, aConcurrent.res),
+      updateProfile(bConcurrent.req, bConcurrent.res),
     ]);
-    assert.equal(concurrent.length, 2);
+    assert.equal(aConcurrent.res.statusCode, 200);
+    assert.equal(bConcurrent.res.statusCode, 200);
 
     const before = await db
       .select({ name: usersTable.name })
@@ -149,16 +146,8 @@ test("ID-01-C UEB profile mutation oracle", async () => {
       result: "DB-ORACLE-PASS",
     }));
   } finally {
-    await db.delete(lawyerProfileChangeRequestsTable).where(
-      and(
-        eq(lawyerProfileChangeRequestsTable.lawyerId, actorA),
-      ),
-    );
-    await db.delete(lawyerProfileChangeRequestsTable).where(
-      and(
-        eq(lawyerProfileChangeRequestsTable.lawyerId, actorB),
-      ),
-    );
+    await db.delete(lawyerProfileChangeRequestsTable).where(eq(lawyerProfileChangeRequestsTable.lawyerId, actorA));
+    await db.delete(lawyerProfileChangeRequestsTable).where(eq(lawyerProfileChangeRequestsTable.lawyerId, actorB));
     await db.delete(usersTable).where(eq(usersTable.id, actorA));
     await db.delete(usersTable).where(eq(usersTable.id, actorB));
     await db.delete(usersTable).where(eq(usersTable.id, client));
