@@ -64,4 +64,4 @@ jobs:
         run: corepack pnpm --filter @workspace/api-server typecheck
 
       - name: E02-CI-01 disposable DB oracle
-        run: corepack pnpm exec tsx artifacts/api-server/scripts/e02-ci-01-controlled-mutation.test.ts
+        run: node --experimental-strip-types artifacts/api-server/scripts/e02-ci-01-controlled-mutation.test.ts
