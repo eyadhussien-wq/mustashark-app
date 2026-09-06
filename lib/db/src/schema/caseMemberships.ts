@@ -1,6 +1,6 @@
 import { pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.ts";
-import { casesTable } from "./cases";
+import { casesTable } from "./cases.ts";
 
 export const caseMembershipRoleEnum = pgEnum("case_membership_role", [
   "client",
