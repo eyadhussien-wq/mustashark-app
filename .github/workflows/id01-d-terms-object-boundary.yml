@@ -66,8 +66,12 @@ jobs:
       - name: Verify isolated PostgreSQL
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'select current_database(), inet_server_addr(), inet_server_port();'
 
-      - name: Push schema to isolated database only
+      - name: Push base schema to isolated database only
         run: pnpm --filter @workspace/db push
+
+      - name: Apply existing ID-01-D Terms migration in isolated database
+        run: node ./scripts/apply-id01-d-terms-migration.mjs
+        working-directory: artifacts/api-server
 
       - name: Build DB declarations
         run: pnpm --filter @workspace/db exec tsc --build
