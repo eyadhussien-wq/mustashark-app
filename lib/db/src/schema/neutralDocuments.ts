@@ -1,6 +1,6 @@
 import { pgEnum, pgTable, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.ts";
-import { neutralMattersTable } from "./neutralMatters";
+import { neutralMattersTable } from "./neutralMatters.ts";
 
 export const neutralDocumentStatusEnum = pgEnum("neutral_document_status", [
   "draft",
