@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, jsonb, uniqueIndex, integer } from "drizzle-orm/pg-core";
-import { bookingsTable } from "./bookings";
-import { usersTable } from "./users";
+import { bookingsTable } from "./bookings.ts";
+import { usersTable } from "./users.ts";
 
 /**
  * S01-07 reminder delivery ledger.

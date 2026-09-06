@@ -1,5 +1,5 @@
 import { pgTable, text, integer, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable } from "./users.ts";
 
 export const idempotencyKeysTable = pgTable(
   "idempotency_keys",
