@@ -85,12 +85,6 @@ async function cleanup() {
   await db.delete(agreementsTable).where(eq(agreementsTable.id, ids.agreementB));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteA));
   await db.delete(representationQuotesTable).where(eq(representationQuotesTable.id, ids.quoteB));
-
-  // Terms are intentionally immutable. Cleanup must not issue DELETE against the
-  // protected Terms tables; the disposable *_test database is the lifecycle boundary.
-  await db.execute(sql`DROP TABLE IF EXISTS terms_consents CASCADE`);
-  await db.execute(sql`DROP TABLE IF EXISTS terms_versions CASCADE`);
-
   await db.delete(usersTable).where(eq(usersTable.id, ids.clientA));
   await db.delete(usersTable).where(eq(usersTable.id, ids.clientB));
   await db.delete(usersTable).where(eq(usersTable.id, ids.lawyerA));
