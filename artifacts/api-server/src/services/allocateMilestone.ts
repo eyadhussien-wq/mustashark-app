@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db } from "@workspace/db";
+import { db, withUeb } from "@workspace/db";
 import {
   escrowAccountsTable,
   escrowTransactionsTable,
@@ -25,75 +25,83 @@ export async function allocateMilestone(
   milestoneId: string,
   clientId: string,
 ): Promise<AllocateMilestoneResult> {
-  return db.transaction(async (tx) => {
-    const idempotency = await claimIdempotency(tx, req, clientId);
-    if (idempotency.replay) return idempotency;
+  const authUser = req.authUser;
+  if (!authUser) throw new Error("UEB_TRUSTED_ACTOR_REQUIRED");
+  if (authUser.userId !== clientId) throw new Error("UEB_ACTOR_ARGUMENT_MISMATCH");
 
-    const [row] = await tx
-      .select({
-        milestone: representationMilestonesTable,
-        quote: representationQuotesTable,
-        escrow: escrowAccountsTable,
-      })
-      .from(representationMilestonesTable)
-      .innerJoin(representationQuotesTable, eq(representationQuotesTable.id, representationMilestonesTable.quoteId))
-      .innerJoin(escrowAccountsTable, eq(escrowAccountsTable.quoteId, representationQuotesTable.id))
-      .where(eq(representationMilestonesTable.id, milestoneId))
-      .limit(1)
-      .for("update");
+  return withUeb(
+    db,
+    { id: authUser.userId, role: authUser.role },
+    async (tx) => {
+      const idempotency = await claimIdempotency(tx, req, authUser.userId);
+      if (idempotency.replay) return idempotency;
 
-    if (!row) return { error: "milestone_not_found" };
-    if (row.quote.clientId !== clientId) return { error: "forbidden" };
-    if (row.milestone.status !== "funded") return { error: "milestone_not_allocatable" };
-    if (!row.escrow) return { error: "escrow_account_not_found" };
+      const [row] = await tx
+        .select({
+          milestone: representationMilestonesTable,
+          quote: representationQuotesTable,
+          escrow: escrowAccountsTable,
+        })
+        .from(representationMilestonesTable)
+        .innerJoin(representationQuotesTable, eq(representationQuotesTable.id, representationMilestonesTable.quoteId))
+        .innerJoin(escrowAccountsTable, eq(escrowAccountsTable.quoteId, representationQuotesTable.id))
+        .where(eq(representationMilestonesTable.id, milestoneId))
+        .limit(1)
+        .for("update");
 
-    const amount = row.milestone.amount;
-    const now = new Date();
-    const [updatedEscrow] = await tx
-      .update(escrowAccountsTable)
-      .set({
-        allocatedAmount: sql`${escrowAccountsTable.allocatedAmount} + ${amount}`,
-        updatedAt: now,
-      })
-      .where(and(
-        eq(escrowAccountsTable.id, row.escrow.id),
-        sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.allocatedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`,
-      ))
-      .returning();
+      if (!row) return { error: "milestone_not_found" };
+      if (row.quote.clientId !== authUser.userId) return { error: "forbidden" };
+      if (row.milestone.status !== "funded") return { error: "milestone_not_allocatable" };
+      if (!row.escrow) return { error: "escrow_account_not_found" };
 
-    if (!updatedEscrow) return { error: "insufficient_unallocated_funds" };
+      const amount = row.milestone.amount;
+      const now = new Date();
+      const [updatedEscrow] = await tx
+        .update(escrowAccountsTable)
+        .set({
+          allocatedAmount: sql`${escrowAccountsTable.allocatedAmount} + ${amount}`,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(escrowAccountsTable.id, row.escrow.id),
+          sql`${escrowAccountsTable.depositedAmount} - ${escrowAccountsTable.allocatedAmount} - ${escrowAccountsTable.refundedAmount} >= ${amount}`,
+        ))
+        .returning();
 
-    const [transaction] = await tx
-      .insert(escrowTransactionsTable)
-      .values({
-        id: randomUUID(),
-        escrowAccountId: row.escrow.id,
-        milestoneId: row.milestone.id,
-        type: "stage_allocation",
-        status: "posted",
-        amount,
-        currency: row.quote.currency,
-        reference: `milestone-allocation:${row.milestone.id}`,
-        createdBy: clientId,
-        createdAt: now,
-      })
-      .returning();
+      if (!updatedEscrow) return { error: "insufficient_unallocated_funds" };
 
-    if (!transaction) throw new Error("ESCROW_ALLOCATION_TRANSACTION_FAILED");
+      const [transaction] = await tx
+        .insert(escrowTransactionsTable)
+        .values({
+          id: randomUUID(),
+          escrowAccountId: row.escrow.id,
+          milestoneId: row.milestone.id,
+          type: "stage_allocation",
+          status: "posted",
+          amount,
+          currency: row.quote.currency,
+          reference: `milestone-allocation:${row.milestone.id}`,
+          createdBy: authUser.userId,
+          createdAt: now,
+        })
+        .returning();
 
-    const [updatedMilestone] = await tx
-      .update(representationMilestonesTable)
-      .set({ status: "in_progress", startedAt: now, updatedAt: now })
-      .where(and(
-        eq(representationMilestonesTable.id, row.milestone.id),
-        eq(representationMilestonesTable.status, "funded"),
-      ))
-      .returning();
+      if (!transaction) throw new Error("ESCROW_ALLOCATION_TRANSACTION_FAILED");
 
-    if (!updatedMilestone) throw new Error("MILESTONE_ALLOCATION_TRANSITION_FAILED");
+      const [updatedMilestone] = await tx
+        .update(representationMilestonesTable)
+        .set({ status: "in_progress", startedAt: now, updatedAt: now })
+        .where(and(
+          eq(representationMilestonesTable.id, row.milestone.id),
+          eq(representationMilestonesTable.status, "funded"),
+        ))
+        .returning();
 
-    const body = { ok: true as const, milestone: updatedMilestone, escrowAccount: updatedEscrow, transaction };
-    await persistIdempotencyResponse(tx, req, clientId, 200, body);
-    return { replay: false as const, status: 200 as const, body };
-  });
+      if (!updatedMilestone) throw new Error("MILESTONE_ALLOCATION_TRANSITION_FAILED");
+
+      const body = { ok: true as const, milestone: updatedMilestone, escrowAccount: updatedEscrow, transaction };
+      await persistIdempotencyResponse(tx, req, authUser.userId, 200, body);
+      return { replay: false as const, status: 200 as const, body };
+    },
+  );
 }
