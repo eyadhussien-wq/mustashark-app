@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Client } from "pg";
 import { test } from "node:test";
 import { db, pool } from "../src/index.ts";
-import { getPendingChanges } from "../../artifacts/api-server/src/controllers/profilePendingChanges.ts";
+import { getPendingChanges } from "../../../artifacts/api-server/src/controllers/profilePendingChanges.ts";
 import { assertNoUebDbActorContext } from "../src/ueb.ts";
 
 function isolatedUrl(): string {
